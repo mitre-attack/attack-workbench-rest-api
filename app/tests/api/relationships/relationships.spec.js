@@ -421,6 +421,24 @@ describe('Relationships API', function () {
     expect(mlRelationships[0].stix.source_ref).toBe(sourceRef2);
   });
 
+  it('GET /api/relationships/parallel returns the parallel relationships', async function () {
+    const res = await request(app)
+      .get('/api/relationships/parallel')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    console.log(res.body);
+    // We expect to get ATT&CK objects in an array
+    const parallelRelationships = res.body;
+    expect(parallelRelationships).toBeDefined();
+    expect(Array.isArray(parallelRelationships)).toBe(true);
+
+    expect(parallelRelationships.length).toBe(1);
+    expect(parallelRelationships[0].stix.source_ref).toBe(sourceRef2);
+  });
+
   it('GET /api/relationships returns the (latest) relationship matching a source_ref', async function () {
     const res = await request(app)
       .get('/api/relationships?sourceRef=' + sourceRef1)

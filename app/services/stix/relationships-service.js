@@ -107,11 +107,11 @@ class RelationshipsService extends BaseService {
   }
 
   async getParallelRelationships() {
-    let documents = await this.repository.retrieveParallelRelationships();
-    for (let i = 0; i < documents.length; i++) {
-      await this.addCreatedByAndModifiedByIdentitiesToAll(documents[i]);
-    }
-    return documents;
+    let relationship_map = await this.repository.retrieveParallelRelationships();
+    relationship_map.forEach(async (value) => {
+      await this.addCreatedByAndModifiedByIdentitiesToAll(value);
+    });
+    return relationship_map;
   }
 }
 

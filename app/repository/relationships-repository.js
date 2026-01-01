@@ -130,16 +130,28 @@ class RelationshipsRepository extends BaseRepository {
   }
 
   async retrieveParallelRelationships() {
-    const all_relationships = this.retrieveAll({ versions: 'latest' });
+    const all_relationships = await this.retrieveAll({ versions: 'latest' });
+
+    // Create a mapping of rel_key (source_ref--relationship_type--target_ref)
+    // to an array of relationships that share it.
     let rel_map = new Map();
     for (const rel of all_relationships) {
       const rel_key =
         rel.stix.source_ref + '--' + rel.stix.relationship_type + '--' + rel.stix.target_ref;
       if (!rel_map.has(rel_key)) {
-        rel_map[rel_key] = [];
+        rel_map.set(rel_key, []);
       }
-      rel_map[rel_key].push(rel.stix.id);
+      const entry = rel_map.get(rel_key);
+      entry.push(rel);
     }
+
+    // return rel_map;
+    // Filter out the rel_keys that have more than one item in the array.
+    const parallel_relationships = new Map(
+      [...rel_map.entries()].filter(([, value]) => value.length > 1),
+    );
+
+    return parallel_relationships;
   }
 }
 
