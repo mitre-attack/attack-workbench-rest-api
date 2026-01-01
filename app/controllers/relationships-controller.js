@@ -110,6 +110,8 @@ exports.getRelationshipsMissingLinkById = async function (_, res) {
 exports.getParallelRelationships = async function (_, res) {
   try {
     const results = await relationshipsService.getParallelRelationships();
+    // console.log("parallel relationships:");
+    // console.log(results);
     logger.debug(`Success: Retrieved ${results.length} set(s) of parallel relationship(s)`);
     return res.status(200).send(results);
   } catch (err) {

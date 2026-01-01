@@ -145,8 +145,7 @@ class RelationshipsRepository extends BaseRepository {
       entry.push(rel);
     }
 
-    // return rel_map;
-    // Filter out the rel_keys that have more than one item in the array.
+    // Return only the rel_keys that have more than one item in the array.
     const parallel_relationships = new Map(
       [...rel_map.entries()].filter(([, value]) => value.length > 1),
     );

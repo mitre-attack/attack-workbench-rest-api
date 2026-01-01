@@ -429,7 +429,7 @@ describe('Relationships API', function () {
       .expect(200)
       .expect('Content-Type', /json/);
 
-    console.log(res.body);
+    // console.log(res.body);
     // We expect to get ATT&CK objects in an array
     const parallelRelationships = res.body;
     expect(parallelRelationships).toBeDefined();
