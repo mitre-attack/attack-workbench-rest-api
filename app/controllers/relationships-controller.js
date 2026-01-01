@@ -112,7 +112,9 @@ exports.getParallelRelationships = async function (_, res) {
     const results = await relationshipsService.getParallelRelationships();
     // console.log("parallel relationships:");
     // console.log(results);
-    logger.debug(`Success: Retrieved ${results.length} set(s) of parallel relationship(s)`);
+    logger.debug(
+      `Success: Retrieved ${Object.keys(results).length} set(s) of parallel relationship(s)`,
+    );
     return res.status(200).send(results);
   } catch (err) {
     logger.error('Failed with error: ' + err);
