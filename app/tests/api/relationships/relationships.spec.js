@@ -360,6 +360,67 @@ describe('Relationships API', function () {
     expect(relationship2).toBeDefined();
   });
 
+  let relationship3a;
+  it('POST /api/relationships creates a parallel relationship', async function () {
+    const timestamp = new Date().toISOString();
+    initialObjectData.stix.created = timestamp;
+    initialObjectData.stix.modified = timestamp;
+    initialObjectData.stix.source_ref = sourceRef2;
+    initialObjectData.stix.target_ref = targetRef2;
+    const body = initialObjectData;
+    const res = await request(app)
+      .post('/api/relationships')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    // We expect to get the created relationship
+    relationship3a = res.body;
+    expect(relationship3a).toBeDefined();
+  });
+
+  let relationship3b;
+  it('POST /api/relationships creates a parallel relationship with a different description', async function () {
+    const timestamp = new Date().toISOString();
+    initialObjectData.stix.created = timestamp;
+    initialObjectData.stix.modified = timestamp;
+    initialObjectData.stix.source_ref = sourceRef2;
+    initialObjectData.stix.target_ref = targetRef2;
+    initialObjectData.stix.description =
+      'This is a different description with a URL that it should not have (https://attack.mitre.org/foo/bar).';
+    const body = initialObjectData;
+    const res = await request(app)
+      .post('/api/relationships')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    // We expect to get the created relationship
+    relationship3b = res.body;
+    expect(relationship3b).toBeDefined();
+  });
+
+  it('GET /api/relationships/missing-linkbyid returns the relationship with an attack.mitre.org URL in the description', async function () {
+    const res = await request(app)
+      .get('/api/relationships/missing-linkbyid')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    // We expect to get ATT&CK objects in an array
+    const mlRelationships = res.body;
+    expect(mlRelationships).toBeDefined();
+    expect(Array.isArray(mlRelationships)).toBe(true);
+
+    expect(mlRelationships.length).toBe(1);
+    expect(mlRelationships[0].stix.source_ref).toBe(sourceRef2);
+  });
+
   it('GET /api/relationships returns the (latest) relationship matching a source_ref', async function () {
     const res = await request(app)
       .get('/api/relationships?sourceRef=' + sourceRef1)
@@ -480,6 +541,30 @@ describe('Relationships API', function () {
     await request(app)
       .delete(
         '/api/relationships/' + relationship2.stix.id + '/modified/' + relationship2.stix.modified,
+      )
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('DELETE /api/relationships should delete the fourth relationship', async function () {
+    await request(app)
+      .delete(
+        '/api/relationships/' +
+          relationship3a.stix.id +
+          '/modified/' +
+          relationship3a.stix.modified,
+      )
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('DELETE /api/relationships should delete the fifth relationship', async function () {
+    await request(app)
+      .delete(
+        '/api/relationships/' +
+          relationship3b.stix.id +
+          '/modified/' +
+          relationship3b.stix.modified,
       )
       .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
       .expect(204);

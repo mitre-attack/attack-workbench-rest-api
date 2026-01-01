@@ -110,6 +110,37 @@ class RelationshipsRepository extends BaseRepository {
       throw new DatabaseError(err);
     }
   }
+
+  async retrieveAllWithAttackURLInDescription() {
+    const aggregation = [
+      { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+      { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$document' } },
+      { $sort: { 'stix.id': 1 } },
+      {
+        $match: {
+          'stix.revoked': { $in: [null, false] },
+          'stix.x_mitre_deprecated': { $in: [null, false] },
+          'stix.description': { $regex: 'attack.mitre.org', $options: 'i' },
+        },
+      },
+    ];
+
+    return await this.model.aggregate(aggregation).exec();
+  }
+
+  async retrieveParallelRelationships() {
+    const all_relationships = this.retrieveAll({ versions: 'latest' });
+    let rel_map = new Map();
+    for (const rel of all_relationships) {
+      const rel_key =
+        rel.stix.source_ref + '--' + rel.stix.relationship_type + '--' + rel.stix.target_ref;
+      if (!rel_map.has(rel_key)) {
+        rel_map[rel_key] = [];
+      }
+      rel_map[rel_key].push(rel.stix.id);
+    }
+  }
 }
 
 module.exports = new RelationshipsRepository(Relationship);

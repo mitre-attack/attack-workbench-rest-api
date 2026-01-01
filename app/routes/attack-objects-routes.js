@@ -17,6 +17,14 @@ router
   );
 
 router
+  .route('/attack-objects/missing-linkbyid')
+  .get(
+    authn.authenticate,
+    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
+    attackObjectsController.getObjectsMissingLinkById,
+  );
+
+router
   .route('/attack-objects/attack-id/next')
   .get(
     authn.authenticate,

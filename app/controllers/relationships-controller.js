@@ -96,6 +96,28 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
+exports.getRelationshipsMissingLinkById = async function (_, res) {
+  try {
+    const results = await relationshipsService.retrieveAllWithAttackURLInDescription();
+    logger.debug(`Success: Retrieved ${results.length} relationship(s)`);
+    return res.status(200).send(results);
+  } catch (err) {
+    logger.error('Failed with error: ' + err);
+    return res.status(500).send('Unable to get relationships. Server error.');
+  }
+};
+
+exports.getParallelRelationships = async function (_, res) {
+  try {
+    const results = await relationshipsService.retrieveParallelRelationships();
+    logger.debug(`Success: Retrieved ${results.length} set(s) of parallel relationship(s)`);
+    return res.status(200).send(results);
+  } catch (err) {
+    logger.error('Failed with error: ' + err);
+    return res.status(500).send('Unable to get relationships. Server error.');
+  }
+};
+
 exports.create = async function (req, res) {
   // Get the data from the request
   const relationshipData = req.body;

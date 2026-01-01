@@ -24,7 +24,8 @@ const malwareObject = {
     name: 'software-2',
     spec_version: '2.1',
     type: 'malware',
-    description: 'This is a malware type of software.',
+    description:
+      'This is a malware type of software, with a URL that it should not have (https://attack.mitre.org/software/SW0001)',
     is_family: false,
     object_marking_refs: ['marking-definition--c2a0b8f8-51d4-4702-8e42-ce7a65235bce'],
     x_mitre_version: '1.1',
@@ -263,6 +264,23 @@ describe('ATT&CK Objects API', function () {
     expect(Array.isArray(attackObjects)).toBe(true);
     expect(attackObjects.length).toBe(1);
     expect(attackObjects[0].stix.type).toBe('malware');
+  });
+
+  it('GET /api/attack-objects/missing-linkbyid returns the object with an attack.mitre.org URL in the description', async function () {
+    const res = await request(app)
+      .get('/api/attack-objects/missing-linkbyid')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    // We expect to get ATT&CK objects in an array
+    const attackObjects = res.body;
+    expect(attackObjects).toBeDefined();
+    expect(Array.isArray(attackObjects)).toBe(true);
+
+    expect(attackObjects.length).toBe(1);
+    expect(attackObjects[0].stix.name).toBe('software-2');
   });
 
   after(async function () {

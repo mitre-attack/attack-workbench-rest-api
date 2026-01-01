@@ -72,6 +72,10 @@ paths:
   /api/attack-objects:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects'
 
+  # Find objects with missing LinkById tags
+  /api/attack-objects/missing-linkbyid:
+    $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1missing-linkbyid'
+
   # Generate next available ATT&CK ID
   /api/attack-objects/attack-id/next:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1attack-id~1next'
@@ -231,6 +235,12 @@ paths:
   # Relationships
   /api/relationships:
     $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships'
+
+  /api/relationships/missing-linkbyid:
+    $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1missing-linkbyid'
+
+  /api/relationships/parallel:
+    $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1parallel'
 
   /api/relationships/{stixId}:
     $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1{stixId}'
