@@ -231,7 +231,9 @@ paths:
               schema:
                 type: object
                 additionalProperties:
-                  $ref: '../components/relationships.yml#/components/schemas/relationship'
+                  type: array
+                  items:
+                    $ref: '../components/relationships.yml#/components/schemas/relationship'
         '500':
           description: 'Server error'
           content:
