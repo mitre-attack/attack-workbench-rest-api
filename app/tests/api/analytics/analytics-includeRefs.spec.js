@@ -10,10 +10,6 @@ const login = require('../../shared/login');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
-const { createSyntheticStixObject } = require('@mitre-attack/attack-data-model/dist/generator');
-
-createSyntheticStixObject();
-
 // Test data for analytics with data component references
 const analyticData = {
   workspace: {
