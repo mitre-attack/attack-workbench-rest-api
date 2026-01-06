@@ -9,9 +9,9 @@ components:
         workspace:
           $ref: 'workspace.yml#/components/schemas/workspace'
         stix:
-          $ref: '#/components/schemas/attack-pattern'
+          $ref: '#/components/schemas/stix-attack-pattern'
 
-    attack-pattern:
+    stix-attack-pattern:
       allOf:
         - $ref: 'stix-common.yml#/components/schemas/stix-common'
         - type: object

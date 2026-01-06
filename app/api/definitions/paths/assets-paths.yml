@@ -293,31 +293,3 @@ paths:
         '404':
           description: 'An asset with the requested STIX id and modified date was not found.'
 
-  # /api/assets/validate:
-  #   post:
-  #     summary: 'Validate an asset or a field of an asset'
-  #     operationId: 'asset-validate'
-  #     description: |
-  #       This endpoint validates an asset object or a field of an asset without creating or updating it.
-  #     tags:
-  #       - 'Assets'
-  #     requestBody:
-  #       required: true
-  #       content:
-  #         application/json:
-  #           schema:
-  #             $ref: '../components/assets.yml#/components/schemas/asset'
-  #     responses:
-  #       '200':
-  #         description: 'Validation result.'
-  #         content:
-  #           application/json:
-  #             schema:
-  #               type: object
-  #               properties:
-  #                 valid:
-  #                   type: boolean
-  #                 errors:
-  #                   type: array
-  #                   items:
-  #                     type: string
