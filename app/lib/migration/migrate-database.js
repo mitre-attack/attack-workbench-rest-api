@@ -9,14 +9,21 @@ exports.migrateDatabase = async function () {
     file: './app/lib/migration/migration-config.js',
   };
 
-  const { db, client } = await migrateMongo.database.connect();
-  const migrationStatus = await migrateMongo.status(db);
+  // In migrate-mongo v14+, exports are Promises that must be awaited
+  const [database, status, up] = await Promise.all([
+    migrateMongo.database,
+    migrateMongo.status,
+    migrateMongo.up,
+  ]);
+
+  const { db, client } = await database.connect();
+  const migrationStatus = await status(db);
 
   const actionsPending = Boolean(migrationStatus.find((elem) => elem.appliedAt === 'PENDING'));
   if (actionsPending) {
     if (config.database.migration.enable) {
       logger.info('Starting database migration...');
-      const appliedActions = await migrateMongo.up(db, client);
+      const appliedActions = await up(db, client);
       for (const action of appliedActions) {
         logger.info(`Applied migration action: ${action}`);
       }
