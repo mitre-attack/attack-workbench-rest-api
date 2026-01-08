@@ -35,17 +35,6 @@ exports.retrieveAll = async function (req, res) {
   }
 };
 
-exports.getObjectsMissingLinkById = async function (_, res) {
-  try {
-    const results = await attackObjectsService.retrieveAllWithAttackURLInDescription();
-    logger.debug(`Success: Retrieved ${results.length} ATT&CK object(s)`);
-    return res.status(200).send(results);
-  } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get ATT&CK objects. Server error.');
-  }
-};
-
 exports.getNextAttackId = async function (req, res) {
   // Validate required query parameter
   if (!req.query.type) {

@@ -22,22 +22,6 @@ router
   );
 
 router
-  .route('/relationships/missing-linkbyid')
-  .get(
-    authn.authenticate,
-    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
-    relationshipsController.getRelationshipsMissingLinkById,
-  );
-
-router
-  .route('/relationships/parallel')
-  .get(
-    authn.authenticate,
-    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
-    relationshipsController.getParallelRelationships,
-  );
-
-router
   .route('/relationships/:stixId')
   .get(
     authn.authenticate,

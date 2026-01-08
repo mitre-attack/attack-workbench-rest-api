@@ -98,21 +98,6 @@ class RelationshipsService extends BaseService {
       return results;
     }
   }
-
-  async retrieveAllWithAttackURLInDescription() {
-    let documents = await this.repository.retrieveAllWithAttackURLInDescription();
-    await this.addCreatedByAndModifiedByIdentitiesToAll(documents);
-
-    return documents;
-  }
-
-  async getParallelRelationships() {
-    let relationship_map = await this.repository.retrieveParallelRelationships();
-    relationship_map.forEach(async (value) => {
-      await this.addCreatedByAndModifiedByIdentitiesToAll(value);
-    });
-    return relationship_map;
-  }
 }
 
 // Default export

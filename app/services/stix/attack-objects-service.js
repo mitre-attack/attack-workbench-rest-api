@@ -50,16 +50,6 @@ class AttackObjectsService extends BaseService {
     return documents;
   }
 
-  async retrieveAllWithAttackURLInDescription() {
-    // Get attack objects from repository
-    let documents = await this.repository.retrieveAllWithAttackURLInDescription();
-
-    // Add identities
-    await identitiesService.addCreatedByAndModifiedByIdentitiesToAll(documents);
-
-    return documents;
-  }
-
   /**
    * Override of base class retrieveVersionById() because:
    * 1. Adds special handling for relationships

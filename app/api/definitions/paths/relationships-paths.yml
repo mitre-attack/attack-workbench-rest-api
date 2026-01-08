@@ -187,61 +187,6 @@ paths:
         '409':
           description: 'Duplicate `stix.id` and `stix.modified` properties. The relationship was not created.'
 
-  /api/relationships/missing-linkbyid:
-    get:
-      summary: 'Get a list of relationships with missing LinkById tags'
-      operationId: 'relationship-get-missing-linkbyid'
-      description: |
-        This endpoint generates a list of relationships that directly mention
-        attack.mitre.org in their descriptions, indicating that they are likely missing a
-        reference using the (LinkById: X####) pattern.
-      tags:
-        - 'Relationships'
-      responses:
-        '200':
-          description: 'A list of relationships.'
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '../components/relationships.yml#/components/schemas/relationship'
-        '500':
-          description: 'Server error'
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: 'Server error.'
-
-  /api/relationships/parallel:
-    get:
-      summary: 'Get a list of relationships with matching sources, targets, and relationship types.'
-      operationId: 'relationship-get-parallel'
-      description: |
-        This endpoint generates a map of lists of parallel relationships. Within each list,
-        the members share the same source_ref, target_ref, and relationship type values.
-      tags:
-        - 'Relationships'
-      responses:
-        '200':
-          description: 'A map of lists of parallel relationships.'
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: array
-                  items:
-                    $ref: '../components/relationships.yml#/components/schemas/relationship'
-        '500':
-          description: 'Server error'
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: 'Server error.'
-
   /api/relationships/{stixId}:
     get:
       summary: 'Get one or more versions of a relationship'

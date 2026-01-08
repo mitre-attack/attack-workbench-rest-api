@@ -66,15 +66,13 @@ tags:
     description: 'Operations on user accounts'
   - name: 'Health Check'
     description: 'Operations on system status'
+  - name: 'Reports'
+    description: 'Operations for generating analytical reports on ATT&CK data'
 
 paths:
   # ATT&CK Objects
   /api/attack-objects:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects'
-
-  # Find objects with missing LinkById tags
-  /api/attack-objects/missing-linkbyid:
-    $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1missing-linkbyid'
 
   # Generate next available ATT&CK ID
   /api/attack-objects/attack-id/next:
@@ -236,12 +234,6 @@ paths:
   /api/relationships:
     $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships'
 
-  /api/relationships/missing-linkbyid:
-    $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1missing-linkbyid'
-
-  /api/relationships/parallel:
-    $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1parallel'
-
   /api/relationships/{stixId}:
     $ref: 'paths/relationships-paths.yml#/paths/~1api~1relationships~1{stixId}'
 
@@ -361,6 +353,13 @@ paths:
   # Recent Activity
   /api/recent-activity:
     $ref: 'paths/recent-activity-paths.yml#/paths/~1api~1recent-activity'
+
+  # Reports
+  /api/reports/link-by-id/missing:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1link-by-id~1missing'
+
+  /api/reports/parallel-relationships:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1parallel-relationships'
 
   # Health Checks
   /api/health/ping:

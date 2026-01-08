@@ -2,26 +2,26 @@
 
 const express = require('express');
 
-const attackObjectsController = require('../controllers/attack-objects-controller');
+const reportsController = require('../controllers/reports-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
 
 const router = express.Router();
 
 router
-  .route('/attack-objects')
+  .route('/reports/link-by-id/missing')
   .get(
     authn.authenticate,
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
-    attackObjectsController.retrieveAll,
+    reportsController.getMissingLinkById,
   );
 
 router
-  .route('/attack-objects/attack-id/next')
+  .route('/reports/parallel-relationships')
   .get(
     authn.authenticate,
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
-    attackObjectsController.getNextAttackId,
+    reportsController.getParallelRelationships,
   );
 
 module.exports = router;
