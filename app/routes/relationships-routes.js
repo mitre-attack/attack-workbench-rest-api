@@ -2,9 +2,12 @@
 
 const express = require('express');
 
+const { relationshipSchema } = require('@mitre-attack/attack-data-model');
+
 const relationshipsController = require('../controllers/relationships-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -18,6 +21,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(relationshipSchema),
     relationshipsController.create,
   );
 
@@ -40,6 +44,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(relationshipSchema),
     relationshipsController.updateFull,
   )
   .delete(

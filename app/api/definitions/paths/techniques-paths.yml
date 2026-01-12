@@ -141,7 +141,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/techniques.yml#/components/schemas/technique'
+              # type: object
+              $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The technique has been successfully created.'
@@ -267,7 +268,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/techniques.yml#/components/schemas/technique'
+              # type: object
+              $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The technique was updated.'

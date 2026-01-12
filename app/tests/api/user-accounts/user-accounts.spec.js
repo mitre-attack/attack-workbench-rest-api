@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { expect } = require('expect');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -36,6 +37,10 @@ describe('User Accounts API', function () {
     // Wait until the indexes are created
     await UserAccount.init();
     await Team.init();
+
+    // Disable validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

@@ -2,9 +2,12 @@
 
 const express = require('express');
 
+const { collectionSchema } = require('@mitre-attack/attack-data-model');
+
 const collectionsController = require('../controllers/collections-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -15,7 +18,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     collectionsController.retrieveAll,
   )
-  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), collectionsController.create);
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(collectionSchema),
+    collectionsController.create,
+  );
 
 router
   .route('/collections/:stixId')

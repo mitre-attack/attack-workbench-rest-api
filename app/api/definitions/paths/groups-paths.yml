@@ -104,7 +104,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/groups.yml#/components/schemas/group'
+              # type: object
+              $ref: '../components/groups.yml#/components/schemas/group' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The group has been successfully created.'
@@ -230,7 +231,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/groups.yml#/components/schemas/group'
+              # type: object
+              $ref: '../components/groups.yml#/components/schemas/group' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The group was updated.'

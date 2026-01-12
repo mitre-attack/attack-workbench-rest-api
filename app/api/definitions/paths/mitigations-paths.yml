@@ -116,7 +116,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/mitigations.yml#/components/schemas/mitigation'
+              # type: object
+              $ref: '../components/mitigations.yml#/components/schemas/mitigation' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The mitigation has been successfully created.'
@@ -242,7 +243,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/mitigations.yml#/components/schemas/mitigation'
+              # type: object
+              $ref: '../components/mitigations.yml#/components/schemas/mitigation' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The mitigation was updated.'

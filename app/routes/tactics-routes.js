@@ -2,9 +2,12 @@
 
 const express = require('express');
 
+const { tacticSchema } = require('@mitre-attack/attack-data-model');
+
 const tacticsController = require('../controllers/tactics-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -15,7 +18,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     tacticsController.retrieveAll,
   )
-  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), tacticsController.create);
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(tacticSchema),
+    tacticsController.create,
+  );
 
 router
   .route('/tactics/:stixId')
@@ -33,7 +41,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     tacticsController.retrieveVersionById,
   )
-  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), tacticsController.updateFull)
+  .put(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(tacticSchema),
+    tacticsController.updateFull,
+  )
   .delete(authn.authenticate, authz.requireRole(authz.admin), tacticsController.deleteVersionById);
 
 router

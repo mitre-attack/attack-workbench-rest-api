@@ -107,7 +107,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/collections.yml#/components/schemas/collection'
+              # type: object
+              $ref: '../components/collections.yml#/components/schemas/collection' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The collection has been successfully created.'

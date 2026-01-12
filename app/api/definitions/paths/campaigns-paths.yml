@@ -104,7 +104,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/campaigns.yml#/components/schemas/campaign'
+              # type: object
+              $ref: '../components/campaigns.yml#/components/schemas/campaign' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The campaign has been successfully created.'
@@ -230,7 +231,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/campaigns.yml#/components/schemas/campaign'
+              # type: object
+              $ref: '../components/campaigns.yml#/components/schemas/campaign' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The campaign was updated.'

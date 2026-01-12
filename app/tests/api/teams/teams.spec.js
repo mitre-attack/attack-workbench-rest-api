@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { expect } = require('expect');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -49,6 +50,10 @@ describe('Teams API', function () {
     // Add an example user
     const user1 = new UserAccount(exampleUser);
     await user1.save();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

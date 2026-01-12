@@ -44,6 +44,10 @@ function cloneForCreate(attackObject) {
     cloned.stix.external_references = cloned.stix.external_references.filter(
       (ref) => !config.attackSourceNames.includes(ref.source_name),
     );
+    // If the list is now empty, remove the field
+    if (cloned.stix.external_references.length === 0) {
+      delete cloned.stix.external_references;
+    }
   }
 
   return cloned;
