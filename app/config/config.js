@@ -199,6 +199,20 @@ function loadConfig() {
         default: './app/api/definitions/openapi.yml',
       },
     },
+    validateRequests: {
+      withAttackDataModel: {
+        doc: 'Enable validation of POST and PUT request bodies using the ATT&CK Data Model',
+        format: Boolean,
+        default: false,
+        env: 'VALIDATE_WITH_ADM_SCHEMAS',
+      },
+      withOpenApi: {
+        doc: 'Enable validation of POST and PUT request bodies using the legacy OpenAPI YAML-based validation schemas',
+        format: Boolean,
+        default: true,
+        env: 'VALIDATE_WITH_LEGACY_SCHEMAS',
+      },
+    },
     collectionIndex: {
       defaultInterval: {
         doc: 'How often collection indexes should check for updates (in seconds). Only applies to new indexes added to the REST API, does not affect existing collection indexes',

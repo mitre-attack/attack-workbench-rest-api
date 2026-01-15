@@ -1,0 +1,38 @@
+paths:
+  /api/validate:
+    post:
+      summary: 'Validate a STIX object'
+      operationId: 'validate-stix-object'
+      description: |
+        Validates a STIX object against the schema specified in the request body `type` field.
+        Returns detailed error information as ZodError objects.
+      tags:
+        - 'Validation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - stix
+              properties:
+                type:
+                  type: string
+                  description: Valid STIX type (e.g., "attack-pattern", "intrustion-set", etc.)
+                status:
+                  type: string
+                  description: Workflow status - "work-in-progress", "awaiting-reviewed", "reviewed"
+                stix:
+                  type: object
+                  description: The STIX object to validate
+      responses:
+        '200':
+          description: 'Validation result'
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: 'Invalid request'

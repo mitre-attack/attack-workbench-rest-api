@@ -116,7 +116,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/tactics.yml#/components/schemas/tactic'
+              # type: object
+              $ref: '../components/tactics.yml#/components/schemas/tactic' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The tactic has been successfully created.'
@@ -242,7 +243,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/tactics.yml#/components/schemas/tactic'
+              # type: object
+              $ref: '../components/tactics.yml#/components/schemas/tactic' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The tactic was updated.'

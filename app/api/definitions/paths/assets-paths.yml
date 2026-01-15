@@ -128,7 +128,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/assets.yml#/components/schemas/asset'
+              # type: object
+              $ref: '../components/assets.yml#/components/schemas/asset' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The asset has been successfully created.'
@@ -252,7 +253,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/assets.yml#/components/schemas/asset'
+              # type: object
+              $ref: '../components/assets.yml#/components/schemas/asset' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The asset was updated.'
@@ -290,3 +292,4 @@ paths:
           description: 'The asset was successfully deleted.'
         '404':
           description: 'An asset with the requested STIX id and modified date was not found.'
+

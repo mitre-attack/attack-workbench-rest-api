@@ -4,6 +4,7 @@ const { expect } = require('expect');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
+const config = require('../../../config/config');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
@@ -72,6 +73,10 @@ describe('Collection Indexes Basic API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

@@ -2,9 +2,12 @@
 
 const express = require('express');
 
+const { dataSourceSchema } = require('@mitre-attack/attack-data-model');
+
 const dataSourcesController = require('../controllers/data-sources-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -15,7 +18,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     dataSourcesController.retrieveAll,
   )
-  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), dataSourcesController.create);
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(dataSourceSchema),
+    dataSourcesController.create,
+  );
 
 router
   .route('/data-sources/:stixId')
@@ -36,6 +44,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(dataSourceSchema),
     dataSourcesController.updateFull,
   )
   .delete(

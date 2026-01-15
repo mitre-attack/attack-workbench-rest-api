@@ -85,7 +85,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/identities.yml#/components/schemas/identity'
+              # type: object
+              $ref: '../components/identities.yml#/components/schemas/identity' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The identity has been successfully created.'
@@ -209,7 +210,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/identities.yml#/components/schemas/identity'
+              # type: object
+              $ref: '../components/identities.yml#/components/schemas/identity' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The identity was updated.'

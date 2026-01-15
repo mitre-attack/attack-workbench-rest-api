@@ -128,7 +128,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/data-sources.yml#/components/schemas/data-source'
+              # type: object
+              $ref: '../components/data-sources.yml#/components/schemas/data-source' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The data source has been successfully created.'
@@ -268,7 +269,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/data-sources.yml#/components/schemas/data-source'
+              # type: object
+              $ref: '../components/data-sources.yml#/components/schemas/data-source' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The data source was updated.'

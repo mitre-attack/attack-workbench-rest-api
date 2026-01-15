@@ -104,7 +104,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/matrices.yml#/components/schemas/matrix'
+              # type: object
+              $ref: '../components/matrices.yml#/components/schemas/matrix' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The matrix has been successfully created.'
@@ -230,7 +231,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/matrices.yml#/components/schemas/matrix'
+              # type: object
+              $ref: '../components/matrices.yml#/components/schemas/matrix' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The matrix was updated.'
