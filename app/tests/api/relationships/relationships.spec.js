@@ -376,7 +376,7 @@ describe('Relationships API', function () {
       .post('/api/relationships')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -576,7 +576,7 @@ describe('Relationships API', function () {
           '/modified/' +
           relationship3a.stix.modified,
       )
-      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
       .expect(204);
   });
 

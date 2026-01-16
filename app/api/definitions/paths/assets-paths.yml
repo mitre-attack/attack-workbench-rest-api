@@ -292,4 +292,3 @@ paths:
           description: 'The asset was successfully deleted.'
         '404':
           description: 'An asset with the requested STIX id and modified date was not found.'
-
