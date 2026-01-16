@@ -3,7 +3,7 @@
 const { z, ZodError } = require('zod');
 const { StatusCodes } = require('http-status-codes');
 const logger = require('../lib/logger');
-const { processValidationIssues } = require('../services/validate-service');
+const { processValidationIssues } = require('../services/system/validate-service');
 const {
   createAttackIdSchema,
   stixTypeToAttackIdMapping,

@@ -2,7 +2,7 @@
 
 const { z } = require('zod');
 const { StatusCodes } = require('http-status-codes');
-const validateService = require('../services/validate-service');
+const validateService = require('../services/system/validate-service');
 const logger = require('../lib/logger');
 
 const validationRequestSchema = z.object({
