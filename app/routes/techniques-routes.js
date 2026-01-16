@@ -2,9 +2,12 @@
 
 const express = require('express');
 
+const { techniqueSchema } = require('@mitre-attack/attack-data-model');
+
 const techniquesController = require('../controllers/techniques-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -15,7 +18,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     techniquesController.retrieveAll,
   )
-  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), techniquesController.create);
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(techniqueSchema),
+    techniquesController.create,
+  );
 
 router
   .route('/techniques/:stixId')
@@ -33,7 +41,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     techniquesController.retrieveVersionById,
   )
-  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), techniquesController.updateFull)
+  .put(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(techniqueSchema),
+    techniquesController.updateFull,
+  )
   .delete(
     authn.authenticate,
     authz.requireRole(authz.admin),

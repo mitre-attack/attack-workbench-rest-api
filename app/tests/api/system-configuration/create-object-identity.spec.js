@@ -5,6 +5,7 @@ const uuid = require('uuid');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
+const config = require('../../../config/config');
 const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
@@ -53,6 +54,10 @@ describe('Create Object with Organization Identity API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

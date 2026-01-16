@@ -2,9 +2,13 @@
 
 const express = require('express');
 
+const { groupSchema } = require('@mitre-attack/attack-data-model');
+
 const groupsController = require('../controllers/groups-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
+
+const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -15,7 +19,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     groupsController.retrieveAll,
   )
-  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), groupsController.create);
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(groupSchema),
+    groupsController.create,
+  );
 
 router
   .route('/groups/:stixId')
@@ -33,7 +42,12 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     groupsController.retrieveVersionById,
   )
-  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), groupsController.updateFull)
+  .put(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    validateWorkspaceStixData(groupSchema),
+    groupsController.updateFull,
+  )
   .delete(authn.authenticate, authz.requireRole(authz.admin), groupsController.deleteVersionById);
 
 module.exports = router;

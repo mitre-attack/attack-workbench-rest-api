@@ -44,6 +44,10 @@ describe('Mitigations API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 

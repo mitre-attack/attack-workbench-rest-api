@@ -60,6 +60,10 @@ describe('Matrices API', function () {
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
+
     // Log into the app
     passportCookie = await login.loginAnonymous(app);
   });

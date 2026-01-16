@@ -202,7 +202,7 @@ class AttackObjectsService extends BaseService {
    * @returns {Promise<string|null>} The next available ATT&CK ID, or null if type doesn't support IDs
    */
   async getNextAttackId(stixType, parentRef = null) {
-    const attackIdGenerator = require('../lib/attack-id-generator');
+    const attackIdGenerator = require('../../lib/attack-id-generator');
 
     // Map STIX types to their repositories
     const repositoryMap = {

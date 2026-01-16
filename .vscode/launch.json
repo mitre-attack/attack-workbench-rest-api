@@ -11,7 +11,11 @@
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/bin/www",
       "outputCapture": "std",
-      "envFile": "${workspaceFolder}/.env"
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "DATABASE_URL": "mongodb://localhost:27017/attack-workspace",
+        "LOG_LEVEL": "debug"
+      }
     },
     {
       "type": "node",

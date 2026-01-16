@@ -104,7 +104,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/data-components.yml#/components/schemas/data-component'
+              # type: object
+              $ref: '../components/data-components.yml#/components/schemas/data-component' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The data component has been successfully created.'
@@ -284,7 +285,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '../components/data-components.yml#/components/schemas/data-component'
+              # type: object
+              $ref: '../components/data-components.yml#/components/schemas/data-component' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The data component was updated.'

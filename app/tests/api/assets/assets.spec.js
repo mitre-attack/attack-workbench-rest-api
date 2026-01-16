@@ -49,6 +49,10 @@ describe('Assets API', function () {
   let passportCookie;
 
   before(async function () {
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
+
     // Establish the database connection
     // Use an in-memory database that we spin up for the test
     await database.initializeConnection();

@@ -5,6 +5,7 @@ const { expect } = require('expect');
 const _ = require('lodash');
 const uuid = require('uuid');
 
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
@@ -148,6 +149,10 @@ describe('Groups API Queries', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
