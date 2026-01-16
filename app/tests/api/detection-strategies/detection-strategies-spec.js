@@ -168,7 +168,7 @@ describe('Detection Strategies API', function () {
       .post('/api/analytics')
       .send(initialPostContentForAnalytic1)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -176,7 +176,7 @@ describe('Detection Strategies API', function () {
       .post('/api/analytics')
       .send(initialPostContentForAnalytic2)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 

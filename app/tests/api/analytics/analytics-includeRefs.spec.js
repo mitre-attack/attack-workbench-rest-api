@@ -377,7 +377,7 @@ describe('Analytics API - includeRefs Parameter', function () {
         .post('/api/analytics')
         .send(analyticWithBadRef)
         .set('Accept', 'application/json')
-        .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
         .expect(404);
     });
 
