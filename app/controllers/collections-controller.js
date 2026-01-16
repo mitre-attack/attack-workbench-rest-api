@@ -1,6 +1,6 @@
 'use strict';
 
-const collectionsService = require('../services/collections-service');
+const collectionsService = require('../services/stix/collections-service');
 const logger = require('../lib/logger');
 const {
   BadlyFormattedParameterError,
@@ -68,11 +68,6 @@ exports.retrieveVersionById = async function (req, res, next) {
     const { stixId, modified } = req.params;
     const { retrieveContents, stream } = req.query;
 
-    // Debug logging
-    console.log('[CONTROLLER] retrieveVersionById called');
-    console.log('[CONTROLLER] stream param:', stream, typeof stream);
-    console.log('[CONTROLLER] retrieveContents param:', retrieveContents, typeof retrieveContents);
-
     const options = {
       retrieveContents: retrieveContents === true || retrieveContents === 'true',
     };
@@ -80,12 +75,10 @@ exports.retrieveVersionById = async function (req, res, next) {
     // Use streaming if requested and contents are being retrieved
     // Fix: Check for string 'true' since query params are strings
     if ((stream === true || stream === 'true') && options.retrieveContents) {
-      console.log('[CONTROLLER] Delegating to streamVersionById');
       return exports.streamVersionById(req, res, next);
     }
 
     // Otherwise use regular response
-    console.log('[CONTROLLER] Using regular response');
     const collection = await collectionsService.retrieveVersionById(stixId, modified, options);
 
     if (!collection) {

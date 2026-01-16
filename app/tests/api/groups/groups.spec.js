@@ -1,15 +1,15 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const Group = require('../../../models/group-model');
-const markingDefinitionService = require('../../../services/marking-definitions-service');
-const systemConfigurationService = require('../../../services/system-configuration-service');
+const markingDefinitionService = require('../../../services/stix/marking-definitions-service');
+const systemConfigurationService = require('../../../services/system/system-configuration-service');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -217,7 +217,7 @@ describe('Groups API', function () {
   });
 
   it('POST /api/groups does not create a group with the same id and modified date', async function () {
-    const body = group1;
+    const body = cloneForCreate(group1);
     await request(app)
       .post('/api/groups')
       .send(body)
@@ -233,10 +233,7 @@ describe('Groups API', function () {
       'This is the second default marking definition';
     defaultMarkingDefinition2 = await addDefaultMarkingDefinition(markingDefinitionData);
 
-    group2 = _.cloneDeep(group1);
-    group2._id = undefined;
-    group2.__t = undefined;
-    group2.__v = undefined;
+    group2 = cloneForCreate(group1);
     const timestamp = new Date().toISOString();
     group2.stix.modified = timestamp;
     group2.stix.description = 'This is a new version of a group. Green.';
@@ -329,10 +326,7 @@ describe('Groups API', function () {
 
   let group3;
   it('POST /api/groups should create a new group with a different stix.id', async function () {
-    const group = _.cloneDeep(initialObjectData);
-    group._id = undefined;
-    group.__t = undefined;
-    group.__v = undefined;
+    const group = cloneForCreate(initialObjectData);
     group.stix.id = undefined;
     const timestamp = new Date().toISOString();
     group.stix.created = timestamp;
@@ -355,10 +349,7 @@ describe('Groups API', function () {
 
   let group4;
   it('POST /api/groups should create a new version of a group with a duplicate stix.id but different stix.modified date', async function () {
-    group4 = _.cloneDeep(group1);
-    group4._id = undefined;
-    group4.__t = undefined;
-    group4.__v = undefined;
+    group4 = cloneForCreate(group1);
     const timestamp = new Date().toISOString();
     group4.stix.modified = timestamp;
     group4.stix.description = 'This is a new version of a group. Yellow.';

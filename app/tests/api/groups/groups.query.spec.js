@@ -13,8 +13,8 @@ logger.level = 'debug';
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const userAccountsService = require('../../../services/user-accounts-service');
-const groupsService = require('../../../services/groups-service');
+const userAccountsService = require('../../../services/system/user-accounts-service');
+const groupsService = require('../../../services/stix/groups-service');
 
 function asyncWait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,31 +25,20 @@ async function readJson(path) {
   return JSON.parse(data);
 }
 
-function makeExternalReference(attackId) {
-  return {
-    source_name: 'mitre-attack',
-    external_id: attackId,
-    url: `https://attack.mitre.org/groups/${attackId}`,
-  };
-}
-
 async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
   const groups = [];
   // x_mitre_deprecated,revoked undefined (user account 1)
   const data1a = _.cloneDeep(baseGroup);
-  data1a.stix.external_references.push(makeExternalReference('G0001'));
   data1a.userAccountId = userAccountId1;
   groups.push(data1a);
 
   // x_mitre_deprecated,revoked undefined (user account 2)
   const data1b = _.cloneDeep(baseGroup);
-  data1b.stix.external_references.push(makeExternalReference('G0010'));
   data1b.userAccountId = userAccountId2;
   groups.push(data1b);
 
   // x_mitre_deprecated = false, revoked = false
   const data2 = _.cloneDeep(baseGroup);
-  data2.stix.external_references.push(makeExternalReference('G0002'));
   data2.stix.x_mitre_deprecated = false;
   data2.stix.revoked = false;
   data2.workspace.workflow = { state: 'work-in-progress' };
@@ -58,7 +47,6 @@ async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
 
   // x_mitre_deprecated = true, revoked = false
   const data3 = _.cloneDeep(baseGroup);
-  data3.stix.external_references.push(makeExternalReference('G0003'));
   data3.stix.x_mitre_deprecated = true;
   data3.stix.revoked = false;
   data3.workspace.workflow = { state: 'awaiting-review' };
@@ -67,7 +55,6 @@ async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
 
   // x_mitre_deprecated = false, revoked = true
   const data4 = _.cloneDeep(baseGroup);
-  data4.stix.external_references.push(makeExternalReference('G0004'));
   data4.stix.x_mitre_deprecated = false;
   data4.stix.revoked = true;
   data4.workspace.workflow = { state: 'awaiting-review' };
@@ -77,7 +64,6 @@ async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
   // multiple versions, last version has x_mitre_deprecated = true, revoked = true
   const data5a = _.cloneDeep(baseGroup);
   const id = `intrusion-set--${uuid.v4()}`;
-  data5a.stix.external_references.push(makeExternalReference('G0005'));
   data5a.stix.id = id;
   data5a.stix.name = 'multiple-versions';
   data5a.workspace.workflow = { state: 'awaiting-review' };
@@ -89,7 +75,6 @@ async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
 
   await asyncWait(10); // wait so the modified timestamp can change
   const data5b = _.cloneDeep(baseGroup);
-  data5b.stix.external_references.push(makeExternalReference('G0005'));
   data5b.stix.id = id;
   data5b.stix.name = 'multiple-versions';
   data5b.workspace.workflow = { state: 'awaiting-review' };
@@ -101,7 +86,6 @@ async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
 
   await asyncWait(10);
   const data5c = _.cloneDeep(baseGroup);
-  data5c.stix.external_references.push(makeExternalReference('G0005'));
   data5c.stix.id = id;
   data5c.stix.name = 'multiple-versions';
   data5c.workspace.workflow = { state: 'awaiting-review' };
@@ -283,7 +267,6 @@ describe('Groups API Queries', function () {
     // We expect to get the latest group with the correct ATT&CK ID
     const groups = res.body;
     logger.info(`Received groups: ${groups}`);
-    console.log(`Received groups: ${JSON.stringify(groups)}`);
     expect(groups).toBeDefined();
     expect(Array.isArray(groups)).toBe(true);
     expect(groups.length).toBe(1);

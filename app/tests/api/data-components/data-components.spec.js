@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -250,7 +250,7 @@ describe('Data Components API', function () {
   });
 
   it('POST /api/data-components does not create a data component with the same id and modified date', async function () {
-    const body = dataComponent1;
+    const body = cloneForCreate(dataComponent1);
     await request(app)
       .post('/api/data-components')
       .send(body)
@@ -261,10 +261,7 @@ describe('Data Components API', function () {
 
   let dataComponent2;
   it('POST /api/data-components should create a new version of a data component with a duplicate stix.id but different stix.modified date', async function () {
-    dataComponent2 = _.cloneDeep(dataComponent1);
-    dataComponent2._id = undefined;
-    dataComponent2.__t = undefined;
-    dataComponent2.__v = undefined;
+    dataComponent2 = cloneForCreate(dataComponent1);
     const timestamp = new Date().toISOString();
     dataComponent2.stix.modified = timestamp;
     const body = dataComponent2;
@@ -358,10 +355,7 @@ describe('Data Components API', function () {
 
   let dataComponent3;
   it('POST /api/data-components should create a new version of a data component with a duplicate stix.id but different stix.modified date', async function () {
-    dataComponent3 = _.cloneDeep(dataComponent1);
-    dataComponent3._id = undefined;
-    dataComponent3.__t = undefined;
-    dataComponent3.__v = undefined;
+    dataComponent3 = cloneForCreate(dataComponent1);
     const timestamp = new Date().toISOString();
     dataComponent3.stix.modified = timestamp;
     const body = dataComponent3;

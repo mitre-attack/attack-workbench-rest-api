@@ -1,6 +1,6 @@
 'use strict';
 
-const assetsService = require('../services/assets-service');
+const assetsService = require('../services/stix/assets-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

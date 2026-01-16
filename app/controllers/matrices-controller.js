@@ -1,6 +1,6 @@
 'use strict';
 
-const matricesService = require('../services/matrices-service');
+const matricesService = require('../services/stix/matrices-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

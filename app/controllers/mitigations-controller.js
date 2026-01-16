@@ -1,6 +1,6 @@
 'use strict';
 
-const mitigationsService = require('../services/mitigations-service');
+const mitigationsService = require('../services/stix/mitigations-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

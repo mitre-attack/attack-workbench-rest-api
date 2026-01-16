@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { expect } = require('expect');
 
+const { cloneForCreate } = require('../../shared/clone-for-create');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
@@ -148,7 +149,7 @@ describe('Marking Definitions API', function () {
 
   it('PUT /api/marking-definitions updates a marking definition', async function () {
     markingDefinition1.stix.description = 'This is an updated marking definition.';
-    const body = markingDefinition1;
+    const body = cloneForCreate(markingDefinition1);
     const res = await request(app)
       .put('/api/marking-definitions/' + markingDefinition1.stix.id)
       .send(body)
@@ -164,7 +165,7 @@ describe('Marking Definitions API', function () {
   });
 
   it('POST /api/marking-definitions does not create a marking definition with the same id', async function () {
-    const body = markingDefinition1;
+    const body = cloneForCreate(markingDefinition1);
     await request(app)
       .post('/api/marking-definitions')
       .send(body)

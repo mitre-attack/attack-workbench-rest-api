@@ -1,6 +1,6 @@
 'use strict';
 
-const markingDefinitionsService = require('../services/marking-definitions-service');
+const markingDefinitionsService = require('../services/stix/marking-definitions-service');
 const logger = require('../lib/logger');
 const {
   BadlyFormattedParameterError,

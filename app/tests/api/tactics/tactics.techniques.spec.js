@@ -11,7 +11,7 @@ logger.level = 'debug';
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 
 async function readJson(path) {
   const data = await fs.readFile(require.resolve(path));

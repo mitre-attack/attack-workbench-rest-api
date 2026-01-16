@@ -95,6 +95,26 @@ class AttackObjectsRepository extends BaseRepository {
     ];
   }
 
+  async retrieveAllWithAttackURLInDescription() {
+    const aggregation = [
+      { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+      { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$document' } },
+      { $sort: { 'stix.id': 1 } },
+      {
+        $match: {
+          'stix.revoked': { $in: [null, false] },
+          'stix.x_mitre_deprecated': { $in: [null, false] },
+          'stix.description': { $regex: 'attack.mitre.org', $options: 'i' },
+        },
+      },
+    ];
+
+    const documents = await this.model.aggregate(aggregation).exec();
+
+    return documents;
+  }
+
   // A lean variant of BaseService.retrieveOneByVersion
   // TODO merge the two methods by supporting method argument 'lean=false' that toggles .lean() on/off
   async retrieveOneByVersionLean(stixId, modified) {

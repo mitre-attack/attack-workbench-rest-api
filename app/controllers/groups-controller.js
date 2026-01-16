@@ -1,6 +1,6 @@
 'use strict';
 
-const groupsService = require('../services/groups-service');
+const groupsService = require('../services/stix/groups-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

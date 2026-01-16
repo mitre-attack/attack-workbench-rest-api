@@ -1,4 +1,4 @@
-const dataSourcesService = require('../../../services/data-sources-service');
+const dataSourcesService = require('../../../services/stix/data-sources-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API

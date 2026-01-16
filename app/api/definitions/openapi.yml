@@ -66,11 +66,17 @@ tags:
     description: 'Operations on user accounts'
   - name: 'Health Check'
     description: 'Operations on system status'
+  - name: 'Reports'
+    description: 'Operations for generating analytical reports on ATT&CK data'
 
 paths:
   # ATT&CK Objects
   /api/attack-objects:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects'
+
+  # Generate next available ATT&CK ID
+  /api/attack-objects/attack-id/next:
+    $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1attack-id~1next'
 
   # Techniques
   /api/techniques:
@@ -347,6 +353,13 @@ paths:
   # Recent Activity
   /api/recent-activity:
     $ref: 'paths/recent-activity-paths.yml#/paths/~1api~1recent-activity'
+
+  # Reports
+  /api/reports/link-by-id/missing:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1link-by-id~1missing'
+
+  /api/reports/parallel-relationships:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1parallel-relationships'
 
   # Health Checks
   /api/health/ping:

@@ -1,6 +1,6 @@
 'use strict';
 
-const notesService = require('../services/notes-service');
+const notesService = require('../services/system/notes-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

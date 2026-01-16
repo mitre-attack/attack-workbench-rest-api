@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -213,10 +213,7 @@ describe('Notes API', function () {
 
   let note2;
   it('POST /api/notes should create a new version of a note with a duplicate stix.id but different stix.modified date', async function () {
-    note2 = _.cloneDeep(note1);
-    note2._id = undefined;
-    note2.__t = undefined;
-    note2.__v = undefined;
+    note2 = cloneForCreate(note1);
     const timestamp = new Date().toISOString();
     note2.stix.abstract = 'This is the abstract for a note.';
     note2.stix.content = 'Still a note. Parchment.';
@@ -255,10 +252,7 @@ describe('Notes API', function () {
 
   let note3;
   it('POST /api/notes should create a new note with a new stix.id', async function () {
-    note3 = _.cloneDeep(note1);
-    note3._id = undefined;
-    note3.__t = undefined;
-    note3.__v = undefined;
+    note3 = cloneForCreate(note1);
     note3.stix.id = undefined;
     const timestamp = new Date().toISOString();
     note3.stix.abstract = 'This is the abstract for a note.';
@@ -280,10 +274,7 @@ describe('Notes API', function () {
 
   let note4;
   it('POST /api/notes should create a new version of the last note with a duplicate stix.id but different stix.modified date', async function () {
-    note4 = _.cloneDeep(note3);
-    note4._id = undefined;
-    note4.__t = undefined;
-    note4.__v = undefined;
+    note4 = cloneForCreate(note3);
     const timestamp = new Date().toISOString();
     note4.stix.abstract = 'This is the abstract for a note. Parchment';
     note4.stix.content = 'Still a note.';

@@ -4,8 +4,6 @@ const mongoose = require('mongoose');
 const workspaceDefinitions = require('./subschemas/workspace');
 const stixCoreDefinitions = require('./subschemas/stix-core');
 
-const config = require('../config/config');
-
 // Create the definition
 const attackObjectDefinition = {
   workspace: {
@@ -23,18 +21,10 @@ const options = {
 };
 const attackObjectSchema = new mongoose.Schema(attackObjectDefinition, options);
 
-//Save the ATT&CK ID in a more easily queried location
-attackObjectSchema.pre('save', function (next) {
-  if (this.stix.external_references) {
-    const mitreAttackReference = this.stix.external_references.find((externalReference) =>
-      config.attackSourceNames.includes(externalReference.source_name),
-    );
-    if (mitreAttackReference && mitreAttackReference.external_id) {
-      this.workspace.attack_id = mitreAttackReference.external_id;
-    }
-  }
-  return next();
-});
+// Note: workspace.attack_id is now managed by the service layer (BaseService)
+// and external_references are built from workspace.attack_id, not the other way around.
+// The pre-save hook that used to extract attack_id from external_references has been removed
+// to avoid circular dependencies with the new external reference builder.
 
 // Add an index on stix.id and stix.modified
 // This improves the efficiency of queries and enforces uniqueness on this combination of properties

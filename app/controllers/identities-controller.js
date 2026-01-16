@@ -1,6 +1,6 @@
 'use strict';
 
-const identitiesService = require('../services/identities-service');
+const identitiesService = require('../services/stix/identities-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

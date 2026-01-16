@@ -1,6 +1,6 @@
 'use strict';
 
-const dataSourcesService = require('../services/data-sources-service');
+const dataSourcesService = require('../services/stix/data-sources-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

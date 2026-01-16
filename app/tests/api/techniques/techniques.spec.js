@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -24,19 +24,12 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'attack-pattern',
     description: 'This is a technique. Orange.',
-    external_references: [
-      {
-        source_name: 'mitre-attack',
-        external_id: 'T9999',
-        url: 'https://attack.mitre.org/techniques/T9999',
-      },
-      { source_name: 'source-1', external_id: 's1' },
-    ],
+    // external_references: [
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     kill_chain_phases: [{ kill_chain_name: 'kill-chain-name-1', phase_name: 'phase-1' }],
     x_mitre_modified_by_ref: 'identity--d6424da5-85a0-496e-ae17-494499271108',
-    x_mitre_data_sources: ['data-source-1', 'data-source-2'],
+    // x_mitre_data_sources: ['data-source-1', 'data-source-2'], // TODO field is deprecated
     x_mitre_detection: 'detection text',
     x_mitre_is_subtechnique: false,
     x_mitre_impact_type: ['impact-1'],
@@ -165,9 +158,12 @@ describe('Techniques Basic API', function () {
     );
     expect(technique.stix.created_by_ref).toBe(technique1.stix.created_by_ref);
     expect(technique.stix.x_mitre_modified_by_ref).toBe(technique1.stix.x_mitre_modified_by_ref);
-    expect(technique.stix.x_mitre_data_sources).toEqual(
-      expect.arrayContaining(technique1.stix.x_mitre_data_sources),
-    );
+    // x_mitre_data_sources is deprecated and not set in the test data
+    if (technique1.stix.x_mitre_data_sources) {
+      expect(technique.stix.x_mitre_data_sources).toEqual(
+        expect.arrayContaining(technique1.stix.x_mitre_data_sources),
+      );
+    }
     expect(technique.stix.x_mitre_detection).toBe(technique1.stix.x_mitre_detection);
     expect(technique.stix.x_mitre_is_subtechnique).toBe(technique1.stix.x_mitre_is_subtechnique);
     expect(technique.stix.x_mitre_impact_type).toEqual(
@@ -201,7 +197,7 @@ describe('Techniques Basic API', function () {
     const timestamp = new Date().toISOString();
     technique1.stix.modified = timestamp;
     technique1.stix.description = 'This is an updated technique.';
-    const body = technique1;
+    const body = cloneForCreate(technique1);
     const res = await request(app)
       .put('/api/techniques/' + technique1.stix.id + '/modified/' + originalModified)
       .send(body)
@@ -218,7 +214,7 @@ describe('Techniques Basic API', function () {
   });
 
   it('POST /api/techniques does not create a technique with the same id and modified date', async function () {
-    const body = technique1;
+    const body = cloneForCreate(technique1);
     await request(app)
       .post('/api/techniques')
       .send(body)
@@ -229,10 +225,7 @@ describe('Techniques Basic API', function () {
 
   let technique2;
   it('POST /api/techniques should create a new version of a technique with a duplicate stix.id but different stix.modified date', async function () {
-    technique2 = _.cloneDeep(technique1);
-    technique2._id = undefined;
-    technique2.__t = undefined;
-    technique2.__v = undefined;
+    technique2 = cloneForCreate(technique1);
     const timestamp = new Date().toISOString();
     technique2.stix.modified = timestamp;
     technique2.stix.description = 'Still a technique. Purple!';
@@ -252,10 +245,7 @@ describe('Techniques Basic API', function () {
 
   let technique3;
   it('POST /api/techniques should create a new version of a technique with a duplicate stix.id but different stix.modified date', async function () {
-    technique3 = _.cloneDeep(technique1);
-    technique3._id = undefined;
-    technique3.__t = undefined;
-    technique3.__v = undefined;
+    technique3 = cloneForCreate(technique1);
     const timestamp = new Date().toISOString();
     technique3.stix.modified = timestamp;
     technique3.stix.description = 'Still a technique. Blue!';
@@ -361,8 +351,10 @@ describe('Techniques Basic API', function () {
   });
 
   it('GET /api/techniques uses the search parameter (ATT&CK ID) to return the latest version of the technique', async function () {
+    // Use the auto-generated ATT&CK ID from technique1
+    const attackId = technique1.workspace.attack_id;
     const res = await request(app)
-      .get('/api/techniques?search=T9999')
+      .get(`/api/techniques?search=${attackId}`)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
@@ -380,7 +372,7 @@ describe('Techniques Basic API', function () {
     expect(technique.stix).toBeDefined();
     expect(technique.stix.id).toBe(technique3.stix.id);
     expect(technique.stix.modified).toBe(technique3.stix.modified);
-    expect(technique.workspace.attack_id).toEqual('T9999');
+    expect(technique.workspace.attack_id).toEqual(attackId);
   });
 
   it('GET /api/techniques should not get the first version of the techniques when using the search parameter', async function () {

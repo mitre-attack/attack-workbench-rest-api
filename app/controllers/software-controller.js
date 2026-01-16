@@ -1,6 +1,6 @@
 'use strict';
 
-const softwareService = require('../services/software-service');
+const softwareService = require('../services/stix/software-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

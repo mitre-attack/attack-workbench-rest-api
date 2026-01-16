@@ -41,6 +41,7 @@ fs.readdirSync(path.join(__dirname, '.')).forEach(function (filename) {
 // Handle errors that haven't otherwise been caught
 router.use(errorHandler.bodyParser);
 router.use(errorHandler.requestValidation);
+router.use(errorHandler.serviceExceptions);
 router.use(errorHandler.catchAll);
 
 module.exports = router;

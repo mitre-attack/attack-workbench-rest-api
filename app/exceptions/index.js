@@ -4,6 +4,9 @@ class CustomError extends Error {
   constructor(message, options = {}) {
     super(message);
 
+    // Set the error name to the class name
+    this.name = this.constructor.name;
+
     // Apply options (if defined) to the error object
     for (const key in options) {
       if (Object.prototype.hasOwnProperty.call(options, key)) {
@@ -169,6 +172,18 @@ class InvalidTypeError extends CustomError {
   }
 }
 
+class ImmutablePropertyError extends CustomError {
+  constructor(propertyName, options) {
+    super(`Cannot modify immutable property: ${propertyName}`, options);
+  }
+}
+
+class InvalidPostOperationError extends CustomError {
+  constructor(options) {
+    super('Cannot set the following keys:', options);
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -179,6 +194,8 @@ module.exports = {
   BadlyFormattedParameterError,
   InvalidQueryStringParameterError,
   CannotUpdateStaticObjectError,
+  ImmutablePropertyError,
+  InvalidPostOperationError,
 
   //** Database-related errors */
   DuplicateIdError,

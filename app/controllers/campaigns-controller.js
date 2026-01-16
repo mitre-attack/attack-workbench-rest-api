@@ -1,6 +1,6 @@
 'use strict';
 
-const campaignsService = require('../services/campaigns-service');
+const campaignsService = require('../services/stix/campaigns-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

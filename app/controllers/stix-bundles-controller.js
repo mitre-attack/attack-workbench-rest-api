@@ -1,7 +1,7 @@
 'use strict';
 
-const stixBundlesService = require('../services/stix-bundles-service');
-const stixBundlesServiceOld = require('../services/stix-bundles-service-old');
+const stixBundlesService = require('../services/stix/stix-bundles-service');
+const stixBundlesServiceOld = require('../services/stix/stix-bundles-service-old');
 const logger = require('../lib/logger');
 
 const validStixVersions = ['2.0', '2.1'];

@@ -2,7 +2,7 @@
 
 const AnonymousUuidStrategy = require('passport-anonym-uuid');
 
-const systemConfigurationService = require('../services/system-configuration-service');
+const systemConfigurationService = require('../services/system/system-configuration-service');
 
 let strategyName;
 exports.strategyName = function () {

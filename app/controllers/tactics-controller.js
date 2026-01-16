@@ -1,6 +1,6 @@
 'use strict';
 
-const tacticsService = require('../services/tactics-service');
+const tacticsService = require('../services/stix/tactics-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,

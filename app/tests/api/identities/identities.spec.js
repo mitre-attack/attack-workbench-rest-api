@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -184,10 +184,7 @@ describe('Identity API', function () {
 
   let identity2;
   it('POST /api/identities should create a new version of an identity with a duplicate stix.id but different stix.modified date', async function () {
-    identity2 = _.cloneDeep(identity1);
-    identity2._id = undefined;
-    identity2.__t = undefined;
-    identity2.__v = undefined;
+    identity2 = cloneForCreate(identity1);
     const timestamp = new Date().toISOString();
     identity2.stix.modified = timestamp;
     const body = identity2;
@@ -271,10 +268,7 @@ describe('Identity API', function () {
 
   let identity3;
   it('POST /api/identities should create a new version of an identity with a duplicate stix.id but different stix.modified date', async function () {
-    identity3 = _.cloneDeep(identity1);
-    identity3._id = undefined;
-    identity3.__t = undefined;
-    identity3.__v = undefined;
+    identity3 = cloneForCreate(identity1);
     const timestamp = new Date().toISOString();
     identity3.stix.modified = timestamp;
     const body = identity3;

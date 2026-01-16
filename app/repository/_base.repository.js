@@ -171,6 +171,14 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  async retrieveLatestByStixId(stixId) {
+    try {
+      return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async retrieveAllById(stixId) {
     try {
       return await this.model.find({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
@@ -179,7 +187,7 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
-  async retrieveLatestByStixId(stixId) {
+  async retrieveLatestByStixIdLean(stixId) {
     try {
       return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
     } catch (err) {
@@ -340,6 +348,7 @@ class BaseRepository extends AbstractRepository {
       const document = new this.model(data);
       return await document.save();
     } catch (err) {
+      logger.error(`A database error occurred: ${err.message}`);
       if (err.name === 'MongoServerError' && err.code === 11000) {
         throw new DuplicateIdError({
           details: `Document with id '${data.stix.id}' already exists.`,

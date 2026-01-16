@@ -2,18 +2,18 @@ const fs = require('fs').promises;
 
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 
 async function readJson(path) {
   const data = await fs.readFile(require.resolve(path));
@@ -201,10 +201,7 @@ describe('Matrices API', function () {
 
   let matrix2;
   it('POST /api/matrices should create a new version of a matrix with a duplicate stix.id but different stix.modified date', async function () {
-    matrix2 = _.cloneDeep(matrix1);
-    matrix2._id = undefined;
-    matrix2.__t = undefined;
-    matrix2.__v = undefined;
+    matrix2 = cloneForCreate(matrix1);
     const timestamp = new Date().toISOString();
     matrix2.stix.modified = timestamp;
     const body = matrix2;
@@ -224,10 +221,7 @@ describe('Matrices API', function () {
 
   let matrix3;
   it('POST /api/matrices should create a new version of a matrix with a duplicate stix.id but different stix.modified date', async function () {
-    matrix3 = _.cloneDeep(matrix1);
-    matrix3._id = undefined;
-    matrix3.__t = undefined;
-    matrix3.__v = undefined;
+    matrix3 = cloneForCreate(matrix1);
     const timestamp = new Date().toISOString();
     matrix3.stix.modified = timestamp;
     const body = matrix3;

@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -177,8 +177,10 @@ describe('Tactics API', function () {
   });
 
   it('POST /api/tactics does not create a tactic with the same id and modified date', async function () {
-    const body = tactic1;
-    // We expect to get the created tactic
+    // Clone the tactic to remove backend-controlled fields, but keep the same modified date
+    const body = cloneForCreate(tactic1);
+    body.stix.modified = tactic1.stix.modified; // Keep the same modified date to trigger duplicate check
+    // We expect to get a 409 Conflict error
     await request(app)
       .post('/api/tactics')
       .send(body)
@@ -189,10 +191,7 @@ describe('Tactics API', function () {
 
   let tactic2;
   it('POST /api/tactics should create a new version of a tactic with a duplicate stix.id but different stix.modified date', async function () {
-    tactic2 = _.cloneDeep(tactic1);
-    tactic2._id = undefined;
-    tactic2.__t = undefined;
-    tactic2.__v = undefined;
+    tactic2 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic2.stix.description = 'Still a tactic. Red.';
     tactic2.stix.modified = timestamp;
@@ -212,10 +211,7 @@ describe('Tactics API', function () {
 
   let tactic3;
   it('POST /api/tactics should create a new version of a tactic with a duplicate stix.id but different stix.modified date', async function () {
-    tactic3 = _.cloneDeep(tactic1);
-    tactic3._id = undefined;
-    tactic3.__t = undefined;
-    tactic3.__v = undefined;
+    tactic3 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic3.stix.description = 'Still a tactic. Violet.';
     tactic3.stix.modified = timestamp;

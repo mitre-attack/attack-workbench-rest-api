@@ -225,10 +225,15 @@ function loadConfig() {
       },
     },
     scheduler: {
-      checkWorkbenchInterval: {
+      syncCollectionIndexesCron: {
         doc: 'Sets the interval in seconds for starting the scheduler.',
-        default: 10,
-        env: 'CHECK_WORKBENCH_INTERVAL',
+        default: '* * * * *', // every minute
+        env: 'SYNC_COLLECTION_INDEXES_CRON',
+      },
+      checkWipAttackIdsCron: {
+        doc: 'Cron pattern for checking WIP objects with ATT&CK IDs (e.g., "0 * * * *" for hourly).',
+        default: '0 * * * *', // every hour
+        env: 'CHECK_WIP_ATTACK_IDS_CRON',
       },
       enableScheduler: {
         format: Boolean,

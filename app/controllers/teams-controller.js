@@ -1,6 +1,6 @@
 'use strict';
 
-const teamsService = require('../services/teams-service');
+const teamsService = require('../services/system/teams-service');
 const logger = require('../lib/logger');
 const { NotFoundError, BadlyFormattedParameterError, DuplicateIdError } = require('../exceptions');
 

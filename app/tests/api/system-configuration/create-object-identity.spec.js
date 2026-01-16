@@ -1,11 +1,11 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 const uuid = require('uuid');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -140,10 +140,7 @@ describe('Create Object with Organization Identity API', function () {
   });
 
   it('POST /api/tactics creates a new version of the tactic', async function () {
-    const tactic2 = _.cloneDeep(tactic1);
-    tactic2._id = undefined;
-    tactic2.__t = undefined;
-    tactic2.__v = undefined;
+    const tactic2 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic2.stix.modified = timestamp;
     const body = tactic2;

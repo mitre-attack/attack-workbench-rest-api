@@ -1,10 +1,9 @@
 'use strict';
 
-const dataComponentsService = require('../services/data-components-service');
+const dataComponentsService = require('../services/stix/data-components-service');
 const logger = require('../lib/logger');
-const { DuplicateIdError } = require('../exceptions');
 
-exports.retrieveAll = async function (req, res) {
+exports.retrieveAll = async function (req, res, next) {
   const options = {
     offset: req.query.offset || 0,
     limit: req.query.limit || 0,
@@ -27,12 +26,11 @@ exports.retrieveAll = async function (req, res) {
     }
     return res.status(200).send(results);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get data components. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveById = async function (req, res) {
+exports.retrieveById = async function (req, res, next) {
   const options = {
     versions: req.query.versions || 'latest',
   };
@@ -48,12 +46,11 @@ exports.retrieveById = async function (req, res) {
       return res.status(200).send(dataComponents);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get data component. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveChannelsById = async function (req, res) {
+exports.retrieveChannelsById = async function (req, res, next) {
   try {
     const dataComponents = await dataComponentsService.retrieveById(req.params.stixId, {
       versions: 'latest',
@@ -68,12 +65,11 @@ exports.retrieveChannelsById = async function (req, res) {
       return res.status(200).send(channels);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get data components. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveLogSourcesById = async function (req, res) {
+exports.retrieveLogSourcesById = async function (req, res, next) {
   try {
     const dataComponents = await dataComponentsService.retrieveById(req.params.stixId, {
       versions: 'latest',
@@ -85,12 +81,11 @@ exports.retrieveLogSourcesById = async function (req, res) {
       return res.status(200).send(dataComponents[0].stix.x_mitre_log_sources);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get data components. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveVersionById = async function (req, res) {
+exports.retrieveVersionById = async function (req, res, next) {
   try {
     const dataComponent = await dataComponentsService.retrieveVersionById(
       req.params.stixId,
@@ -103,12 +98,11 @@ exports.retrieveVersionById = async function (req, res) {
       return res.status(200).send(dataComponent);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get data component. Server error.');
+    next(err);
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   // Get the data from the request
   const dataComponentData = req.body;
   const options = {
@@ -122,19 +116,11 @@ exports.create = async function (req, res) {
     logger.debug('Success: Created data component with id ' + dataComponent.stix.id);
     return res.status(201).send(dataComponent);
   } catch (err) {
-    if (err instanceof DuplicateIdError) {
-      logger.warn('Duplicate stix.id and stix.modified');
-      return res
-        .status(409)
-        .send('Unable to create data component. Duplicate stix.id and stix.modified properties.');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create data component. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.updateFull = async function (req, res) {
+exports.updateFull = async function (req, res, next) {
   // Get the data from the request
   const dataComponentData = req.body;
 
@@ -153,12 +139,11 @@ exports.updateFull = async function (req, res) {
       return res.status(200).send(dataComponent);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update data component. Server error.');
+    next(err);
   }
 };
 
-exports.deleteVersionById = async function (req, res) {
+exports.deleteVersionById = async function (req, res, next) {
   try {
     const dataComponent = await dataComponentsService.deleteVersionById(
       req.params.stixId,
@@ -171,12 +156,11 @@ exports.deleteVersionById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete data component failed. ' + err);
-    return res.status(500).send('Unable to delete data component. Server error.');
+    next(err);
   }
 };
 
-exports.deleteById = async function (req, res) {
+exports.deleteById = async function (req, res, next) {
   try {
     const dataComponents = await dataComponentsService.deleteById(req.params.stixId);
     if (dataComponents.deletedCount === 0) {
@@ -186,7 +170,6 @@ exports.deleteById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete data component failed. ' + err);
-    return res.status(500).send('Unable to delete data component. Server error.');
+    next(err);
   }
 };

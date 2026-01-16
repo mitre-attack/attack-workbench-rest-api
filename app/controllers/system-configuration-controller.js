@@ -1,7 +1,7 @@
 'use strict';
 
-const systemConfigurationService = require('../services/system-configuration-service');
-const { SystemConfigurationService } = require('../services/system-configuration-service');
+const systemConfigurationService = require('../services/system/system-configuration-service');
+const { SystemConfigurationService } = require('../services/system/system-configuration-service');
 const logger = require('../lib/logger');
 
 exports.retrieveSystemVersion = function (req, res) {

@@ -1,4 +1,4 @@
-const mitigationsService = require('../../../services/mitigations-service');
+const mitigationsService = require('../../../services/stix/mitigations-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API

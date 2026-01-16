@@ -1,6 +1,6 @@
 'use strict';
 
-const relationshipsService = require('../services/relationships-service');
+const relationshipsService = require('../services/stix/relationships-service');
 const logger = require('../lib/logger');
 const {
   BadlyFormattedParameterError,
