@@ -39,7 +39,7 @@ async function initializeData() {
   };
 
   // Log into the Workbench REST API
-  const loginUrl = 'http://localhost:3000/api/authn/anonymous/login';
+  const loginUrl = 'http://localhost:8080/api/authn/anonymous/login';
   await login(loginUrl);
 
   // Import the collection index v1 into the database
