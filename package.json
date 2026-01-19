@@ -73,7 +73,7 @@
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
-    "zod": "^4.1.8"
+    "zod": "4.2.1"
   },
   "devDependencies": {
     "@codedependant/semantic-release-docker": "^5.1.1",
