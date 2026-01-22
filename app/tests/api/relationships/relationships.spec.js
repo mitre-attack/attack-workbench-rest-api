@@ -376,7 +376,7 @@ describe('Relationships API', function () {
       .post('/api/relationships')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -399,7 +399,7 @@ describe('Relationships API', function () {
       .post('/api/relationships')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -408,28 +408,11 @@ describe('Relationships API', function () {
     expect(relationship3b).toBeDefined();
   });
 
-  it('GET /api/relationships/missing-linkbyid returns the relationship with an attack.mitre.org URL in the description', async function () {
+  it('GET /api/reports/parallel-relationships returns the parallel relationships', async function () {
     const res = await request(app)
-      .get('/api/relationships/missing-linkbyid')
+      .get('/api/reports/parallel-relationships')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
-      .expect(200)
-      .expect('Content-Type', /json/);
-
-    // We expect to get one relationship in an array
-    const mlRelationships = res.body;
-    expect(mlRelationships).toBeDefined();
-    expect(Array.isArray(mlRelationships)).toBe(true);
-
-    expect(mlRelationships.length).toBe(1);
-    expect(mlRelationships[0].stix.source_ref).toBe(sourceRef2);
-  });
-
-  it('GET /api/relationships/parallel returns the parallel relationships', async function () {
-    const res = await request(app)
-      .get('/api/relationships/parallel')
-      .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -437,10 +420,10 @@ describe('Relationships API', function () {
     // We expect to get a mapping of relationship key -> list of three parallel relationships
     const parallelRelationships = res.body;
     expect(parallelRelationships).toBeDefined();
-    expect(Array.isArray(parallelRelationships)).toBe(true);
-
-    expect(parallelRelationships.length).toBe(1);
-    expect(parallelRelationships[0].stix.source_ref).toBe(sourceRef2);
+    const pRelationships = Object.values(parallelRelationships)[0];
+    expect(Array.isArray(pRelationships)).toBe(true);
+    expect(pRelationships.length).toBe(3);
+    expect(pRelationships[0].stix.source_ref).toBe(sourceRef2);
   });
 
   it('GET /api/relationships returns the (latest) relationship matching a source_ref', async function () {
@@ -576,7 +559,7 @@ describe('Relationships API', function () {
           '/modified/' +
           relationship3a.stix.modified,
       )
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
@@ -588,7 +571,7 @@ describe('Relationships API', function () {
           '/modified/' +
           relationship3b.stix.modified,
       )
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
