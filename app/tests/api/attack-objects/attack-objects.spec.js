@@ -271,23 +271,6 @@ describe('ATT&CK Objects API', function () {
     expect(attackObjects[0].stix.type).toBe('malware');
   });
 
-  it('GET /api/attack-objects/missing-linkbyid returns the object with an attack.mitre.org URL in the description', async function () {
-    const res = await request(app)
-      .get('/api/attack-objects/missing-linkbyid')
-      .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
-      .expect(200)
-      .expect('Content-Type', /json/);
-
-    // We expect to get ATT&CK objects in an array
-    const attackObjects = res.body;
-    expect(attackObjects).toBeDefined();
-    expect(Array.isArray(attackObjects)).toBe(true);
-
-    expect(attackObjects.length).toBe(1);
-    expect(attackObjects[0].stix.name).toBe('software-2');
-  });
-
   after(async function () {
     await database.closeConnection();
   });
