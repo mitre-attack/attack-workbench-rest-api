@@ -23,6 +23,7 @@ module.exports.importErrors = {
   notInContents: 'Not in contents', // object in bundle but not in x_mitre_contents
   missingObject: 'Missing object', // object in x_mitre_contents but not in bundle
   saveError: 'Save error',
+  validationError: 'Validation error',
   attackSpecVersionViolation: 'ATT&CK Spec version violation',
 };
 
