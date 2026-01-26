@@ -184,6 +184,26 @@ class InvalidPostOperationError extends CustomError {
   }
 }
 
+class ValidationError extends CustomError {
+  constructor(message = 'Validation failed', options) {
+    super(message, options);
+  }
+}
+
+class SchemaValidationError extends CustomError {
+  constructor(schemaName, zodError, options = {}) {
+    const errorDetails = zodError.errors
+      .map((err) => `${err.path.join('.')}: ${err.message}`)
+      .join('; ');
+
+    super(`Schema validation failed for ${schemaName}: ${errorDetails}`, {
+      ...options,
+      zodError,
+      schemaName,
+    });
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -196,6 +216,10 @@ module.exports = {
   CannotUpdateStaticObjectError,
   ImmutablePropertyError,
   InvalidPostOperationError,
+
+  //** Validation errors */
+  ValidationError,
+  SchemaValidationError,
 
   //** Database-related errors */
   DuplicateIdError,
