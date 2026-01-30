@@ -16,49 +16,49 @@ This approach allows continuous development while providing stable, versioned re
 ### Snapshots
 
 A **snapshot** is an immutable state of a release track at a specific point in time, identified by:
-- `stix.id` - The release track's STIX identifier (constant across all snapshots)
-- `stix.modified` - ISO 8601 timestamp when the snapshot was created (unique per snapshot)
+- `id` - The release track's STIX identifier (constant across all snapshots)
+- `modified` - ISO 8601 timestamp when the snapshot was created (unique per snapshot)
 
-Every modification operation creates a new snapshot with a new `stix.modified` timestamp.
+Every modification operation creates a new snapshot with a new `modified` timestamp.
 
 A snapshot may be either a **draft release** (untagged) or a **tagged release** (has version number).
 
 ### Draft Releases vs Tagged Releases
 
-A **draft release** is a snapshot without a version number (`x_mitre_version === null`). It represents work-in-progress.
+A **draft release** is a snapshot without a version number (`version === null`). It represents work-in-progress.
 
 A **tagged release** is a snapshot that has been marked as production-ready for publication, identified by:
-- `stix.x_mitre_version` - Version string in MAJOR.MINOR format (e.g., "1.0")
+- `version` - Version string in MAJOR.MINOR format (e.g., "1.0")
 
-**Note:** ATT&CK release tracks use a two-part versioning scheme (MAJOR.MINOR), not the three-part semver format (MAJOR.MINOR.PATCH). The patch component is not tracked in `x_mitre_version`.
+**Note:** ATT&CK release tracks use a two-part versioning scheme (MAJOR.MINOR), not the three-part semver format (MAJOR.MINOR.PATCH). The patch component is not tracked in `version`.
 
-Not all snapshots are tagged releases. Only snapshots explicitly tagged via the `tag` operation become tagged releases.
+Not all snapshots are tagged releases. Only snapshots explicitly tagged via the **bump** operation become tagged releases.
 
 **Example Timeline with Tagged Releases:**
 ```
-id: "release-track--123", snapshot_id: "2024-01-01T10:00:00.000Z"
+id: "release-track--123", modified: "2024-01-01T10:00:00.000Z"
   version: null  ← DRAFT RELEASE (work in progress)
 
-id: "release-track--123", snapshot_id: "2024-01-02T14:30:00.000Z"
+id: "release-track--123", modified: "2024-01-02T14:30:00.000Z"
   version: null  ← DRAFT RELEASE (work in progress)
 
-id: "release-track--123", snapshot_id: "2024-01-05T09:15:00.000Z"
+id: "release-track--123", modified: "2024-01-05T09:15:00.000Z"
   version: "1.0"  ← TAGGED RELEASE (via tagging operation)
   version_history: [{
     version: "1.0",
     tagged_at: "2024-01-05T10:00:00Z",
     tagged_by: "user@example.com",
-    snapshot_id: "2024-01-05T09:15:00.000Z"
+    modified: "2024-01-05T09:15:00.000Z"
   }]
 
-id: "release-track--123", snapshot_id: "2024-01-10T11:00:00.000Z"
+id: "release-track--123", modified: "2024-01-10T11:00:00.000Z"
   version: null  ← DRAFT RELEASE (more development)
 
-id: "release-track--123", snapshot_id: "2024-01-15T16:20:00.000Z"
+id: "release-track--123", modified: "2024-01-15T16:20:00.000Z"
   version: "1.1"  ← TAGGED RELEASE (via tagging operation)
   version_history: [
-    { version: "1.1", tagged_at: "2024-01-15T17:00:00Z", tagged_by: "user@example.com", snapshot_id: "2024-01-15T16:20:00.000Z" },
-    { version: "1.0", tagged_at: "2024-01-05T10:00:00Z", tagged_by: "user@example.com", snapshot_id: "2024-01-05T09:15:00.000Z" }
+    { version: "1.1", tagged_at: "2024-01-15T17:00:00Z", tagged_by: "user@example.com", modified: "2024-01-15T16:20:00.000Z" },
+    { version: "1.0", tagged_at: "2024-01-05T10:00:00Z", tagged_by: "user@example.com", modified: "2024-01-05T09:15:00.000Z" }
   ]
 ```
 
@@ -69,8 +69,8 @@ id: "release-track--123", snapshot_id: "2024-01-15T16:20:00.000Z"
 The `tag` operation **tags an existing snapshot as a release** by assigning it a semantic version number (without the patch number). It does **NOT** create a new snapshot.
 
 This is analogous to Git's tagging system:
-- Git commits = release track snapshots (identified by `stix.modified`)
-- Git tags = tagged releases (identified by `stix.x_mitre_version`)
+- Git commits = release track snapshots (identified by `modified` key)
+- Git tags = tagged releases (identified by `version` key)
 
 ### In-Place Tagging Strategy
 
@@ -94,7 +94,7 @@ When you tag a snapshot:
 POST /api/release-tracks/:id/bump
 ```
 
-Tags the most recent snapshot (highest `stix.modified`) as a tagged release.
+Tags the most recent snapshot (highest `modified`) as a tagged release.
 
 **Request Body (optional):**
 ```json
@@ -116,7 +116,7 @@ POST /api/release-tracks/release--123/bump
 }
 ```
 
-2. **Major version increment:**
+1. **Major version increment:**
 ```bash
 # Current latest tagged release: 1.2
 # Tag as: 2.0 (major increment)
@@ -126,7 +126,7 @@ POST /api/release-tracks/release--123/bump
 }
 ```
 
-3. **Explicit version:**
+1. **Explicit version:**
 ```bash
 # Set specific version (must be greater than previous)
 POST /api/release-tracks/release--123/bump
@@ -135,7 +135,7 @@ POST /api/release-tracks/release--123/bump
 }
 ```
 
-4. **Default behavior (no body):**
+1. **Default behavior (no body):**
 ```bash
 # Defaults to minor increment
 POST /api/release-tracks/release--123/bump

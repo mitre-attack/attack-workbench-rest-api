@@ -24,20 +24,20 @@ This overloading creates confusion in documentation, code, and conversation. Col
 
 ### Release Track
 
-A **release track** is a series/chain (linked list) of **snapshots**, where each snapshot is either a draft release or a tagged release.
+A **release track** (RT) is a series/chain (linked list) of **snapshots**, where each snapshot is either a draft release or a tagged release.
 
 **Technical Definition:**
-- A release track is represented by all documents in the database sharing the same `stix.id`
+- A release track is represented by all documents in a RT-designated Mongo collection sharing the same `id`
+  - There exists exactly one Mongo collection for each release track.
 - Each document in the series represents a snapshot at a specific point in time
 - The release track provides version control and release management for curated sets of STIX objects
 
 **Characteristics:**
-- Has a unique identifier (e.g., `x-mitre-release--uuid`)
-  - **TODO**: should we support custom, user-specified identifiers? As long as we enforce uniqueness, I don't see an issue with abandoning the `type--uuid` format here, since the ID will not be exposed in releases.
+- Has a unique identifier (e.g., `release-track--uuid`) (see [naming conventions](./06_ENTITIES.md#naming-conventions) for details)
 - Contains a chronological history of all changes
 - Supports Git-inspired versioning workflow
 
-**Types of Release Tracks:**
+#### Types of Release Tracks
 
 There are two types of release tracks:
 
@@ -48,7 +48,9 @@ There are two types of release tracks:
 
 2. **Virtual Release Track** - Computes content by aggregating other release tracks
    - No direct object management (objects managed in source tracks)
-   - Creates snapshots manually or on schedule
+   - Creates snapshots **manually** or on **schedule**
+     - **Event-driven snapshots are not supported** to avoid from RT snapshot explosion. Consider for example a virtual RT that composes from 10 standard RTs, each of which releases on a daily basis: an enormous amount of virtual snapshots would quickly accrue, making it difficult to ascertain the causal relationships to the originating snapshots and which should actually be tagged/released. 
+     - Instead, users are encouraged to use virtual release tracks carefully and intentionally, creating aggregate releases on a more controlled, infrequent cadence than their non-virtual counterparts.
    - Examples: "EnterpriseTwiceAnnual" (aggregates Groups + Techniques + Software)
 
 **Examples:**
@@ -62,15 +64,15 @@ There are two types of release tracks:
 
 ### Snapshot
 
-A **snapshot** is a *node* in the release track's version history, identified by its `stix.modified` timestamp.
+A **snapshot** is a *node* in the release track's version history, identified by its `modified` timestamp.
 
 **Technical Definition:**
-- Each snapshot is a MongoDB document with a specific `stix.id` and `stix.modified` timestamp
+- Each snapshot is a MongoDB document with a specific `id` and `modified` timestamp
 - **Snapshots are immutable** once created (**except** for tagging operations)
-- The snapshot identifier is the combination of `stix.id` + `stix.modified`
+- The snapshot identifier is the combination of `id` + `modified`
 
 **Characteristics:**
-- Unique `stix.modified` timestamp (ISO 8601 format)
+- Unique `modified` timestamp (ISO 8601 format)
 - May be a **draft** release or a **tagged** release
 - Contains the full state of the release track at that point in time
 - Analogous to a Git commit
@@ -91,7 +93,7 @@ A **snapshot** is a *node* in the release track's version history, identified by
 A **draft release** (or **draft snapshot**) is an untagged snapshot - still in development, not yet published.
 
 **Technical Definition:**
-- A snapshot where `stix.x_mitre_version === null`
+- A snapshot where `version === null`
 - Represents work-in-progress that has not been marked as production-ready
 - Can be freely modified (creates new snapshots) without affecting published releases
 
@@ -110,10 +112,10 @@ A **draft release** (or **draft snapshot**) is an untagged snapshot - still in d
 
 ### Tagged Release
 
-A **tagged release** (or **tagged snapshot**) is a snapshot that has been marked with a version number (`x_mitre_version`) and is considered published/released.
+A **tagged release** (or **tagged snapshot**) is a snapshot that has been marked with a version number (`version`) and is considered published/released.
 
 **Technical Definition:**
-- A snapshot where `stix.x_mitre_version !== null`
+- A snapshot where `version !== null`
 - The version follows MAJOR.MINOR format (e.g., "1.0", "2.3", "15.1")
 - Created by performing a tagging operation on a draft release
 - The `stix.modified` timestamp does not change during tagging (in-place operation)
@@ -122,7 +124,7 @@ A **tagged release** (or **tagged snapshot**) is a snapshot that has been marked
 - Has an explicit version number
 - Considered production-ready and published
 - **Immutable** - cannot be re-tagged or untagged
-- Recorded in `workspace.version_history` for audit trail
+- Recorded in `version_history` for audit trail
 - Analogous to a Git tag
 
 **Examples:**
@@ -138,13 +140,12 @@ A **tagged release** (or **tagged snapshot**) is a snapshot that has been marked
 The **tagging operation** marks an existing snapshot as a tagged release by assigning it a version number.
 
 **Technical Definition:**
-- Sets `stix.x_mitre_version` on an existing snapshot (in-place update)
-- Does NOT create a new snapshot (does NOT change `stix.modified`)
-- Adds an entry to `workspace.version_history` for audit trail
+- Sets `version` on an existing snapshot (in-place update)
+- Does NOT create a new snapshot (does NOT change `modified`)
+- Adds an entry to `version_history` for audit trail
 - Can be performed on the latest snapshot or a specific historical snapshot
 
 **Characteristics:**
-- Analogous to `git tag`
 - Version must be greater than all previous tagged releases (monotonically increasing)
 - Cannot tag a snapshot that is already tagged (throws `AlreadyReleasedError`)
 - Supports automatic version calculation (MAJOR/MINOR bump) or explicit version
@@ -166,7 +167,7 @@ Standard release tracks use three tiers to manage the object lifecycle from deve
 
 ##### 1. Candidate Objects
 
-**Location:** `workspace.candidates`
+**Location:** `candidates`
 
 **Definition:** Objects being worked on; not yet ready for release.
 
@@ -180,7 +181,8 @@ Standard release tracks use three tiers to manage the object lifecycle from deve
 **Duplicate Rules:**
 - Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
 - **CAN** contain multiple versions of the same object (same `object_ref`, different `object_modified` timestamps)
-- Example: Can have `attack-pattern--T1234, modified: 2024-01-15` AND `attack-pattern--T1234, modified: 2024-02-20` simultaneously
+  - Example: Can have `attack-pattern--T1234, modified: 2024-01-15` AND `attack-pattern--T1234, modified: 2024-02-20` simultaneously
+  - However, only one version of a given object can be promoted to the `staged` tier and `members` tier
 
 **Examples:**
 - "Add these 10 techniques as candidate objects"
@@ -189,15 +191,18 @@ Standard release tracks use three tiers to manage the object lifecycle from deve
 
 ##### 2. Staged Objects
 
-**Location:** `workspace.staged`
+**Location:** `staged`
 
 **Definition:** Objects that have been reviewed (in this release track) and are ready for the next tagged release.
 
 **Characteristics:**
-- Once a candidate's workflow status meets the release track's ["candidacy threshold"](./05_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in `x_mitre_contents`.
-- Each entry includes a version pin (`object_modified` timestamp)
-- Auto-promoted from candidates when objects meet the candidacy threshold
-- Moved to member objects tier (`x_mitre_contents`) when the snapshot is tagged
+- Once a candidate's workflow status meets the release track's ["candidacy threshold"](./05_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in `members`. 
+ 
+When the release is exported as a `bundle`, all `members` will be included in the resultant bundle's `x_mitre_contents` array.
+
+- Each `staged` entry includes a version pin (`object_modified` timestamp), which can either equal an ISO 8601 timestamp (designating a specific object version) or `"latest"` (designating a dynamic reference to the latest permutation of the relevant object)
+- Auto-promoted from candidates when objects meet the [candidacy threshold](./05_RELEASE_WORKFLOW.md#candidacy-threshold-configuration)
+- Moved to member objects tier (`members`) when the snapshot is tagged
 - NOT included in published STIX bundles until the snapshot is tagged
 
 **Duplicate Rules:**
@@ -212,13 +217,13 @@ Standard release tracks use three tiers to manage the object lifecycle from deve
 
 ##### 3. Member Objects
 
-**Location:** `stix.x_mitre_contents`
+**Location:** `members`
 
 **Definition:** Objects included in the current/latest released version of this release track.
 
 **Characteristics:**
-- Objects are considered "members" if they are "cooked" into the `x_mitre_contents` array of the current snapshot. These are considered already released.
-- Each entry is a version-pinned reference (`object_ref` + `object_modified`)
+- Objects are considered "members" if they are contained in the `x_mitre_contents` array of the current snapshot. These are considered *already* released.
+- Each entry is a version-pinned reference (`object_ref` + `object_modified`). Dynamic references (`object_modified: "latest"`) are not supported on member objects.
 - These objects are included in published STIX bundles
 - Represents the production-ready, published content
 - Only updated when a snapshot is tagged (staged objects are promoted to members)
@@ -239,7 +244,7 @@ Virtual release tracks use a simplified two-tier system since they aggregate alr
 
 ##### 1. Member Objects
 
-**Location:** `stix.x_mitre_contents`
+**Location:** `members`
 
 **Definition:** Successfully synced objects from component tracks.
 
@@ -257,7 +262,7 @@ Virtual release tracks use a simplified two-tier system since they aggregate alr
 
 ##### 2. Quarantine
 
-**Location:** `workspace.quarantine`
+**Location:** `quarantine`
 
 **Definition:** Conflicting objects that require manual resolution.
 
@@ -287,7 +292,7 @@ A **virtual release track** is a special type of release track that computes its
 - Does NOT manage objects through candidate/staged/released workflow
 - Aggregates content from **component tracks** (standard or other virtual tracks)
 - Only references **tagged snapshots** from component tracks (never drafts)
-- Creates snapshots **manually** or **on schedule** (never event-driven)
+- Creates snapshots **manually** or **on schedule** (*never* event-driven; see [Types of Release Tracks](#types-of-release-tracks) for explanation)
 - All snapshots start as drafts and must be explicitly tagged
 - Can optionally have **native objects** in addition to composed content (hybrid model)
 
@@ -307,7 +312,7 @@ A **virtual release track** is a special type of release track that computes its
 A **component track** is a release track (standard or virtual) that is referenced by a virtual release track.
 
 **Technical Definition:**
-- A component track is specified in a virtual track's `workspace.composition.component_tracks` array
+- A component track is specified in a virtual track's `composition.component_tracks` array
 - Each component defines a `resolution_strategy` (how to select which snapshot to use)
 - Each component can optionally specify `filters` (which objects to include)
 
@@ -328,7 +333,7 @@ A **component track** is a release track (standard or virtual) that is reference
 **Composition** refers to the rules and configuration that define how a virtual release track aggregates content from component tracks.
 
 **Technical Definition:**
-- Defined in `workspace.composition` object of virtual track
+- Defined in `composition` object of virtual track
 - Specifies which component tracks to include
 - Defines resolution strategies, filters, and deduplication rules
 
@@ -368,7 +373,7 @@ A **component track** is a release track (standard or virtual) that is reference
 
 **Characteristics:**
 - Resolution happens at snapshot creation time (not query time)
-- Resolution metadata is stored in snapshot (`workspace.composition_resolution`)
+- Resolution metadata is stored in snapshot (`composition_resolution`)
 - Once resolved, a snapshot's composition is immutable
 - Different snapshots of same virtual track may resolve to different component versions
 
@@ -413,21 +418,21 @@ A **resolution strategy** determines which snapshot from a component track to us
 | Collection version | Snapshot | Individual node in version history |
 | Collection (unpublished) | Draft Release | Snapshot without version number |
 | Collection (published) | Tagged Release | Snapshot with version number |
-| Collection contents | Member objects | Objects in `stix.x_mitre_contents` |
-| Collection Bundle | -- | STIX bundle exported from release track |
+| Collection contents | Member objects | Objects in `members` |
+| Collection Bundle | -- | STIX bundle exported from a released/tagged snapshot |
 
 ### Technical Mappings
 
 | Concept | MongoDB Representation |
 |---------|------------------------|
-| Release Track | All docs with same `stix.id` |
-| Snapshot | Doc with specific `stix.id` + `stix.modified` |
-| Draft Release | Snapshot where `x_mitre_version === null` |
-| Tagged Release | Snapshot where `x_mitre_version !== null` |
-| Tagging Operation | Set `x_mitre_version` on existing doc |
-| Candidate Objects | Array at `workspace.candidates` |
-| Staged Objects | Array at `workspace.staged` |
-| Member Objects | Array at `stix.x_mitre_contents` |
+| Release Track | Mongo collection following name format `$name--$uuid` |
+| Snapshot | Doc with specific `id` + `modified` |
+| Draft Release | Snapshot where `version === null` |
+| Tagged Release | Snapshot where `version !== null` |
+| Tagging Operation | Set `version` on existing doc |
+| Candidate Objects | Array at `candidates` |
+| Staged Objects | Array at `staged` |
+| Member Objects | Array at `members` |
 
 ---
 

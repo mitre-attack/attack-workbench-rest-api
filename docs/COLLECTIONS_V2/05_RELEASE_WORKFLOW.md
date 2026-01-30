@@ -33,22 +33,24 @@ Each tier entry includes **version pinning** via the `object_modified` timestamp
 
 Release tracks maintain objects in three distinct tiers, with each entry pinning to a specific object version:
 
-1. **Candidates** (`workspace.candidates`) - Objects being worked on with track-scoped status
-2. **Staged** (`workspace.staged`) - Reviewed objects (in this release track) ready for the next tagged release
-3. **Released** (`stix.x_mitre_contents`) - Object versions included in the current/latest tagged release
+1. **Candidates** (`candidates`) - Objects being worked on with track-scoped status
+2. **Staged** (`staged`) - Reviewed objects (in this release track) ready for the next tagged release
+3. **Released** (`members`) - Object versions included in the current/latest tagged release
 
 ### Automatic Promotion Flow
 
 ```
 Object version added to release track
   ↓
-Track-scoped status: work-in-progress → Added to workspace.candidates with version pin
+Track-scoped status: work-in-progress → Added to candidates with version pin
   ↓
-Track-scoped status: awaiting-review → Remains in workspace.candidates
+Track-scoped status: awaiting-review → Remains in candidates
   ↓
-Track-scoped status: reviewed → Automatically promoted to workspace.staged
+Track-scoped status: reviewed → Automatically promoted to staged
   ↓
-Snapshot tagged → workspace.staged entries moved to stix.x_mitre_contents
+Snapshot tagged → staged entries moved to members
+  ↓
+Snapshot exported → members reflected in stix.x_mitre_contents of the output bundle
 ```
 
 ### STIX Freeze Solution

@@ -95,22 +95,22 @@ We borrow heavily concepts from git. Snapshots are sort of like commits and tagg
 - May be a **draft release** (untagged) or **tagged release** (has version number)
 
 **Tagged Releases** (like Git tags)
-- Snapshots are tagged with `x_mitre_version`. Draft snapshots are denoted by the fact that their `x_mitre_version` key is set to `null`.
-- Uses MAJOR.MINOR versioning (not MAJOR.MINOR.PATCH), as specified by `x_mitre_version`
+- Snapshots are tagged with `version`, which when exported/retrieved as a STIX bundle, will be expressed as `x_mitre_version`. Draft snapshots are denoted by the fact that their `version` key is set to `null`.
+- Uses MAJOR.MINOR versioning (not MAJOR.MINOR.PATCH), as specified by the [`x_mitre_version` ADM schema](https://github.com/mitre-attack/attack-data-model/blob/f249442b3588de9cca84b819d480306b106d2c1f/src/schemas/common/property-schemas/attack-versioning.ts#L21:L26)
 - Snapshots are tagged in-place (no duplicate data)
-- When a snapshot is tagged/released, an event is captured in its `workspace.version_history` array
+- When a snapshot is tagged/released, an event is captured in its `version_history` array
 - Once a snapshot is tagged, it cannot be re-tagged. Tagged snapshots are **immutable**.
 
 ### 3. Three-Tier Workflow Integration with Version Pinning
 
 We use the preexisting object workflow statuses, `work-in-progress`, `awaiting-review`, and `reviewed`, to control each object's "standing" in a release track.
 
-There are three types of "standings":
+There are three types of membership "standings":
   1. **Candidate**: When an object is first added to a release track, is it considered a candidate. It does not have full membership yet; if the snapshot were to be tagged and released right now, candidates would not be included.
-  2. **Staged**: Once a candidate's workflow status meets the release track's ["candidacy threshold"](./4_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in `x_mitre_contents`.
+  2. **Staged**: Once a candidate's workflow status meets the release track's ["candidacy threshold"](./4_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in the resultant bundle's `x_mitre_contents`.
   3. **Member**: Objects are considered "members" if they are "cooked" into the `x_mitre_contents` array of the current snapshot. These are considered already released.
 
-Thus, we now have a viable solution for the classic "STIX freeze" dilemma wherein editors cannot begin working on the next-next release until all objects in the next release have been released. Staged objects are locked in for the imminent release, but editors are free to continue iterating on future object changes and can queue them up as candidates without affecting the permutation that has already been staged for the imminent release.
+This presents a tenable solution to the classic "STIX freeze" dilemma wherein editors cannot begin working on the next-*next* (e.g., v20) release until all objects in the next (e.g., v19) release have been released. Staged objects are locked in for the imminent release, but editors are free to continue iterating on future object changes and can queue them up as candidates without affecting the permutation that has already been staged for the imminent release.
 
 Candidates and staged objects alike can be be statically pinned to specific versions via `stix.id` and `stix.modified` couplings, or maintain dynamic/moving references to object versions by omitting `stix.modified`. In the latter, scenario, the release track will effectively "follow" the latest permutation of the relevant object until the moment a release snapshot is generated, at which point the latest permutation will become "locked in" to `x_mitre_contents` via the `stix.id` and `stix.modified` keys of the latest permutation of the object that existed at the time of the release.
 
