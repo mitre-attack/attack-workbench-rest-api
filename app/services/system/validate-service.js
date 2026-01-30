@@ -20,19 +20,27 @@ const {
   markingDefinitionSchema,
   relationshipPartialSchema,
 } = require('@mitre-attack/attack-data-model/dist');
-const { campaignPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/campaign.schema');
-const { groupPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/group.schema');
-const { malwarePartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/malware.schema');
-const { toolPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/tool.schema');
+const {
+  campaignPartialSchema,
+} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/campaign.schema');
+const {
+  groupPartialSchema,
+} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/group.schema');
+const {
+  malwarePartialSchema,
+} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/malware.schema');
+const {
+  toolPartialSchema,
+} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/tool.schema');
 
 const STIX_SCHEMAS = {
   'x-mitre-tactic': tacticSchema,
-  'attack-pattern': {'partial': techniquePartialSchema, 'full': techniqueSchema},
-  'intrusion-set': {'partial': groupPartialSchema, 'full': groupSchema},
-  malware: {'partial': malwarePartialSchema, 'full': malwareSchema},
-  tool: {'partial': toolPartialSchema, 'full': toolSchema},
-  campaign: {'partial': campaignPartialSchema, 'full': campaignSchema},
-  relationship: {'partial': relationshipPartialSchema, 'full': relationshipSchema},
+  'attack-pattern': { partial: techniquePartialSchema, full: techniqueSchema },
+  'intrusion-set': { partial: groupPartialSchema, full: groupSchema },
+  malware: { partial: malwarePartialSchema, full: malwareSchema },
+  tool: { partial: toolPartialSchema, full: toolSchema },
+  campaign: { partial: campaignPartialSchema, full: campaignSchema },
+  relationship: { partial: relationshipPartialSchema, full: relationshipSchema },
   'course-of-action': mitigationSchema,
   'marking-definition': markingDefinitionSchema,
   'x-mitre-asset': assetSchema,
@@ -117,9 +125,7 @@ function getSchema(type, status) {
 
   if (entry.partial && entry.full) {
     return status === 'work-in-progress' ? entry.partial : entry.full;
-  }
-
-  else{
+  } else {
     return status === 'work-in-progress' ? entry.partial() : entry;
   }
 }
