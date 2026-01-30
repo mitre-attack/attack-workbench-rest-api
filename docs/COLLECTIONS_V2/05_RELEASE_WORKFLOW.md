@@ -241,7 +241,174 @@ POST /api/release-tracks/:id/candidates/promote
 - Useful for exceptions or urgent fixes
 - Logs warning for audit trail
 
-### 4. Viewing Latest Snapshot with All Tiers
+### 4. Promotion Conflict Resolution
+
+When promoting objects between tiers, conflicts can occur if multiple versions of the same object (same `stix.id`, different `stix.modified` timestamps) exist. Release tracks use **conflict resolution policies** to determine how to handle these situations.
+
+**When do conflicts occur?**
+- Promoting from `candidates` to `staged` when a different version of the object already exists in `staged`
+- Promoting from `staged` to `members` (during tagging/release) when a different version already exists in `members`
+
+**Promotions can happen via:**
+- **Manual promotion** via REST API endpoint (e.g., `POST /api/release-tracks/:id/candidates/promote`)
+- **Auto-promotion** based on candidacy threshold (e.g., object status changes to `awaiting-review`)
+- **Tagging/release operations** (e.g., `POST /api/release-tracks/:id/bump`)
+
+#### Conflict Resolution Policies
+
+Release tracks can be configured with different policies for handling promotion conflicts:
+
+```javascript
+config: {
+  promotion_conflicts: {
+    candidates_to_staged: "prefer_latest",     // Candidates → Staged promotions
+    staged_to_members: "abort"                 // Staged → Members promotions (during release)
+  }
+}
+```
+
+#### Policy Options
+
+##### 1. `always_overwrite`
+
+Always keep the incoming object and discard the incumbent object.
+
+**Example:**
+```javascript
+// Current state:
+// - staged: attack-pattern--T1234, modified: 2024-01-15
+
+// Promotion request:
+// - Promote attack-pattern--T1234, modified: 2024-02-20 from candidates to staged
+
+// Result with always_overwrite:
+// - staged: attack-pattern--T1234, modified: 2024-02-20  (new version)
+// - candidates: attack-pattern--T1234, modified: 2024-02-20 (removed)
+```
+
+**Use case:** "Always use the latest work, overwrite previous versions"
+
+##### 2. `always_reject`
+
+Always keep the incumbent object and reject the incoming object. The rejected object remains in its current tier.
+
+**Example:**
+```javascript
+// Current state:
+// - staged: attack-pattern--T1234, modified: 2024-01-15
+
+// Promotion request:
+// - Promote attack-pattern--T1234, modified: 2024-02-20 from candidates to staged
+
+// Result with always_reject:
+// - staged: attack-pattern--T1234, modified: 2024-01-15  (unchanged)
+// - candidates: attack-pattern--T1234, modified: 2024-02-20 (stays in candidates)
+
+// Response:
+{
+  "rejected": [
+    {
+      "object_ref": "attack-pattern--T1234",
+      "object_modified": "2024-02-20T10:00:00Z",
+      "reason": "Conflict: Different version already in staged tier",
+      "incumbent_version": "2024-01-15T10:00:00Z",
+      "resolution": "Rejected per always_reject policy"
+    }
+  ]
+}
+```
+
+**Use case:** "Protect already-staged content from being overwritten"
+
+##### 3. `prefer_latest`
+
+Keep whichever version has the newer `modified` timestamp.
+
+**Example:**
+```javascript
+// Current state:
+// - staged: attack-pattern--T1234, modified: 2024-01-15
+
+// Promotion request:
+// - Promote attack-pattern--T1234, modified: 2024-02-20 from candidates to staged
+
+// Result with prefer_latest:
+// - staged: attack-pattern--T1234, modified: 2024-02-20  (newer version wins)
+```
+
+**Use case:** "Trust the most recent edits, regardless of current tier"
+
+##### 4. `abort` (Tagging/Release Operations Only)
+
+**Only available for `staged_to_members` during tagging/release operations.**
+
+If a conflict occurs during a tagging/release operation (`POST /api/release-tracks/:id/bump`), reject and abort the entire release. The snapshot will NOT be tagged, and no immutable snapshot will be created.
+
+**Example:**
+```javascript
+// Current state:
+// - members: attack-pattern--T1234, modified: 2024-01-15
+// - staged: attack-pattern--T1234, modified: 2024-02-20
+
+// Tagging request:
+POST /api/release-tracks/release-track--123/bump
+{ "type": "minor" }
+
+// Result with abort:
+// ERROR Response:
+{
+  "error": "ReleaseConflictError",
+  "message": "Cannot complete release due to promotion conflict",
+  "conflicts": [
+    {
+      "object_ref": "attack-pattern--T1234",
+      "incumbent_version": "2024-01-15T10:00:00Z",
+      "incoming_version": "2024-02-20T10:00:00Z",
+      "tier": "members"
+    }
+  ],
+  "resolution": "Resolve conflicts manually before releasing, or change promotion_conflicts.staged_to_members policy"
+}
+
+// State unchanged:
+// - Snapshot NOT tagged
+// - No new version history entry
+// - Objects remain in current tiers
+```
+
+**Use case:** "Never accidentally overwrite released content during a release; require explicit conflict resolution"
+
+**Why abort is important:** Once a snapshot is tagged and released, it becomes immutable. The `abort` policy ensures that releases don't inadvertently overwrite existing released content, providing an additional safety guardrail for critical release operations.
+
+#### Configuring Conflict Resolution Policies
+
+**Update release track configuration:**
+```bash
+PUT /api/release-tracks/:id/config
+```
+
+**Request:**
+```json
+{
+  "promotion_conflicts": {
+    "candidates_to_staged": "prefer_latest",
+    "staged_to_members": "abort"
+  }
+}
+```
+
+**Default values:**
+- `candidates_to_staged`: `"prefer_latest"`
+- `staged_to_members`: `"abort"`
+
+#### Best Practices
+
+1. **Production tracks**: Use `abort` for `staged_to_members` to prevent accidental overwrites during releases
+2. **Development tracks**: Use `always_overwrite` or `prefer_latest` for faster iteration
+3. **Review conflicts before releasing**: Always run `GET /api/release-tracks/:id/bump/preview` to identify potential conflicts
+4. **Manual resolution**: When `abort` triggers, manually resolve conflicts before retrying the release
+
+### 5. Viewing Latest Snapshot with All Tiers
 
 Set the `include` query parameter to `members`, `staged`, `candidates` or `all` to view different subsets of a given snapshot.
 ```
@@ -288,7 +455,7 @@ GET /api/release-tracks/:id?include=all
 }
 ```
 
-### 5. Preview Release
+### 6. Preview Release
 
 Compute a release preview, which outputs a verbose diff of what will change in the next release.
 ```
@@ -338,7 +505,7 @@ GET /api/release-tracks/:id/bump/preview
 }
 ```
 
-### 6. Bump with Staging
+### 7. Bump with Staging
 
 ```
 POST /api/collections/:id/bump

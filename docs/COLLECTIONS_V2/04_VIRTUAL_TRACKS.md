@@ -59,61 +59,67 @@ Virtual tracks are identified by `stix.type = "virtual"` in their schema.
 
 ```javascript
 {
-  stix: {
-    id: "x-mitre-collection--virtual-uuid",
-    type: "virtual",  // Distinguishes from standard tracks
-    modified: "2024-03-01T10:00:00Z",
-    x_mitre_version: null,  // Draft snapshot (or "14.0" if tagged)
-    name: "Enterprise ATT&CK",
-    description: "Virtual aggregation of Enterprise content"
+  // Identity
+  id: "release-track--uuid-virtual",
+  type: "virtual",  // Distinguishes from standard tracks
+
+  // Snapshot metadata
+  snapshot_id: "2024-03-01T10:00:00.000Z",
+  modified: "2024-03-01T10:00:00Z",
+  version: null,  // Draft snapshot (or "14.0" if tagged)
+
+  // Release track metadata
+  name: "Enterprise ATT&CK",
+  description: "Virtual aggregation of Enterprise content",
+  created: "2024-01-01T10:00:00.000Z",
+  created_by_ref: "identity--uuid",
+  object_marking_refs: ["marking-definition--uuid"],
+
+  // Objects in this snapshot (Virtual tracks use a 2-tier system)
+  members: [],      // Successfully synced objects from component tracks
+  quarantine: [],   // Conflicting objects that require manual resolution
+
+  // Composition rules (how to build this virtual track)
+  composition: {
+    component_tracks: [
+      {
+        track_id: "release-track--uuid-1",
+        resolution_strategy: "latest_tagged",
+        priority: 1,  // Used with prioritize_higher_priority strategy (lower number = higher priority)
+        filters: {
+          object_types: ["intrusion-set"],
+          // Additional filters...
+        }
+      },
+      {
+        track_id: "release-track--uuid-2",
+        resolution_strategy: "latest_tagged",
+        priority: 2,
+        filters: {
+          object_types: ["attack-pattern"]
+        }
+      }
+    ],
+
+    deduplication: {
+      strategy: "prioritize_latest_object"  // See Deduplication Strategies below
+    }
   },
 
-  workspace: {
-    // Composition rules (how to build this virtual track)
-    composition: {
-      component_tracks: [
-        {
-          track_id: "GroupsMonthly--uuid",
-          resolution_strategy: "latest_tagged",
-          filters: {
-            object_types: ["intrusion-set"],
-            // Additional filters...
-          }
-        },
-        {
-          track_id: "TechniquesQuarterly--uuid",
-          resolution_strategy: "latest_tagged",
-          filters: {
-            object_types: ["attack-pattern"]
-          }
-        }
-      ],
+  // Snapshot schedule configuration
+  snapshot_schedule: {
+    mode: "manual",  // "manual" | "cron" | "dates"
+    cron: "0 0 1 1,7 *",  // Jan 1 and July 1 at midnight
+    dates: ["2024-01-01T00:00:00Z", "2024-07-01T00:00:00Z"]
+  },
 
-      deduplication: {
-        strategy: "prefer_latest_modified",
-        tier_resolution: "highest_tier",
-        status_resolution: "highest_status"
-      }
-    },
+  // Configuration
+  config: {
+    candidacy_threshold: "reviewed",
+    auto_promote: true
+  },
 
-    // Snapshot schedule configuration
-    snapshot_schedule: {
-      mode: "manual" | "cron" | "dates",
-      cron: "0 0 1 1,7 *",  // Jan 1 and July 1 at midnight
-      dates: ["2024-01-01T00:00:00Z", "2024-07-01T00:00:00Z"]
-    },
-
-    // Optional: Virtual track can also have its own native objects
-    candidates: [],  // Virtual track's own objects (not from components)
-    staged: [],
-
-    config: {
-      candidacy_threshold: "reviewed",
-      auto_promote: true
-    },
-
-    version_history: []
-  }
+  version_history: []
 }
 ```
 
@@ -127,13 +133,13 @@ Always resolves to the most recent **tagged snapshot** from the component track.
 
 ```javascript
 {
-  track_id: "GroupsMonthly--uuid",
+  track_id: "release-track--uuid-1",
   resolution_strategy: "latest_tagged"
 }
 
 // At virtual snapshot time (e.g., March 1, 2024):
-// 1. Query GroupsMonthly for all snapshots where x_mitre_version !== null
-// 2. Sort by stix.modified DESC
+// 1. Query GroupsMonthly for all snapshots where version !== null
+// 2. Sort by modified DESC
 // 3. Take first result
 // → Resolves to GroupsMonthly v5.2 (released Feb 15, 2024)
 ```
@@ -146,13 +152,13 @@ Resolves to a specific semantic version from the component track.
 
 ```javascript
 {
-  track_id: "GroupsMonthly--uuid",
+  track_id: "release-track--uuid-1",
   resolution_strategy: "specific_version",
   version: "5.0"
 }
 
 // At virtual snapshot time:
-// 1. Query GroupsMonthly for snapshot where x_mitre_version === "5.0"
+// 1. Query GroupsMonthly for snapshot where version === "5.0"
 // → Resolves to GroupsMonthly v5.0 (regardless of when snapshot occurs)
 ```
 
@@ -160,21 +166,32 @@ Resolves to a specific semantic version from the component track.
 
 #### 3. `specific_snapshot`
 
-Resolves to a specific snapshot by its `stix.modified` timestamp.
+Resolves to a specific snapshot by its `modified` timestamp.
 
 ```javascript
 {
-  track_id: "GroupsMonthly--uuid",
+  track_id: "release-track--uuid-1",
   resolution_strategy: "specific_snapshot",
   snapshot: "2024-02-01T10:00:00Z"
 }
 
 // At virtual snapshot time:
-// 1. Query GroupsMonthly for snapshot where stix.modified === "2024-02-01T10:00:00Z"
+// 1. Query GroupsMonthly for snapshot where modified === "2024-02-01T10:00:00Z"
 // → Resolves to that specific snapshot
 ```
 
 **Use case:** "Lock to exact snapshot for reproducibility"
+
+### Component Track Sync Rules
+
+Virtual tracks **only sync from component tracks' `members` tier** (`x_mitre_contents`). This ensures that virtual tracks only aggregate objects that have been officially released in their source tracks.
+
+**Important:**
+- Virtual tracks reference **tagged snapshots only** (never drafts)
+- Virtual tracks pull objects from **`members` tier only** (never staged or candidates)
+- This guarantees that virtual track releases are composed of stable, released content
+
+**Rationale:** Since virtual tracks can only reference tagged snapshots from component tracks, it makes sense to only pull from the `members` tier, which contains the released objects from those snapshots.
 
 ### Filters
 
@@ -195,43 +212,184 @@ filters: {
 }
 ```
 
-### Deduplication Rules
+### Deduplication Strategies
 
-When multiple component tracks contain the same object:
+When multiple component tracks contain the same object (same `stix.id`), a conflict occurs during the sync operation. The virtual track's deduplication strategy determines how to resolve the conflict. Four strategies are available:
+
+#### 1. `prioritize_latest_object`
+
+Keep the version with the newest `modified` timestamp, regardless of which component track it came from.
 
 ```javascript
 deduplication: {
-  // Which version of the object to include
-  strategy: "prefer_latest_modified" | "prefer_highest_version" | "error",
-
-  // If object is in different tiers across components, which tier wins?
-  tier_resolution: "highest_tier" | "source_priority",
-
-  // If object has different statuses across components, which status wins?
-  status_resolution: "highest_status" | "source_priority"
+  strategy: "prioritize_latest_object"
 }
 ```
 
 **Example:**
+```javascript
+// GroupsMonthly v5.2 has:
+//   intrusion-set--APT1, modified: 2024-02-01T10:00:00Z
+
+// MobileGroups v3.1 has:
+//   intrusion-set--APT1, modified: 2024-01-15T14:00:00Z
+
+// Virtual track sync result:
+//   → Uses 2024-02-01 version from GroupsMonthly (newer object)
+//   → Added to virtual track's members
+```
+
+**Use case:** "Always use the most recently updated object, regardless of source"
+
+#### 2. `prioritize_latest_snapshot`
+
+Keep the version from the component track whose resolved snapshot has the newest `modified` timestamp. This can result in syncing **older** versions of objects if they came from a more recently released snapshot.
 
 ```javascript
-// GroupsMonthly has: intrusion-set--APT1
-//   - modified: 2024-02-01
-//   - tier: members (released)
-//   - status: reviewed
-
-// MobileGroups has: intrusion-set--APT1
-//   - modified: 2024-01-15
-//   - tier: candidates
-//   - status: work-in-progress
-
-// Virtual track with deduplication:
-{
-  strategy: "prefer_latest_modified",  // → Use 2024-02-01 from GroupsMonthly
-  tier_resolution: "highest_tier",     // → Use "members" tier
-  status_resolution: "highest_status"  // → Use "reviewed" status
+deduplication: {
+  strategy: "prioritize_latest_snapshot"
 }
 ```
+
+**Example:**
+```javascript
+// GroupsMonthly v5.2
+//   - Snapshot created: 2024-02-15T10:00:00Z
+//   - intrusion-set--APT1, modified: 2024-02-01T10:00:00Z
+
+// MobileGroups v3.1
+//   - Snapshot created: 2024-01-10T10:00:00Z
+//   - intrusion-set--APT1, modified: 2024-02-05T10:00:00Z
+
+// Virtual track sync result:
+//   → Uses 2024-02-01 version from GroupsMonthly
+//   → GroupsMonthly snapshot is newer (2024-02-15), even though APT1 object is older
+//   → Added to virtual track's members
+```
+
+**Use case:** "Trust the more recently released track, even if individual objects are older"
+
+#### 3. `prioritize_higher_priority`
+
+Keep the version from the component track with the higher priority (lower priority number). Each component track must have a unique priority value.
+
+```javascript
+composition: {
+  component_tracks: [
+    {
+      track_id: "release-track--authoritative",
+      resolution_strategy: "latest_tagged",
+      priority: 1,  // Higher priority (lower number = higher priority)
+      filters: { object_types: ["intrusion-set"] }
+    },
+    {
+      track_id: "release-track--supplemental",
+      resolution_strategy: "latest_tagged",
+      priority: 2,  // Lower priority
+      filters: { object_types: ["intrusion-set"] }
+    }
+  ],
+  deduplication: {
+    strategy: "prioritize_higher_priority"
+  }
+}
+```
+
+**Example:**
+```javascript
+// Authoritative track (priority: 1) has:
+//   intrusion-set--APT1, modified: 2024-01-01T10:00:00Z
+
+// Supplemental track (priority: 2) has:
+//   intrusion-set--APT1, modified: 2024-02-15T10:00:00Z
+
+// Virtual track sync result:
+//   → Uses 2024-01-01 version from Authoritative track
+//   → Priority 1 wins, even though object is older
+//   → Added to virtual track's members
+```
+
+**Use case:** "One track is authoritative; always prefer its version over others"
+
+**Important:** Component tracks cannot have duplicate priority values. The API will reject composition configurations with conflicting priorities.
+
+#### 4. `quarantine`
+
+Don't automatically choose a version. Instead, store **both** versions in the virtual track's `quarantine` tier for manual review and resolution.
+
+```javascript
+deduplication: {
+  strategy: "quarantine"
+}
+```
+
+**Example:**
+```javascript
+// GroupsMonthly has: intrusion-set--APT1, modified: 2024-02-01
+// MobileGroups has: intrusion-set--APT1, modified: 2024-01-15
+
+// Virtual track sync result:
+{
+  members: [
+    // APT1 is NOT included here
+    // ... other non-conflicting objects
+  ],
+  quarantine: [
+    {
+      object_ref: "intrusion-set--APT1",
+      object_modified: "2024-02-01T10:00:00Z",
+      source_track_id: "release-track--groups-monthly",
+      source_track_name: "Groups Monthly",
+      source_snapshot_version: "5.2",
+      conflict_reason: "duplicate_object"
+    },
+    {
+      object_ref: "intrusion-set--APT1",
+      object_modified: "2024-01-15T14:00:00Z",
+      source_track_id: "release-track--mobile-groups",
+      source_track_name: "Mobile Groups",
+      source_snapshot_version: "3.1",
+      conflict_reason: "duplicate_object"
+    }
+  ]
+}
+```
+
+**Use case:** "Conflicts require human review; don't automatically choose a version"
+
+**Follow-up workflow:** Users review the quarantined objects and manually promote one version to `members` during a future snapshot update. The quarantined objects remain in the virtual track until manual intervention occurs.
+
+### Virtual Track Two-Tier System
+
+Unlike standard release tracks (which use a three-tier system: candidates → staged → members), virtual tracks use a simplified **two-tier system**:
+
+1. **`members`** - Successfully synced objects from component tracks
+   - Contains objects that were either:
+     - Synced from component tracks without conflicts, OR
+     - Manually promoted from quarantine after conflict resolution
+   - These objects are included in published STIX bundles
+   - No duplicate objects allowed (unique by `stix.id`)
+
+2. **`quarantine`** - Conflicting objects requiring manual resolution
+   - Contains objects that couldn't be automatically resolved due to conflicts
+   - Only populated when using `quarantine` deduplication strategy
+   - Can contain multiple versions of the same object (different `modified` timestamps)
+   - NOT included in published STIX bundles
+   - Requires manual intervention to resolve
+
+**Comparison to Standard Tracks:**
+
+| Feature | Standard Track | Virtual Track |
+|---------|---------------|---------------|
+| Tiers | candidates, staged, members | quarantine, members |
+| Object management | Direct (add/remove objects) | Indirect (synced from components) |
+| Workflow states | work-in-progress, awaiting-review, reviewed | N/A |
+| Auto-promotion | Based on candidacy threshold | N/A |
+| Manual promotion | candidates → staged → members | quarantine → members |
+
+**Why only two tiers?**
+
+Virtual tracks aggregate content from component tracks that have already gone through the full workflow (candidates → staged → members). Virtual tracks don't need the intermediate `staged` tier because they're composing already-released content. The only workflow step is resolving conflicts via the `quarantine` tier.
 
 ## Virtual Track Snapshot Lifecycle
 
@@ -255,35 +413,49 @@ POST /api/release-tracks/:id/snapshots/create
 **Response:**
 ```json
 {
-  "stix": {
-    "id": "x-mitre-collection--virtual-uuid",
-    "modified": "2024-03-01T10:00:00Z",
-    "x_mitre_version": null,  // Draft snapshot
-    "type": "virtual"
-  },
+  "id": "release-track--uuid-virtual",
+  "type": "virtual",
+  "snapshot_id": "2024-03-01T10:00:00.000Z",
+  "modified": "2024-03-01T10:00:00Z",
+  "version": null,
+  "name": "Enterprise ATT&CK",
+  "description": "Virtual aggregation of Enterprise content",
 
   "composition_resolution": {
     "resolved_at": "2024-03-01T10:00:00Z",
     "component_snapshots": [
       {
-        "track_id": "GroupsMonthly--uuid",
+        "track_id": "release-track--uuid-1",
         "track_name": "Groups Monthly",
-        "resolved_snapshot": "2024-02-15T10:00:00Z",
+        "track_type": "standard",
+        "resolved_snapshot_id": "2024-02-15T10:00:00.000Z",
         "resolved_version": "5.2",
         "strategy_used": "latest_tagged",
-        "object_count": 47
+        "total_objects_in_source": 47,
+        "objects_after_filter": 47,
+        "objects_contributed": 47
       },
       {
-        "track_id": "TechniquesQuarterly--uuid",
+        "track_id": "release-track--uuid-2",
         "track_name": "Techniques Quarterly",
-        "resolved_snapshot": "2024-01-15T10:00:00Z",
+        "track_type": "standard",
+        "resolved_snapshot_id": "2024-01-15T10:00:00.000Z",
         "resolved_version": "2.1",
         "strategy_used": "latest_tagged",
-        "object_count": 823
+        "total_objects_in_source": 823,
+        "objects_after_filter": 823,
+        "objects_contributed": 823
       }
     ],
-    "total_objects": 870,
-    "duplicates_resolved": 0
+    "deduplication": {
+      "total_objects_before": 870,
+      "total_objects_after": 870,
+      "duplicates_found": 0,
+      "conflicts_resolved": []
+    },
+    "summary": {
+      "total_objects": 870
+    }
   }
 }
 ```
@@ -291,13 +463,19 @@ POST /api/release-tracks/:id/snapshots/create
 **Business Logic:**
 1. For each component track in `composition.component_tracks`:
    - Resolve snapshot based on `resolution_strategy`
-   - **Validate that resolved snapshot is tagged** (x_mitre_version !== null)
+   - **Validate that resolved snapshot is tagged** (version !== null)
+   - Pull objects from component track's **`members` tier only** (`x_mitre_contents`)
    - Apply `filters` to get subset of objects
-   - Collect all object references
-2. Apply deduplication rules across all components
+   - Collect all object references with source metadata
+2. Apply deduplication rules across all components:
+   - If no conflicts: objects go to virtual track's `members`
+   - If conflicts + `quarantine` strategy: both versions go to `quarantine`
+   - If conflicts + other strategies: winning version goes to `members`
 3. Create new virtual track snapshot with:
-   - New `stix.modified` timestamp
-   - `x_mitre_version = null` (always starts as draft)
+   - New `snapshot_id` and `modified` timestamp
+   - `version = null` (always starts as draft)
+   - `members` array (successfully synced objects)
+   - `quarantine` array (conflicting objects, if any)
    - `composition_resolution` metadata (what was included)
 4. Return snapshot with resolution details
 
@@ -316,7 +494,7 @@ snapshot_schedule: {
 ```javascript
 scheduler.register({
   type: "virtual-track-snapshot",
-  trackId: "EnterpriseTwiceAnnual--uuid",
+  trackId: "release-track--uuid-virtual",
   schedule: "0 0 1 1,7 *",
   handler: async (trackId) => {
     await virtualTrackService.createSnapshot(trackId, {
@@ -364,15 +542,14 @@ POST /api/release-tracks/:id/snapshots/:modified/bump
 **Response:**
 ```json
 {
-  "stix": {
-    "id": "x-mitre-collection--virtual-uuid",
-    "modified": "2024-03-01T10:00:00Z",  // Unchanged
-    "x_mitre_version": "14.0",  // Now tagged
-    "type": "virtual"
-  },
+  "id": "release-track--uuid-virtual",
+  "type": "virtual",
+  "snapshot_id": "2024-03-01T10:00:00.000Z",
+  "modified": "2024-03-01T10:00:00Z",
+  "version": "14.0",
+  "name": "Enterprise ATT&CK",
 
   "composition_resolution": {
-    // Preserved from snapshot creation
     "resolved_at": "2024-03-01T10:00:00Z",
     "component_snapshots": [...]
   },
@@ -380,12 +557,12 @@ POST /api/release-tracks/:id/snapshots/:modified/bump
   "version_history": [
     {
       "version": "14.0",
-      "tagged_at": "2024-03-05T14:00:00Z",  // Later than snapshot creation
+      "tagged_at": "2024-03-05T14:00:00Z",
       "tagged_by": "admin@example.com",
-      "snapshot_created_at": "2024-03-01T10:00:00Z",
+      "snapshot_id": "2024-03-01T10:00:00.000Z",
       "component_versions": {
-        "GroupsMonthly": "5.2",
-        "TechniquesQuarterly": "2.1"
+        "Groups Monthly": "5.2",
+        "Techniques Quarterly": "2.1"
       }
     }
   ]
@@ -393,10 +570,10 @@ POST /api/release-tracks/:id/snapshots/:modified/bump
 ```
 
 **Business Logic:**
-1. Validate snapshot exists and is a draft (x_mitre_version === null)
+1. Validate snapshot exists and is a draft (version === null)
 2. Calculate/validate version number
-3. Set x_mitre_version on snapshot (in-place update)
-4. Add entry to workspace.version_history
+3. Set version on snapshot (in-place update)
+4. Add entry to version_history
 5. Snapshot is now immutable
 
 ### 4. Snapshot Export
@@ -420,9 +597,9 @@ GET /api/release-tracks/:id/snapshots/:modified?format=bundle
       "x_mitre_version": "14.0",
       "name": "Enterprise ATT&CK",
       "x_mitre_contents": [
-        "intrusion-set--APT1",
-        "intrusion-set--APT2",
-        "attack-pattern--T1234",
+        { "object_ref": "intrusion-set--APT1", "object_modified": "2024-02-01T10:00:00Z" },
+        { "object_ref": "intrusion-set--APT2", "object_modified": "2024-01-15T10:00:00Z" },
+        { "object_ref": "attack-pattern--T1234", "object_modified": "2024-01-10T10:00:00Z" }
         // ... all 870 objects
       ]
     },
@@ -441,65 +618,66 @@ Each virtual track snapshot stores metadata about how it was composed:
 
 ```javascript
 {
-  stix: {
-    modified: "2024-03-01T10:00:00Z",
-    x_mitre_version: "14.0"
-  },
+  // Identity and snapshot metadata
+  id: "release-track--uuid-virtual",
+  type: "virtual",
+  snapshot_id: "2024-03-01T10:00:00.000Z",
+  modified: "2024-03-01T10:00:00Z",
+  version: "14.0",
 
-  workspace: {
-    composition_resolution: {
-      resolved_at: "2024-03-01T10:00:00Z",
+  // Composition resolution metadata
+  composition_resolution: {
+    resolved_at: "2024-03-01T10:00:00Z",
 
-      component_snapshots: [
-        {
-          track_id: "GroupsMonthly--uuid",
-          track_name: "Groups Monthly",
-          track_type: "standard",
+    component_snapshots: [
+      {
+        track_id: "release-track--uuid-1",
+        track_name: "Groups Monthly",
+        track_type: "standard",
 
-          // Which snapshot was used
-          resolved_snapshot: "2024-02-15T10:00:00Z",
-          resolved_version: "5.2",
+        // Which snapshot was used
+        resolved_snapshot_id: "2024-02-15T10:00:00.000Z",
+        resolved_version: "5.2",
 
-          // How it was resolved
-          strategy_used: "latest_tagged",
-          filters_applied: {
-            object_types: ["intrusion-set"]
-          },
-
-          // Statistics
-          total_objects_in_source: 47,
-          objects_after_filter: 47,
-          objects_contributed: 47  // After deduplication
-        }
-      ],
-
-      // Deduplication report
-      deduplication: {
-        total_objects_before: 870,
-        total_objects_after: 870,
-        duplicates_found: 0,
-        conflicts_resolved: []
-      },
-
-      // Native objects (if any)
-      native_objects: {
-        candidates_count: 0,
-        staged_count: 0,
-        members_count: 0
-      },
-
-      // Final statistics
-      summary: {
-        total_objects: 870,
-        by_type: {
-          "intrusion-set": 47,
-          "attack-pattern": 823
+        // How it was resolved
+        strategy_used: "latest_tagged",
+        filters_applied: {
+          object_types: ["intrusion-set"]
         },
-        by_tier: {
-          "members": 870,
-          "staged": 0,
-          "candidates": 0
-        }
+
+        // Statistics
+        total_objects_in_source: 47,
+        objects_after_filter: 47,
+        objects_contributed: 47  // After deduplication
+      }
+    ],
+
+    // Deduplication report
+    deduplication: {
+      total_objects_before: 870,
+      total_objects_after: 870,
+      duplicates_found: 0,
+      conflicts_resolved: []
+    },
+
+    // Native objects (if any)
+    native_objects: {
+      candidates_count: 0,
+      staged_count: 0,
+      members_count: 0
+    },
+
+    // Final statistics
+    summary: {
+      total_objects: 870,
+      by_type: {
+        "intrusion-set": 47,
+        "attack-pattern": 823
+      },
+      by_tier: {
+        "members": 870,
+        "staged": 0,
+        "candidates": 0
       }
     }
   }
@@ -515,7 +693,7 @@ Each virtual track snapshot stores metadata about how it was composed:
 for (const component of composition.component_tracks) {
   const snapshot = await resolveSnapshot(component);
 
-  if (snapshot.stix.x_mitre_version === null) {
+  if (snapshot.version === null) {
     throw new ValidationError(
       `Component track ${component.track_id} resolved to draft snapshot. ` +
       `Virtual tracks can only reference tagged snapshots.`
@@ -526,64 +704,35 @@ for (const component of composition.component_tracks) {
 
 **User experience:**
 ```bash
-POST /api/release-tracks/EnterpriseTwiceAnnual--uuid/snapshots/create
+POST /api/release-tracks/release-track--uuid-virtual/snapshots/create
 
 # Error response:
 {
   "error": "ValidationError",
   "message": "Cannot create virtual snapshot: component track 'GroupsMonthly' has no tagged releases",
   "details": {
-    "component": "GroupsMonthly--uuid",
+    "component": "release-track--uuid-1",
     "issue": "No tagged snapshots found (all snapshots are drafts)"
   }
 }
 ```
 
-#### 2. Circular dependency prevention
+#### 2. Component tracks must be standard tracks
 
 ```javascript
 // When creating/updating virtual track composition
-async function validateNoCycles(virtualTrack) {
-  const visited = new Set();
-  const stack = [virtualTrack.stix.id];
+async function validateComponentsAreStandard(virtualTrack) {
+  for (const component of virtualTrack.composition.component_tracks) {
+    const track = await getReleaseTrack(component.track_id);
 
-  while (stack.length > 0) {
-    const currentId = stack.pop();
-
-    if (visited.has(currentId)) {
-      throw new ValidationError(`Circular dependency detected: ${currentId}`);
-    }
-
-    visited.add(currentId);
-
-    const track = await getReleaseTrack(currentId);
-
-    if (track.stix.type === "virtual") {
-      for (const component of track.workspace.composition.component_tracks) {
-        stack.push(component.track_id);
-      }
+    if (track.type === "virtual") {
+      throw new ValidationError(
+        `Virtual tracks can only compose from standard tracks. ` +
+        `Component track ${component.track_id} is a virtual track.`
+      );
     }
   }
 }
-```
-
-#### 3. Maximum composition depth
-
-```javascript
-workspace: {
-  config: {
-    max_composition_depth: 3  // Limit nesting to prevent performance issues
-  }
-}
-```
-
-Virtual track nesting example:
-```
-VirtualA (depth 0)
-  → VirtualB (depth 1)
-    → VirtualC (depth 2)
-      → StandardD (depth 3) ✓ allowed
-        → StandardE (depth 4) ✗ exceeds max_composition_depth
 ```
 
 ## API Reference
@@ -604,7 +753,7 @@ POST /api/release-tracks/new
   "composition": {
     "component_tracks": [
       {
-        "track_id": "GroupsMonthly--uuid",
+        "track_id": "release-track--uuid-1",
         "resolution_strategy": "latest_tagged",
         "filters": {
           "object_types": ["intrusion-set"]
@@ -636,11 +785,11 @@ PUT /api/release-tracks/:id/composition
 {
   "component_tracks": [
     {
-      "track_id": "GroupsMonthly--uuid",
+      "track_id": "release-track--uuid-1",
       "resolution_strategy": "latest_tagged"
     },
     {
-      "track_id": "TechniquesQuarterly--uuid",
+      "track_id": "release-track--uuid-2",
       "resolution_strategy": "specific_version",
       "version": "2.0"
     }
@@ -710,30 +859,30 @@ GET /api/release-tracks/:id?format=workbench&include=all
 
 **Query params:**
 - `format`: `bundle` | `workbench` | `filesystemstore`
-- `include`: `members` | `staged` | `candidates` | `all`
+- `include`: `members` | `quarantine` | `all`
 - `resolve`: `true` (default) | `false` - Whether to resolve composition
 
 **Response when `resolve=true`:**
 ```json
 {
-  "stix": {
-    "id": "x-mitre-collection--virtual-uuid",
-    "type": "virtual",
-    "x_mitre_version": null
-  },
+  "id": "release-track--uuid-virtual",
+  "type": "virtual",
+  "snapshot_id": "2024-03-05T10:00:00.000Z",
+  "modified": "2024-03-05T10:00:00Z",
+  "version": null,
+  "name": "Enterprise ATT&CK",
 
   "resolved_content": {
     "members": [
       {
         "object_ref": "intrusion-set--APT1",
         "object_modified": "2024-02-01T10:00:00Z",
-        "source_track": "GroupsMonthly--uuid",
+        "source_track": "release-track--uuid-1",
         "source_version": "5.2"
       }
       // ... all resolved objects
     ],
-    "staged": [],
-    "candidates": []
+    "quarantine": []
   },
 
   "composition_resolution": {
@@ -743,45 +892,78 @@ GET /api/release-tracks/:id?format=workbench&include=all
 }
 ```
 
-## Hybrid Model: Virtual Track + Native Objects
+## Quarantine Management
 
-Virtual tracks can have **both** composed content **and** native objects:
+When using the `quarantine` deduplication strategy, conflicting objects are stored in the virtual track's `quarantine` tier. Users must manually resolve these conflicts:
 
-```javascript
+**View quarantined objects:**
+```bash
+GET /api/release-tracks/:id?include=quarantine
+```
+
+**Manually promote a quarantined object to members:**
+```bash
+POST /api/release-tracks/:id/quarantine/promote
+```
+
+**Request:**
+```json
 {
-  stix: {
-    type: "virtual"
-  },
-
-  workspace: {
-    // Composed from standard tracks
-    composition: {
-      component_tracks: [
-        { track_id: "GroupsMonthly--uuid" },
-        { track_id: "TechniquesQuarterly--uuid" }
-      ]
-    },
-
-    // PLUS virtual track's own candidates/staged
-    candidates: [
-      {
-        object_ref: "marking-definition--enterprise-only",
-        object_modified: "2024-01-01T10:00:00Z",
-        status: "reviewed"
-      }
-    ],
-
-    staged: []
-  }
+  "object_ref": "intrusion-set--APT1",
+  "object_modified": "2024-02-01T10:00:00Z"
 }
 ```
 
-**Use case:** Enterprise track includes Groups and Techniques from standard tracks, PLUS Enterprise-specific marking definitions or custom objects.
+**Effect:**
+- Moves the specified version from `quarantine` to `members`
+- Removes other versions of the same object from `quarantine`
+- Next snapshot tagging will include this object in the release
+
+## Hybrid Model: Virtual Track + Native Objects
+
+Virtual tracks can optionally have **native objects** in addition to composed content. This is an advanced use case where a virtual track needs to include objects that don't exist in any component track:
+
+```javascript
+{
+  id: "release-track--uuid-virtual",
+  type: "virtual",
+
+  // Composed from standard tracks
+  composition: {
+    component_tracks: [
+      { track_id: "release-track--uuid-1", priority: 1 },
+      { track_id: "release-track--uuid-2", priority: 2 }
+    ],
+    deduplication: {
+      strategy: "prioritize_latest_object"
+    }
+  },
+
+  // PLUS virtual track's own native members
+  native_members: [
+    {
+      object_ref: "marking-definition--enterprise-only",
+      object_modified: "2024-01-01T10:00:00Z"
+    }
+  ],
+
+  // Final result after sync
+  members: [
+    // ... objects from component tracks
+    // ... plus native_members
+  ],
+  quarantine: []
+}
+```
+
+**Use case:** Enterprise track includes Groups and Techniques from standard tracks, PLUS Enterprise-specific marking definitions or custom objects that don't belong in any component track.
 
 **When virtual snapshot is created:**
-1. Resolve composed content from component tracks
-2. Merge with virtual track's native candidates/staged/members
-3. Apply deduplication if any native objects overlap with composed objects
+1. Resolve composed content from component tracks (goes to `members` or `quarantine`)
+2. Merge with virtual track's `native_members` (goes to `members`)
+3. If any `native_members` conflict with composed objects, apply deduplication strategy
+
+**Note:** This is an advanced feature. Most virtual tracks should only use composition without native members.
 
 ## Migration Strategy
 
@@ -796,13 +978,13 @@ POST /api/release-tracks/new
 }
 
 # Add existing Groups as candidates
-POST /api/release-tracks/GroupsMonthly--uuid/candidates
+POST /api/release-tracks/release-track--uuid-1/candidates
 {
   "object_refs": ["intrusion-set--APT1", "intrusion-set--APT2", ...]
 }
 
 # Tag initial release
-POST /api/release-tracks/GroupsMonthly--uuid/bump
+POST /api/release-tracks/release-track--uuid-1/bump
 { "version": "1.0" }
 ```
 
@@ -816,11 +998,11 @@ POST /api/release-tracks/new
   "composition": {
     "component_tracks": [
       {
-        "track_id": "GroupsMonthly--uuid",
+        "track_id": "release-track--uuid-1",
         "resolution_strategy": "latest_tagged"
       },
       {
-        "track_id": "TechniquesQuarterly--uuid",
+        "track_id": "release-track--uuid-2",
         "resolution_strategy": "latest_tagged"
       }
     ]
@@ -836,13 +1018,13 @@ POST /api/release-tracks/new
 
 ```bash
 # Manually trigger first snapshot
-POST /api/release-tracks/EnterpriseTwiceAnnual--uuid/snapshots/create
+POST /api/release-tracks/release-track--uuid-virtual/snapshots/create
 
 # Review draft snapshot
-GET /api/release-tracks/EnterpriseTwiceAnnual--uuid/snapshots/:modified
+GET /api/release-tracks/release-track--uuid-virtual/snapshots/:modified
 
 # Tag as Enterprise v14.0
-POST /api/release-tracks/EnterpriseTwiceAnnual--uuid/snapshots/:modified/bump
+POST /api/release-tracks/release-track--uuid-virtual/snapshots/:modified/bump
 { "version": "14.0" }
 ```
 
@@ -892,11 +1074,14 @@ Otherwise, return composition metadata without resolving:
 if (!query.resolve && query.format === 'workbench') {
   // Return composition config without resolving
   return {
-    stix: snapshot.stix,
-    workspace: {
-      composition: snapshot.workspace.composition,
-      composition_resolution: snapshot.workspace.composition_resolution  // Pre-computed
-    }
+    id: snapshot.id,
+    type: snapshot.type,
+    snapshot_id: snapshot.snapshot_id,
+    modified: snapshot.modified,
+    version: snapshot.version,
+    name: snapshot.name,
+    composition: snapshot.composition,
+    composition_resolution: snapshot.composition_resolution  // Pre-computed
   };
 }
 ```
@@ -1037,22 +1222,12 @@ Virtual tracks cannot compose from draft snapshots.
 }
 ```
 
-### Error: Circular Dependency
+### Error: Component Is Virtual Track
 
 ```json
 {
-  "error": "CircularDependencyError",
-  "message": "Virtual track composition creates circular dependency: VirtualA → VirtualB → VirtualA",
-  "resolution": "Remove one of the component track references to break the cycle"
-}
-```
-
-### Error: Composition Depth Exceeded
-
-```json
-{
-  "error": "CompositionDepthExceededError",
-  "message": "Virtual track composition exceeds maximum depth of 3",
-  "resolution": "Reduce nesting of virtual tracks"
+  "error": "InvalidComponentTypeError",
+  "message": "Virtual tracks can only compose from standard tracks. Component 'release-track--uuid-x' is a virtual track.",
+  "resolution": "Remove the virtual track from component_tracks. Virtual tracks cannot compose from other virtual tracks."
 }
 ```

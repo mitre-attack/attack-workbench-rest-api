@@ -2,20 +2,37 @@
 
 This document tracks new database schemas, interfaces, etc.; as well as changes to any such existing entities.
 
-### Release Track 
+### Release Track
 
 `ReleaseTrack` instances will be tracked as independent MongoDB Collections. The reason for this is because the volume of snapshot permutations is expected to be very high given the frequency of changes that typically occur between releases.
 
-MongoDB Collections will follow a predictive naming convention that the REST API will (attempt to) detect at runtime:
-```
-$name--$uuid
-```
-`$name` is set by the user whereas `$uuid` is dynamically generated and must be unique.
+#### Naming Conventions
 
-For example, a user might create a new release tracked called `Enterprise`; at the time of instantiation, a unique UUIv4 identifier is generated, `8b0ff8f9-27fd-4d7e-bbc9-8fe9465342af`, resulting in the following MongoDB Collection:
+**Release Track Names:**
+- Must contain only alphanumeric characters and spaces: `[a-zA-Z0-9 ]`
+- No special characters allowed (no hyphens, underscores, or other punctuation)
+- Examples: `Enterprise`, `Groups Monthly`, `Techniques Quarterly`
+
+**Release Track IDs:**
+MongoDB Collections and release track IDs follow a simple naming convention:
 ```
-Enterprise--8b0ff8f9-27fd-4d7e-bbc9-8fe9465342af
+release-track--$uuid
 ```
+
+Where:
+- `release-track--` is a fixed prefix
+- `$uuid` is a dynamically generated UUIDv4 identifier (must be unique)
+
+**Example:**
+A user creates a release track named `Groups Monthly`:
+1. Name: `Groups Monthly` (user-specified, stored in the `name` field)
+2. UUID: `8b0ff8f9-27fd-4d7e-bbc9-8fe9465342af` (generated)
+3. Final ID: `release-track--8b0ff8f9-27fd-4d7e-bbc9-8fe9465342af`
+
+This ID is used for:
+- MongoDB Collection name
+- The `id` field in release track snapshots
+- API endpoint references (`/api/release-tracks/:id`)
 
 
 ### Release Track Types
@@ -108,6 +125,10 @@ Each release track snapshot will be tracked as an individual MongoDB Document in
     include_secondary_objects: {
       enabled: true,
       status_threshold: "reviewed"
+    },
+    promotion_conflicts: {
+      candidates_to_staged: "prefer_latest",  // "always_overwrite" | "always_reject" | "prefer_latest"
+      staged_to_members: "abort"              // "always_overwrite" | "always_reject" | "prefer_latest" | "abort"
     }
   },
 
@@ -226,16 +247,15 @@ Virtual release tracks compute their contents by aggregating objects from compon
   created_by_ref: "identity--uuid",
   object_marking_refs: ["marking-definition--uuid"],
 
-  // Objects in this snapshot (resolved from component tracks)
+  // Objects in this snapshot (Virtual tracks use 2-tier system)
   members: [
     {
       object_ref: "intrusion-set--APT1",
       object_modified: "2024-02-01T10:00:00Z"
     }
-    // ... 870 total objects
+    // ... 870 total objects synced from component tracks
   ],
-  staged: [],
-  candidates: [],
+  quarantine: [],  // Conflicting objects requiring manual resolution
 
   // Composition rules - defines how this virtual track is built
   composition: {
@@ -243,6 +263,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
       {
         track_id: "release-track--groups-monthly",
         resolution_strategy: "latest_tagged",  // "latest_tagged" | "specific_version" | "specific_snapshot"
+        priority: 1,  // Required for prioritize_higher_priority strategy (lower number = higher priority)
 
         // Optional: version/snapshot specification for non-latest strategies
         version: "5.0",  // Used with "specific_version" strategy
@@ -258,17 +279,16 @@ Virtual release tracks compute their contents by aggregating objects from compon
       {
         track_id: "release-track--techniques-quarterly",
         resolution_strategy: "latest_tagged",
+        priority: 2,
         filters: {
           object_types: ["attack-pattern"]
         }
       }
     ],
 
-    // Deduplication rules when same object appears in multiple components
+    // Deduplication strategy when same object appears in multiple component tracks
     deduplication: {
-      strategy: "prefer_latest_modified",  // "prefer_latest_modified" | "prefer_highest_version" | "error"
-      tier_resolution: "highest_tier",     // "highest_tier" | "source_priority"
-      status_resolution: "highest_status"  // "highest_status" | "source_priority"
+      strategy: "prioritize_latest_object"  // "prioritize_latest_object" | "prioritize_latest_snapshot" | "prioritize_higher_priority" | "quarantine"
     }
   },
 
@@ -323,9 +343,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
 
     // Native objects (if virtual track has its own objects in addition to composed)
     native_objects: {
-      candidates_count: 0,
-      staged_count: 0,
-      members_count: 0
+      members_count: 0  // Virtual tracks can optionally have native members
     },
 
     // Final statistics
@@ -337,8 +355,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
       },
       by_tier: {
         "members": 870,
-        "staged": 0,
-        "candidates": 0
+        "quarantine": 0
       }
     }
   },
@@ -355,9 +372,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
 
   // Configuration
   config: {
-    candidacy_threshold: "reviewed",
-    notification_email: "enterprise-team@example.com",
-    max_composition_depth: 3  // Limit nesting depth for virtual tracks
+    notification_email: "enterprise-team@example.com"
   },
 
   // Version history (same as standard tracks)
@@ -379,17 +394,20 @@ Virtual release tracks compute their contents by aggregating objects from compon
 **Key Differences from Standard Tracks:**
 
 1. **Type Identification**: `stix.type = "virtual"`
-2. **Composition Rules**: Defines which component tracks to aggregate and how
-3. **Composition Resolution**: Immutable metadata about how snapshot was computed
-4. **No Direct Object Management**: Virtual tracks don't add objects as candidates directly (except optional native objects)
-5. **Scheduled Snapshots**: Can auto-generate snapshots on schedule
-6. **Component Version Tracking**: Version history records which component versions were included
+2. **Two-Tier System**: Only `members` and `quarantine` (no `candidates` or `staged` tiers)
+3. **Composition Rules**: Defines which component tracks to aggregate and how
+4. **Composition Resolution**: Immutable metadata about how snapshot was computed
+5. **Sync from Members Only**: Always pulls from component tracks' `members` tier (never staged or candidates)
+6. **No Workflow States**: No work-in-progress, awaiting-review, or reviewed states
+7. **Scheduled Snapshots**: Can auto-generate snapshots on schedule
+8. **Component Version Tracking**: Version history records which component versions were included
 
 **Virtual Track Constraints:**
 
 - Can only reference **tagged snapshots** from component tracks (not drafts)
+- Can only sync from component tracks' **`members` tier** (released objects only)
+- Can only compose from **standard release tracks** (not other virtual tracks - no nesting allowed)
 - Snapshots are created **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
 - Component tracks must exist and have at least one tagged release
-- Circular dependencies are not allowed (VirtualA → VirtualB → VirtualA)
-- Maximum composition depth is configurable (default: 3 levels)
+- Each component track must have a unique **priority** value (no duplicates)

@@ -158,9 +158,13 @@ The **tagging operation** marks an existing snapshot as a tagged release by assi
 
 ### Object Membership Tiers
 
-Every snapshot (draft or tagged) contains objects which can be classified into any of three categories:
+The tier system differs between **standard release tracks** and **virtual release tracks**.
 
-#### 1. Candidate Objects
+#### Standard Release Tracks: Three-Tier System
+
+Standard release tracks use three tiers to manage the object lifecycle from development to release:
+
+##### 1. Candidate Objects
 
 **Location:** `workspace.candidates`
 
@@ -173,12 +177,17 @@ Every snapshot (draft or tagged) contains objects which can be classified into a
 - Objects in this tier are NOT included in published STIX bundles by default
 - Automatically promoted to staged tier when status reaches the candidacy threshold
 
+**Duplicate Rules:**
+- Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
+- **CAN** contain multiple versions of the same object (same `object_ref`, different `object_modified` timestamps)
+- Example: Can have `attack-pattern--T1234, modified: 2024-01-15` AND `attack-pattern--T1234, modified: 2024-02-20` simultaneously
+
 **Examples:**
 - "Add these 10 techniques as candidate objects"
 - "There are 47 candidate objects in work-in-progress status"
 - "Transition candidate objects from awaiting-review to reviewed"
 
-#### 2. Staged Objects
+##### 2. Staged Objects
 
 **Location:** `workspace.staged`
 
@@ -191,12 +200,17 @@ Every snapshot (draft or tagged) contains objects which can be classified into a
 - Moved to member objects tier (`x_mitre_contents`) when the snapshot is tagged
 - NOT included in published STIX bundles until the snapshot is tagged
 
+**Duplicate Rules:**
+- Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
+- **CANNOT** contain multiple versions of the same object
+- If a promotion would create a duplicate (different version of same object already in staged), conflict resolution policy applies
+
 **Examples:**
 - "There are 12 staged objects ready for the next release"
 - "Promote all reviewed candidates to staged"
 - "Preview which staged objects will be included in the next tagged release"
 
-#### 3. Member Objects
+##### 3. Member Objects
 
 **Location:** `stix.x_mitre_contents`
 
@@ -209,10 +223,54 @@ Every snapshot (draft or tagged) contains objects which can be classified into a
 - Represents the production-ready, published content
 - Only updated when a snapshot is tagged (staged objects are promoted to members)
 
+**Duplicate Rules:**
+- Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
+- **CANNOT** contain multiple versions of the same object
+- If a promotion would create a duplicate (different version of same object already in members), conflict resolution policy applies
+
 **Examples:**
 - "The Enterprise release track has 3,247 member objects"
 - "Export all member objects as a STIX bundle"
 - "Which version of Technique T1234 is in the member objects?"
+
+#### Virtual Release Tracks: Two-Tier System
+
+Virtual release tracks use a simplified two-tier system since they aggregate already-released content:
+
+##### 1. Member Objects
+
+**Location:** `stix.x_mitre_contents`
+
+**Definition:** Successfully synced objects from component tracks.
+
+**Characteristics:**
+- Contains objects synced from component tracks' `members` tiers
+- Objects that were automatically resolved using the deduplication strategy
+- OR objects manually promoted from quarantine
+- These objects are included in published STIX bundles
+- No workflow states (no work-in-progress, awaiting-review, reviewed)
+
+**Duplicate Rules:**
+- Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
+- **CANNOT** contain multiple versions of the same object
+- Deduplication strategy determines which version to keep when conflicts occur
+
+##### 2. Quarantine
+
+**Location:** `workspace.quarantine`
+
+**Definition:** Conflicting objects that require manual resolution.
+
+**Characteristics:**
+- Only populated when using `quarantine` deduplication strategy
+- Contains objects that couldn't be automatically resolved due to conflicts
+- NOT included in published STIX bundles
+- Requires manual intervention to promote one version to members
+
+**Duplicate Rules:**
+- Cannot contain exact duplicates (same `object_ref` + `object_modified` pair)
+- **CAN** contain multiple versions of the same object (different versions from different component tracks)
+- Example: Can have `attack-pattern--T1234, modified: 2024-01-15` (from Track A) AND `attack-pattern--T1234, modified: 2024-02-20` (from Track B) simultaneously
 
 ---
 
