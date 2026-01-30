@@ -3,6 +3,7 @@
 const {
   tacticSchema,
   techniqueSchema,
+  techniquePartialSchema,
   groupSchema,
   malwareSchema,
   toolSchema,
@@ -17,16 +18,21 @@ const {
   relationshipSchema,
   collectionSchema,
   markingDefinitionSchema,
-} = require('@mitre-attack/attack-data-model');
+  relationshipPartialSchema,
+} = require('@mitre-attack/attack-data-model/dist');
+const { campaignPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/campaign.schema');
+const { groupPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/group.schema');
+const { malwarePartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/malware.schema');
+const { toolPartialSchema } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/tool.schema');
 
 const STIX_SCHEMAS = {
   'x-mitre-tactic': tacticSchema,
-  'attack-pattern': techniqueSchema,
-  'intrusion-set': groupSchema,
-  malware: malwareSchema,
-  tool: toolSchema,
-  campaign: campaignSchema,
-  relationship: relationshipSchema,
+  'attack-pattern': {'partial': techniquePartialSchema, 'full': techniqueSchema},
+  'intrusion-set': {'partial': groupPartialSchema, 'full': groupSchema},
+  malware: {'partial': malwarePartialSchema, 'full': malwareSchema},
+  tool: {'partial': toolPartialSchema, 'full': toolSchema},
+  campaign: {'partial': campaignPartialSchema, 'full': campaignSchema},
+  relationship: {'partial': relationshipPartialSchema, 'full': relationshipSchema},
   'course-of-action': mitigationSchema,
   'marking-definition': markingDefinitionSchema,
   'x-mitre-asset': assetSchema,
@@ -93,6 +99,30 @@ const ERROR_TRANSFORMATION_RULES = [
   // Add more rules here as needed
 ];
 exports.ERROR_TRANSFORMATION_RULES = ERROR_TRANSFORMATION_RULES;
+
+/**
+ * Get the schema to use for validating a STIX object.
+ *
+ * Some STIX types define both a "partial" (work-in-progress) and "full" schema,
+ * while others only define a single schema. This helper resolves the correct
+ * schema based on the STIX type and object status.
+ *
+ * @param {string} type - The STIX `type` being validated (e.g. "attack-pattern")
+ * @param {string} status - The object status (e.g. "work-in-progress", "awaiting-review", "reviewed")
+ * @returns {Object} Zod schema
+ */
+function getSchema(type, status) {
+  const entry = STIX_SCHEMAS[type];
+  if (!entry) return null;
+
+  if (entry.partial && entry.full) {
+    return status === 'work-in-progress' ? entry.partial : entry.full;
+  }
+
+  else{
+    return status === 'work-in-progress' ? entry.partial() : entry;
+  }
+}
 
 /**
  * Check if a validation error should be transformed (converted to warning or suppressed)
@@ -218,8 +248,8 @@ exports.validateStixObject = function (payload) {
     };
   }
 
-  // Apply partial validation for work-in-progress
-  const stixSchema = status === 'work-in-progress' ? baseSchema.partial() : baseSchema;
+  // Get the schema to run
+  const stixSchema = getSchema(type, status);
 
   // Validate STIX data
   const stixResult = stixSchema.safeParse(stix);
