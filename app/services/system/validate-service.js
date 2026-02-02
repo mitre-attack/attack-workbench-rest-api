@@ -22,7 +22,7 @@ const {
   campaignPartialSchema,
   groupPartialSchema,
   malwarePartialSchema,
-  toolPartialSchema
+  toolPartialSchema,
 } = require('@mitre-attack/attack-data-model/dist');
 
 const STIX_SCHEMAS = {
