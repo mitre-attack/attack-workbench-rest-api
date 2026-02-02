@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-// TODO remove the above eslint rule after all functions have been implemented
+// TODO remove the above eslint rule after all sub-services have been implemented
 'use strict';
 
 // =============================================================================
@@ -8,11 +8,17 @@
 // Orchestrator that delegates to domain-specific sub-services. This is the
 // single entry point consumed by the controller layer.
 //
-// All methods currently throw NotImplementedError. Sub-services (WS3-WS7)
-// will provide real implementations progressively.
+// Phase 1: Track management, snapshot CRUD, config → snapshot-service
+// Phase 2: Candidates, staged, object versions    → standard-track-service
+// Phase 3: Auto-promotion, workflow               → workflow-service (TODO)
+// Phase 4: Bump/tag, versioning                   → versioning-service (TODO)
+// Phase 5: Virtual track composition              → virtual-track-service (TODO)
+// Phase 6: Export, ephemeral                       → export-service, ephemeral-service (TODO)
 // =============================================================================
 
 const { NotImplementedError } = require('../../exceptions');
+const snapshotService = require('./snapshot-service');
+const standardTrackService = require('./standard-track-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -21,15 +27,15 @@ function notImplemented(methodName) {
 }
 
 // -----------------------------------------------------------------------------
-// Track management
+// Track management  (Phase 1 → snapshot-service)
 // -----------------------------------------------------------------------------
 
-exports.listTracks = async function listTracks(_options) {
-  notImplemented('listTracks');
+exports.listTracks = function listTracks(options) {
+  return snapshotService.listTracks(options);
 };
 
-exports.createTrack = async function createTrack(_data) {
-  notImplemented('createTrack');
+exports.createTrack = function createTrack(data) {
+  return snapshotService.createTrack(data);
 };
 
 exports.createTrackFromBundle = async function createTrackFromBundle(_bundleData) {
@@ -40,62 +46,58 @@ exports.importTrack = async function importTrack(_data) {
   notImplemented('importTrack');
 };
 
-exports.getLatestSnapshot = async function getLatestSnapshot(_trackId, _options) {
-  notImplemented('getLatestSnapshot');
+exports.getLatestSnapshot = function getLatestSnapshot(trackId, options) {
+  return snapshotService.getLatestSnapshot(trackId, options);
 };
 
-exports.getSnapshotByModified = async function getSnapshotByModified(
-  _trackId,
-  _modified,
-  _options,
+exports.getSnapshotByModified = function getSnapshotByModified(trackId, modified, options) {
+  return snapshotService.getSnapshotByModified(trackId, modified, options);
+};
+
+exports.updateMetadata = function updateMetadata(trackId, updates, userId) {
+  return snapshotService.updateMetadata(trackId, updates, userId);
+};
+
+exports.updateMetadataByModified = function updateMetadataByModified(
+  trackId,
+  modified,
+  updates,
+  userId,
 ) {
-  notImplemented('getSnapshotByModified');
+  return snapshotService.updateMetadataByModified(trackId, modified, updates, userId);
 };
 
-exports.updateMetadata = async function updateMetadata(_trackId, _updates, _userId) {
-  notImplemented('updateMetadata');
+exports.updateContents = function updateContents(trackId, contents, userId) {
+  return snapshotService.updateContents(trackId, contents, userId);
 };
 
-exports.updateMetadataByModified = async function updateMetadataByModified(
-  _trackId,
-  _modified,
-  _updates,
-  _userId,
+exports.updateContentsByModified = function updateContentsByModified(
+  trackId,
+  modified,
+  contents,
+  userId,
 ) {
-  notImplemented('updateMetadataByModified');
+  return snapshotService.updateContentsByModified(trackId, modified, contents, userId);
 };
 
-exports.updateContents = async function updateContents(_trackId, _contents, _userId) {
-  notImplemented('updateContents');
+exports.cloneTrack = function cloneTrack(trackId, options) {
+  return snapshotService.cloneTrack(trackId, options);
 };
 
-exports.updateContentsByModified = async function updateContentsByModified(
-  _trackId,
-  _modified,
-  _contents,
-  _userId,
-) {
-  notImplemented('updateContentsByModified');
+exports.cloneFromSnapshot = function cloneFromSnapshot(trackId, modified, options) {
+  return snapshotService.cloneFromSnapshot(trackId, modified, options);
 };
 
-exports.cloneTrack = async function cloneTrack(_trackId, _options) {
-  notImplemented('cloneTrack');
+exports.deleteTrack = function deleteTrack(trackId) {
+  return snapshotService.deleteTrack(trackId);
 };
 
-exports.cloneFromSnapshot = async function cloneFromSnapshot(_trackId, _modified, _options) {
-  notImplemented('cloneFromSnapshot');
-};
-
-exports.deleteTrack = async function deleteTrack(_trackId) {
-  notImplemented('deleteTrack');
-};
-
-exports.deleteSnapshot = async function deleteSnapshot(_trackId, _modified) {
-  notImplemented('deleteSnapshot');
+exports.deleteSnapshot = function deleteSnapshot(trackId, modified) {
+  return snapshotService.deleteSnapshot(trackId, modified);
 };
 
 // -----------------------------------------------------------------------------
-// Ephemeral
+// Ephemeral  (Phase 6 → ephemeral-service, TODO)
 // -----------------------------------------------------------------------------
 
 exports.getEphemeralBundle = async function getEphemeralBundle(_domain, _format) {
@@ -103,51 +105,47 @@ exports.getEphemeralBundle = async function getEphemeralBundle(_domain, _format)
 };
 
 // -----------------------------------------------------------------------------
-// Candidates
+// Candidates  (Phase 2 → standard-track-service)
 // -----------------------------------------------------------------------------
 
-exports.addCandidates = async function addCandidates(_trackId, _objectRefs, _userId) {
-  notImplemented('addCandidates');
+exports.addCandidates = function addCandidates(trackId, objectRefs, userId) {
+  return standardTrackService.addCandidates(trackId, objectRefs, userId);
 };
 
-exports.listCandidates = async function listCandidates(_trackId, _options) {
-  notImplemented('listCandidates');
+exports.listCandidates = function listCandidates(trackId, options) {
+  return standardTrackService.listCandidates(trackId, options);
 };
 
-exports.removeCandidate = async function removeCandidate(_trackId, _objectRef) {
-  notImplemented('removeCandidate');
+exports.removeCandidate = function removeCandidate(trackId, objectRef) {
+  return standardTrackService.removeCandidate(trackId, objectRef);
 };
 
-exports.reviewCandidates = async function reviewCandidates(_trackId, _reviewData, _userId) {
-  notImplemented('reviewCandidates');
+exports.reviewCandidates = function reviewCandidates(trackId, reviewData, userId) {
+  return standardTrackService.reviewCandidates(trackId, reviewData, userId);
 };
 
-exports.promoteCandidates = async function promoteCandidates(_trackId, _objectRefs, _userId) {
-  notImplemented('promoteCandidates');
+exports.promoteCandidates = function promoteCandidates(trackId, objectRefs, userId) {
+  return standardTrackService.promoteCandidates(trackId, objectRefs, userId);
 };
 
-exports.updateCandidateVersion = async function updateCandidateVersion(
-  _trackId,
-  _objectRef,
-  _data,
-) {
-  notImplemented('updateCandidateVersion');
+exports.updateCandidateVersion = function updateCandidateVersion(trackId, objectRef, data) {
+  return standardTrackService.updateCandidateVersion(trackId, objectRef, data);
 };
 
 // -----------------------------------------------------------------------------
-// Staged
+// Staged  (Phase 2 → standard-track-service)
 // -----------------------------------------------------------------------------
 
-exports.listStaged = async function listStaged(_trackId) {
-  notImplemented('listStaged');
+exports.listStaged = function listStaged(trackId) {
+  return standardTrackService.listStaged(trackId);
 };
 
-exports.demoteStaged = async function demoteStaged(_trackId, _objectRefs, _userId) {
-  notImplemented('demoteStaged');
+exports.demoteStaged = function demoteStaged(trackId, objectRefs, userId) {
+  return standardTrackService.demoteStaged(trackId, objectRefs, userId);
 };
 
 // -----------------------------------------------------------------------------
-// Versioning
+// Versioning  (Phase 4 → versioning-service, TODO)
 // -----------------------------------------------------------------------------
 
 exports.bumpLatest = async function bumpLatest(_trackId, _options) {
@@ -163,19 +161,19 @@ exports.previewBump = async function previewBump(_trackId, _format) {
 };
 
 // -----------------------------------------------------------------------------
-// Configuration
+// Configuration  (Phase 1 → snapshot-service)
 // -----------------------------------------------------------------------------
 
-exports.getConfig = async function getConfig(_trackId) {
-  notImplemented('getConfig');
+exports.getConfig = function getConfig(trackId) {
+  return snapshotService.getConfig(trackId);
 };
 
-exports.updateConfig = async function updateConfig(_trackId, _config, _userId) {
-  notImplemented('updateConfig');
+exports.updateConfig = function updateConfig(trackId, config, userId) {
+  return snapshotService.updateConfig(trackId, config, userId);
 };
 
 // -----------------------------------------------------------------------------
-// Virtual tracks
+// Virtual tracks  (Phase 5 → virtual-track-service, TODO)
 // -----------------------------------------------------------------------------
 
 exports.updateComposition = async function updateComposition(_trackId, _composition, _userId) {
@@ -191,9 +189,9 @@ exports.previewVirtualSnapshot = async function previewVirtualSnapshot(_trackId)
 };
 
 // -----------------------------------------------------------------------------
-// Object versions
+// Object versions  (Phase 2 → standard-track-service)
 // -----------------------------------------------------------------------------
 
-exports.listObjectVersions = async function listObjectVersions(_trackId, _objectRef) {
-  notImplemented('listObjectVersions');
+exports.listObjectVersions = function listObjectVersions(trackId, objectRef) {
+  return standardTrackService.listObjectVersions(trackId, objectRef);
 };
