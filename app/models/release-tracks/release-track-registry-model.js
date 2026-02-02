@@ -1,13 +1,12 @@
 'use strict';
 
 const mongoose = require('mongoose');
-
-// --- Validation patterns ---
-
-const TRACK_ID_RE = /^release-track--[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const TRACK_NAME_RE = /^[a-zA-Z0-9 ]+$/;
-const VERSION_RE = /^\d+\.\d+$/;
-const CRON_RE = /^(\S+\s+){4}\S+$/;
+const {
+  validateTrackId,
+  validateTrackName,
+  validateVersion,
+  validateCron,
+} = require('../../lib/release-tracks/release-track-validators');
 
 // --- Sub-schemas ---
 
@@ -19,10 +18,7 @@ const snapshotScheduleDefinition = {
   },
   cron: {
     type: String,
-    validate: {
-      validator: (v) => CRON_RE.test(v),
-      message: (props) => `"${props.value}" is not a valid cron expression (expected 5 fields)`,
-    },
+    validate: validateCron,
   },
   dates: { type: [Date], default: undefined },
 };
@@ -35,11 +31,7 @@ const releaseTrackRegistryDefinition = {
     type: String,
     required: [true, 'Release track ID is required'],
     index: { unique: true },
-    validate: {
-      validator: (v) => TRACK_ID_RE.test(v),
-      message: (props) =>
-        `"${props.value}" is not a valid release track ID (expected "release-track--<uuid>")`,
-    },
+    validate: validateTrackId,
   },
   type: {
     type: String,
@@ -49,11 +41,7 @@ const releaseTrackRegistryDefinition = {
   name: {
     type: String,
     required: [true, 'Release track name is required'],
-    validate: {
-      validator: (v) => TRACK_NAME_RE.test(v),
-      message: (props) =>
-        `"${props.value}" is not a valid release track name (only alphanumeric characters and spaces allowed)`,
-    },
+    validate: validateTrackName,
   },
   description: { type: String },
 
@@ -62,11 +50,7 @@ const releaseTrackRegistryDefinition = {
   latest_tagged_version: {
     type: String,
     default: null,
-    validate: {
-      validator: (v) => v === null || VERSION_RE.test(v),
-      message: (props) =>
-        `"${props.value}" is not a valid version (expected MAJOR.MINOR format, e.g. "1.0")`,
-    },
+    validate: validateVersion,
   },
   snapshot_count: { type: Number, default: 0 },
   tagged_release_count: { type: Number, default: 0 },
