@@ -19,19 +19,11 @@ const {
   collectionSchema,
   markingDefinitionSchema,
   relationshipPartialSchema,
-} = require('@mitre-attack/attack-data-model/dist');
-const {
   campaignPartialSchema,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/campaign.schema');
-const {
   groupPartialSchema,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/group.schema');
-const {
   malwarePartialSchema,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/malware.schema');
-const {
-  toolPartialSchema,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/tool.schema');
+  toolPartialSchema
+} = require('@mitre-attack/attack-data-model/dist');
 
 const STIX_SCHEMAS = {
   'x-mitre-tactic': tacticSchema,
