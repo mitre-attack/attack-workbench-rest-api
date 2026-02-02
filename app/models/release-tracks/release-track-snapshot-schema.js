@@ -1,40 +1,14 @@
 'use strict';
 
 const mongoose = require('mongoose');
-const { z } = require('zod');
 const {
-  stixIdentifierSchema,
-  xMitreVersionSchema,
-  createStixIdValidator,
-} = require('@mitre-attack/attack-data-model');
-
-// =============================================================================
-// Custom Mongoose validators
-// For context, read: https://mongoosejs.com/docs/validation.html#custom-validators
-// =============================================================================
-
-// We can't use ADM to validate `track_id` because the ADM's `stixIdentifierSchema` and `createStixIdValidator`
-// only supports official STIX types.
-//  - 'attack-pattern--$uuid' will work
-//  - 'release-track--$uuid' will NOT work
-// TODO we should consider adding a `customStixIdValidator` schema + factoryfunction for checking IDs that follow the STIX ID format but have custom STIX types, e.g., "foobar--$uuid"
-const TRACK_ID_RE = /^release-track--[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const validateTrackId = {
-  validator: (v) => TRACK_ID_RE.test(v),
-  message: (props) =>
-    `"${props.value}" is not a valid release track ID (expected "release-track--<uuid>")`,
-};
-
-const validateStixId = {
-  validator: (v) => stixIdentifierSchema.safeParse(v).success,
-  message: (props) => `"${props.data}" is not a valid STIX ID (expected "<type>--<uuid>")`,
-};
-
-const validateVersion = {
-  validator: (v) => v === null || xMitreVersionSchema.safeParse(v).success,
-  message: (props) =>
-    `"${props.data}" is not a valid version (expected MAJOR.MINOR format, e.g. "1.0")`,
-};
+  validateTrackId,
+  validateTrackName,
+  validateStixId,
+  validateIdentityRef,
+  validateMarkingDefRefs,
+  validateVersion,
+} = require('../../lib/release-tracks/release-track-validators');
 
 // =============================================================================
 // Sub-schemas (all use _id: false to match codebase conventions)
@@ -297,31 +271,18 @@ const releaseTrackSnapshotDefinition = {
   name: {
     type: String,
     required: [true, 'Release track name is required'],
-    validate: {
-      validator: (v) => z.string().safeParse(v).success,
-      message: (props) =>
-        `"${props.value}" is not a valid release track name (only alphanumeric characters and spaces allowed)`,
-    },
+    validate: validateTrackName,
   },
   description: { type: String },
   created: { type: Date, required: true },
   created_by_ref: {
     type: String,
-    validate: {
-      validator: (v) => createStixIdValidator('identity').safeParse(v).success,
-      message: (props) =>
-        `"${props.data}" is not a valid identity reference (expected "identity--<uuid>")`,
-    },
+    validate: validateIdentityRef,
   },
   object_marking_refs: {
     type: [String],
     default: undefined,
-    validate: {
-      validator: (v) =>
-        v.every((ref) => createStixIdValidator('marking-definition').safeParse(ref).success),
-      message: () =>
-        'Each marking reference must be a valid marking-definition ID (expected "marking-definition--<uuid>")',
-    },
+    validate: validateMarkingDefRefs,
   },
 
   // --- Standard track tiers ---
