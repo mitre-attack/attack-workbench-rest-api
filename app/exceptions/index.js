@@ -204,6 +204,45 @@ class SchemaValidationError extends CustomError {
   }
 }
 
+class AlreadyReleasedError extends CustomError {
+  constructor(version, options) {
+    super(`This snapshot has already been tagged as version ${version}`, options);
+  }
+}
+
+class InvalidVersionError extends CustomError {
+  constructor(message, options) {
+    super(message || 'Invalid version', options);
+  }
+}
+
+class ReleaseConflictError extends CustomError {
+  constructor(message, options) {
+    super(message || 'Release conflict: promotion aborted due to conflicting objects', options);
+  }
+}
+
+class NoTaggedSnapshotsError extends CustomError {
+  constructor(trackId, options) {
+    super(`Component track ${trackId} has no tagged snapshots`, options);
+  }
+}
+
+class InvalidComponentTypeError extends CustomError {
+  constructor(trackId, options) {
+    super(
+      `Component track ${trackId} must be a standard track (virtual nesting is not allowed)`,
+      options,
+    );
+  }
+}
+
+class TrackNotFoundError extends CustomError {
+  constructor(trackId, options) {
+    super(`Release track ${trackId} not found`, options);
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -220,6 +259,16 @@ module.exports = {
   //** Validation errors */
   ValidationError,
   SchemaValidationError,
+
+  //** Version control errors */
+  AlreadyReleasedError,
+  InvalidVersionError,
+
+  //** Release track errors */
+  ReleaseConflictError,
+  NoTaggedSnapshotsError,
+  InvalidComponentTypeError,
+  TrackNotFoundError,
 
   //** Database-related errors */
   DuplicateIdError,

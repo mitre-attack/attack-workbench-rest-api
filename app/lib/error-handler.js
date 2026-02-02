@@ -30,6 +30,12 @@ const {
   ImmutablePropertyError,
   InvalidPostOperationError,
   DefaultMarkingDefinitionsNotFoundError,
+  AlreadyReleasedError,
+  InvalidVersionError,
+  ReleaseConflictError,
+  NoTaggedSnapshotsError,
+  InvalidComponentTypeError,
+  TrackNotFoundError,
 } = require('../exceptions');
 
 exports.bodyParser = function (err, req, res, next) {
@@ -86,7 +92,10 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof InvalidTypeError ||
     err instanceof PropertyNotAllowedError ||
     err instanceof CannotUpdateStaticObjectError ||
-    err instanceof BadRequestError
+    err instanceof BadRequestError ||
+    err instanceof InvalidVersionError ||
+    err instanceof NoTaggedSnapshotsError ||
+    err instanceof InvalidComponentTypeError
   ) {
     logger.warn(`Bad request: ${err.message}`);
     return res.status(400).send(buildErrorResponse(err));
@@ -98,7 +107,8 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof SystemConfigurationNotFound ||
     err instanceof OrganizationIdentityNotFoundError ||
     err instanceof AnonymousUserAccountNotFoundError ||
-    err instanceof DefaultMarkingDefinitionsNotFoundError
+    err instanceof DefaultMarkingDefinitionsNotFoundError ||
+    err instanceof TrackNotFoundError
   ) {
     logger.warn(`Not found: ${err.message}`);
     return res.status(404).send(buildErrorResponse(err));
@@ -108,7 +118,9 @@ exports.serviceExceptions = function (err, req, res, next) {
   if (
     err instanceof DuplicateIdError ||
     err instanceof DuplicateEmailError ||
-    err instanceof DuplicateNameError
+    err instanceof DuplicateNameError ||
+    err instanceof AlreadyReleasedError ||
+    err instanceof ReleaseConflictError
   ) {
     logger.warn(`Conflict: ${err.message}`);
     return res.status(409).send(buildErrorResponse(err));
