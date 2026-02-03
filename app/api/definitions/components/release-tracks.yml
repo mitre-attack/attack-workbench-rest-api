@@ -1,0 +1,343 @@
+components:
+  schemas:
+    release-track-snapshot:
+      type: object
+      description: 'A snapshot document for a release track, containing versioned member objects and workflow tiers'
+      properties:
+        id:
+          type: string
+          description: 'The release track ID (STIX identifier format)'
+          example: 'release-track--a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+        type:
+          type: string
+          enum:
+            - standard
+            - virtual
+          description: 'Track type: standard (direct object management) or virtual (aggregation)'
+        modified:
+          type: string
+          format: date-time
+          description: 'When this snapshot was created'
+        version:
+          type: string
+          nullable: true
+          description: 'Semantic version (e.g., "1.0", "2.1") if tagged, null for draft snapshots'
+          example: '1.0'
+        name:
+          type: string
+          description: 'Human-readable track name'
+          example: 'Enterprise ATT&CK'
+        description:
+          type: string
+          description: 'Track description'
+        created:
+          type: string
+          format: date-time
+          description: 'When the track was initially created'
+        created_by_ref:
+          type: string
+          description: 'STIX ID of the user who created the track'
+          example: 'identity--12345678-1234-1234-1234-123456789012'
+        object_marking_refs:
+          type: array
+          items:
+            type: string
+          description: 'STIX marking definition references'
+        members:
+          type: array
+          description: 'Released objects (promoted from staged during tagging)'
+          items:
+            $ref: '#/components/schemas/tier-entry'
+        staged:
+          type: array
+          nullable: true
+          description: 'Reviewed objects ready for next release (standard tracks only)'
+          items:
+            $ref: '#/components/schemas/staged-entry'
+        candidates:
+          type: array
+          nullable: true
+          description: 'Objects in workflow (standard tracks only)'
+          items:
+            $ref: '#/components/schemas/candidate-entry'
+        quarantine:
+          type: array
+          nullable: true
+          description: 'Conflicting objects needing resolution (virtual tracks only)'
+          items:
+            $ref: '#/components/schemas/tier-entry'
+        composition:
+          nullable: true
+          description: 'Component track references (virtual tracks only)'
+          $ref: '#/components/schemas/composition'
+        config:
+          $ref: '#/components/schemas/track-config'
+        version_history:
+          type: array
+          description: 'History of tagged releases'
+          items:
+            $ref: '#/components/schemas/version-history-entry'
+
+    tier-entry:
+      type: object
+      description: 'A reference to a specific version of a STIX object'
+      properties:
+        object_ref:
+          type: string
+          description: 'STIX ID of the object'
+          example: 'attack-pattern--12345678-1234-1234-1234-123456789012'
+        object_modified:
+          type: string
+          format: date-time
+          description: 'Version pin: the modified timestamp of this object version'
+
+    candidate-entry:
+      allOf:
+        - $ref: '#/components/schemas/tier-entry'
+        - type: object
+          properties:
+            object_status:
+              type: string
+              enum:
+                - work-in-progress
+                - awaiting-review
+                - reviewed
+              description: 'Workflow status (scoped to this track)'
+            object_added_at:
+              type: string
+              format: date-time
+              description: 'When added to candidates'
+            object_added_by:
+              type: string
+              description: 'User who added this candidate'
+
+    staged-entry:
+      allOf:
+        - $ref: '#/components/schemas/tier-entry'
+        - type: object
+          properties:
+            object_status:
+              type: string
+              enum:
+                - work-in-progress
+                - awaiting-review
+                - reviewed
+              description: 'Workflow status (preserved from candidates)'
+            object_staged_at:
+              type: string
+              format: date-time
+              description: 'When promoted to staged'
+            object_staged_by:
+              type: string
+              description: 'User who staged this object'
+
+    track-config:
+      type: object
+      description: 'Release track configuration'
+      properties:
+        auto_promote:
+          type: boolean
+          description: 'Whether to automatically promote candidates that meet the threshold'
+          default: false
+        candidacy_threshold:
+          type: string
+          enum:
+            - work-in-progress
+            - awaiting-review
+            - reviewed
+          description: 'Minimum workflow status required for auto-promotion to staged'
+          default: 'reviewed'
+        include_candidates_in_snapshots:
+          type: boolean
+          description: 'Whether to include candidates when exporting snapshots'
+          default: false
+        promotion_conflicts:
+          type: object
+          description: 'Conflict resolution policies for tier promotions'
+          properties:
+            candidates_to_staged:
+              type: string
+              enum:
+                - always_overwrite
+                - always_reject
+                - prefer_latest
+                - abort
+              description: 'How to handle conflicts when promoting candidates to staged'
+              default: 'prefer_latest'
+            staged_to_members:
+              type: string
+              enum:
+                - always_overwrite
+                - always_reject
+                - prefer_latest
+                - abort
+              description: 'How to handle conflicts when tagging (promoting staged to members)'
+              default: 'abort'
+
+    composition:
+      type: object
+      description: 'Virtual track composition (references to component standard tracks)'
+      properties:
+        component_tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/component-track'
+        deduplication_strategy:
+          type: string
+          enum:
+            - prioritize_latest_object
+            - prioritize_latest_snapshot
+            - prioritize_higher_priority
+            - quarantine
+          description: 'How to resolve duplicate objects across components'
+          default: 'prioritize_latest_object'
+
+    component-track:
+      type: object
+      description: 'Reference to a component track in a virtual track composition'
+      properties:
+        track_id:
+          type: string
+          description: 'The release track ID of the component'
+          example: 'release-track--a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+        priority:
+          type: number
+          description: 'Priority for deduplication (higher wins)'
+        resolution_strategy:
+          type: string
+          enum:
+            - latest_tagged
+            - specific_version
+            - specific_snapshot
+          description: 'How to resolve which snapshot to use from this component'
+          default: 'latest_tagged'
+        version:
+          type: string
+          nullable: true
+          description: 'Specific version to pin to (when resolution_strategy is specific_version)'
+        snapshot_modified:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Specific snapshot to pin to (when resolution_strategy is specific_snapshot)'
+        filters:
+          type: object
+          description: 'Optional filters to apply to component members'
+          properties:
+            object_types:
+              type: array
+              items:
+                type: string
+              description: 'Only include these STIX types'
+            domains:
+              type: array
+              items:
+                type: string
+              description: 'Only include objects from these ATT&CK domains'
+
+    version-history-entry:
+      type: object
+      description: 'Record of a tagged release'
+      properties:
+        version:
+          type: string
+          description: 'The semantic version number'
+          example: '1.0'
+        tagged_at:
+          type: string
+          format: date-time
+          description: 'When this version was tagged'
+        tagged_by:
+          type: string
+          description: 'User who tagged this version'
+        snapshot_id:
+          type: string
+          format: date-time
+          description: 'The snapshot modified timestamp that was tagged'
+        summary:
+          type: object
+          description: 'Statistics about this release'
+          properties:
+            members_count:
+              type: number
+              description: 'Total objects in members tier after release'
+            promoted_count:
+              type: number
+              description: 'Objects promoted from staged in this release'
+            staged_count:
+              type: number
+              description: 'Objects remaining in staged after release'
+            candidate_count:
+              type: number
+              description: 'Objects in candidates at time of release'
+
+    release-track-registry:
+      type: object
+      description: 'Registry entry tracking metadata about a release track'
+      properties:
+        track_id:
+          type: string
+          description: 'The release track ID'
+          example: 'release-track--a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+        type:
+          type: string
+          enum:
+            - standard
+            - virtual
+          description: 'Track type'
+        name:
+          type: string
+          description: 'Track name'
+        description:
+          type: string
+          description: 'Track description'
+        latest_snapshot_modified:
+          type: string
+          format: date-time
+          description: 'Timestamp of the most recent snapshot'
+        latest_tagged_version:
+          type: string
+          nullable: true
+          description: 'Most recent tagged version number'
+          example: '2.1'
+        snapshot_count:
+          type: number
+          description: 'Total number of snapshots for this track'
+        tagged_release_count:
+          type: number
+          description: 'Number of tagged releases'
+        created_at:
+          type: string
+          format: date-time
+          description: 'When the track was created'
+        updated_at:
+          type: string
+          format: date-time
+          description: 'When the track metadata was last updated'
+        snapshot_schedule:
+          nullable: true
+          description: 'Automated snapshot schedule (virtual tracks only)'
+          $ref: '#/components/schemas/snapshot-schedule'
+
+    snapshot-schedule:
+      type: object
+      description: 'Schedule for automated virtual track snapshot creation'
+      properties:
+        mode:
+          type: string
+          enum:
+            - interval
+            - dates
+            - disabled
+          description: 'Scheduling mode'
+        interval_days:
+          type: number
+          nullable: true
+          description: 'Days between snapshots (when mode is interval)'
+        dates:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: date-time
+          description: 'Specific dates for snapshots (when mode is dates)'

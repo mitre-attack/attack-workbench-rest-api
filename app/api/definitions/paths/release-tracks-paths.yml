@@ -1,0 +1,870 @@
+paths:
+  # =============================================================================
+  # Ephemeral bundles
+  # =============================================================================
+  /api/release-tracks/ephemeral/{domain}:
+    get:
+      summary: 'Generate an ephemeral bundle for a domain'
+      operationId: 'release-tracks-ephemeral-get'
+      description: |
+        Generate a stateless bundle containing all objects from a given ATT&CK domain.
+        This endpoint queries all STIX repositories by domain without persisting a release track.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          description: 'ATT&CK domain (e.g., enterprise-attack, mobile-attack, ics-attack)'
+          schema:
+            type: string
+            example: 'enterprise-attack'
+        - name: format
+          in: query
+          description: 'Output format (bundle, workbench, or filesystem-store)'
+          schema:
+            type: string
+            enum:
+              - bundle
+              - workbench
+              - filesystem-store
+            default: bundle
+      responses:
+        '200':
+          description: 'Ephemeral bundle generated successfully'
+        '501':
+          description: 'Not yet implemented'
+
+  # =============================================================================
+  # Track management
+  # =============================================================================
+  /api/release-tracks:
+    get:
+      summary: 'List all release tracks'
+      operationId: 'release-tracks-list'
+      description: |
+        Retrieve a paginated list of release track registry entries.
+        Returns metadata about each track (not full snapshots).
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: type
+          in: query
+          description: 'Filter by track type'
+          schema:
+            type: string
+            enum:
+              - standard
+              - virtual
+        - name: search
+          in: query
+          description: 'Search by name or description (case-insensitive)'
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 'Number of tracks to return (0 for all)'
+          schema:
+            type: number
+            default: 0
+        - name: offset
+          in: query
+          description: 'Number of tracks to skip'
+          schema:
+            type: number
+            default: 0
+      responses:
+        '200':
+          description: 'List of release tracks'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '../components/release-tracks.yml#/components/schemas/release-track-registry'
+                  pagination:
+                    type: object
+                    properties:
+                      total:
+                        type: number
+                      limit:
+                        type: number
+                      offset:
+                        type: number
+
+  /api/release-tracks/new:
+    post:
+      summary: 'Create a new release track'
+      operationId: 'release-tracks-create'
+      description: |
+        Create a new standard or virtual release track with an initial empty draft snapshot.
+        Request body is validated via Zod (not OpenAPI). See controller for schema.
+      tags:
+        - 'Release Tracks'
+      # Request body validation moved to Zod in controller
+      responses:
+        '201':
+          description: 'Release track created successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+        '400':
+          description: 'Invalid request parameters'
+
+  /api/release-tracks/new-from-bundle:
+    post:
+      summary: 'Create a release track from a STIX bundle'
+      operationId: 'release-tracks-create-from-bundle'
+      description: |
+        Parse a STIX bundle and create a new release track with member objects extracted from x_mitre_contents.
+        Request body validation moved to Zod in controller.
+      tags:
+        - 'Release Tracks'
+      responses:
+        '201':
+          description: 'Release track created from bundle'
+        '501':
+          description: 'Not yet implemented'
+
+  /api/release-tracks/import:
+    post:
+      summary: 'Import a release track'
+      operationId: 'release-tracks-import'
+      description: |
+        Import a release track with all snapshots and version history.
+        Request body validation moved to Zod in controller.
+      tags:
+        - 'Release Tracks'
+      responses:
+        '201':
+          description: 'Release track imported successfully'
+        '501':
+          description: 'Not yet implemented'
+
+  # =============================================================================
+  # Track retrieval and deletion
+  # =============================================================================
+  /api/release-tracks/{id}:
+    get:
+      summary: 'Get the latest snapshot of a release track'
+      operationId: 'release-tracks-get-latest'
+      description: |
+        Retrieve the most recent snapshot for a release track.
+        By default returns only members; use include query param for other tiers.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 'Release track ID'
+          schema:
+            type: string
+            example: 'release-track--a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+        - name: include
+          in: query
+          description: 'Which tiers to include in response'
+          schema:
+            type: string
+            enum:
+              - members
+              - staged
+              - candidates
+              - all
+            default: members
+        - name: format
+          in: query
+          description: 'Output format'
+          schema:
+            type: string
+            enum:
+              - snapshot
+              - bundle
+              - workbench
+            default: snapshot
+      responses:
+        '200':
+          description: 'Latest snapshot retrieved successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+        '404':
+          description: 'Release track not found'
+
+    delete:
+      summary: 'Delete a release track'
+      operationId: 'release-tracks-delete'
+      description: |
+        Delete an entire release track including all snapshots and version history.
+        This operation cannot be undone.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 'Release track ID'
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'Release track deleted successfully'
+        '404':
+          description: 'Release track not found'
+
+  # =============================================================================
+  # Latest snapshot operations
+  # =============================================================================
+  /api/release-tracks/{id}/meta:
+    post:
+      summary: 'Update metadata on the latest snapshot'
+      operationId: 'release-tracks-update-meta-latest'
+      description: |
+        Update name, description, or object_marking_refs on the latest snapshot.
+        Creates a new snapshot clone with updated metadata.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Metadata updated successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+
+  /api/release-tracks/{id}/contents:
+    post:
+      summary: 'Update member contents on the latest snapshot'
+      operationId: 'release-tracks-update-contents-latest'
+      description: |
+        Replace the members tier with new contents (x_mitre_contents format).
+        Creates a new snapshot clone.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Contents updated successfully'
+
+  /api/release-tracks/{id}/clone:
+    post:
+      summary: 'Clone the latest snapshot into a new release track'
+      operationId: 'release-tracks-clone-latest'
+      description: |
+        Create a new release track by cloning the latest snapshot.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Release track cloned successfully'
+
+  /api/release-tracks/{id}/bump:
+    post:
+      summary: 'Tag the latest snapshot (create a release)'
+      operationId: 'release-tracks-bump-latest'
+      description: |
+        Tag the latest snapshot with a version number.
+        For standard tracks: promotes staged → members.
+        For virtual tracks: N/A (already resolved).
+        Request body validated via Zod in controller: { type: 'major'|'minor', version?: string, dry_run?: boolean }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Snapshot tagged successfully'
+        '409':
+          description: 'Snapshot already tagged or conflict during promotion'
+        '501':
+          description: 'Not yet implemented'
+
+  /api/release-tracks/{id}/bump/preview:
+    get:
+      summary: 'Preview the next release'
+      operationId: 'release-tracks-bump-preview'
+      description: |
+        Compute what the next tagged release will contain without persisting changes.
+        Shows which objects will be promoted from staged → members.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum:
+              - summary
+              - detailed
+            default: summary
+      responses:
+        '200':
+          description: 'Release preview generated'
+        '501':
+          description: 'Not yet implemented'
+
+  # =============================================================================
+  # Candidate management
+  # =============================================================================
+  /api/release-tracks/{id}/candidates:
+    get:
+      summary: 'List candidates in the latest snapshot'
+      operationId: 'release-tracks-candidates-list'
+      description: |
+        Retrieve the candidates tier from the latest snapshot.
+        Optionally filter by workflow status.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 'Filter by workflow status'
+          schema:
+            type: string
+            enum:
+              - work-in-progress
+              - awaiting-review
+              - reviewed
+      responses:
+        '200':
+          description: 'Candidates retrieved successfully'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: '../components/release-tracks.yml#/components/schemas/candidate-entry'
+
+    post:
+      summary: 'Add objects as candidates'
+      operationId: 'release-tracks-candidates-add'
+      description: |
+        Add one or more objects to the candidates tier.
+        If modified is omitted or 'latest', resolves to the latest version of the object.
+        If auto_promote is enabled and candidates meet the threshold, they are auto-promoted to staged.
+        Request body validated via Zod: { object_refs: Array<string | {id, modified}> }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Candidates added successfully'
+
+  /api/release-tracks/{id}/candidates/review:
+    post:
+      summary: 'Bulk transition candidate workflow status'
+      operationId: 'release-tracks-candidates-review'
+      description: |
+        Transition candidates from one workflow status to another (forward-only).
+        If auto_promote is enabled and candidates meet the threshold after transition, they are auto-promoted to staged.
+        Request body validated via Zod: { from, to, object_refs? }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Candidates reviewed successfully'
+
+  /api/release-tracks/{id}/candidates/promote:
+    post:
+      summary: 'Manually promote candidates to staged'
+      operationId: 'release-tracks-candidates-promote'
+      description: |
+        Manually promote specific candidates to the staged tier, bypassing auto-promotion logic.
+        Applies conflict resolution policy.
+        Request body validated via Zod: { object_refs: string[] }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Candidates promoted successfully'
+
+  /api/release-tracks/{id}/candidates/{objectRef}:
+    delete:
+      summary: 'Remove a candidate'
+      operationId: 'release-tracks-candidates-remove'
+      description: |
+        Remove all entries for a given object_ref from the candidates tier.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: objectRef
+          in: path
+          required: true
+          description: 'STIX ID of the object to remove'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Candidate removed successfully'
+        '404':
+          description: 'Candidate not found'
+
+  /api/release-tracks/{id}/candidates/{objectRef}/update-version:
+    post:
+      summary: 'Update the version pin of a candidate'
+      operationId: 'release-tracks-candidates-update-version'
+      description: |
+        Change which version of an object is being tracked in the candidates tier.
+        Request body validated via Zod: { old_modified, new_modified }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: objectRef
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Candidate version pin updated successfully'
+
+  # =============================================================================
+  # Staged objects
+  # =============================================================================
+  /api/release-tracks/{id}/staged:
+    get:
+      summary: 'List staged objects in the latest snapshot'
+      operationId: 'release-tracks-staged-list'
+      description: |
+        Retrieve the staged tier from the latest snapshot.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Staged objects retrieved successfully'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staged:
+                    type: array
+                    items:
+                      $ref: '../components/release-tracks.yml#/components/schemas/staged-entry'
+
+  /api/release-tracks/{id}/staged/demote:
+    post:
+      summary: 'Demote staged objects back to candidates'
+      operationId: 'release-tracks-staged-demote'
+      description: |
+        Move objects from staged tier back to candidates tier.
+        Request body validated via Zod: { object_refs: Array<{id, modified}> }
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Staged objects demoted successfully'
+
+  # =============================================================================
+  # Configuration
+  # =============================================================================
+  /api/release-tracks/{id}/config:
+    get:
+      summary: 'Get release track configuration'
+      operationId: 'release-tracks-config-get'
+      description: |
+        Retrieve the config sub-document from the latest snapshot.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Configuration retrieved successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/track-config'
+
+    put:
+      summary: 'Update release track configuration'
+      operationId: 'release-tracks-config-update'
+      description: |
+        Merge configuration changes into the latest snapshot (creates new snapshot clone).
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Configuration updated successfully'
+
+  # =============================================================================
+  # Object version history
+  # =============================================================================
+  /api/release-tracks/{id}/objects/{objectRef}/versions:
+    get:
+      summary: 'List all versions of an object across tiers'
+      operationId: 'release-tracks-object-versions'
+      description: |
+        Find all occurrences of a given object_ref across members, staged, and candidates tiers.
+        Shows which versions are tracked in which tiers.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: objectRef
+          in: path
+          required: true
+          description: 'STIX ID of the object'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Object versions retrieved successfully'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        tier:
+                          type: string
+                          enum:
+                            - members
+                            - staged
+                            - candidates
+                        object_ref:
+                          type: string
+                        object_modified:
+                          type: string
+                          format: date-time
+                        object_status:
+                          type: string
+                          nullable: true
+
+  # =============================================================================
+  # Virtual track operations
+  # =============================================================================
+  /api/release-tracks/{id}/composition:
+    put:
+      summary: 'Update virtual track composition'
+      operationId: 'release-tracks-composition-update'
+      description: |
+        Update which component tracks a virtual track aggregates.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Composition updated successfully'
+        '501':
+          description: 'Not yet implemented'
+
+  /api/release-tracks/{id}/snapshots/create:
+    post:
+      summary: 'Create a virtual track snapshot'
+      operationId: 'release-tracks-virtual-snapshot-create'
+      description: |
+        Resolve component tracks and create a new virtual snapshot.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Virtual snapshot created successfully'
+        '501':
+          description: 'Not yet implemented'
+
+  /api/release-tracks/{id}/snapshots/preview:
+    get:
+      summary: 'Preview a virtual track snapshot'
+      operationId: 'release-tracks-virtual-snapshot-preview'
+      description: |
+        Compute what a virtual snapshot would contain without persisting it.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Virtual snapshot preview generated'
+        '501':
+          description: 'Not yet implemented'
+
+  # =============================================================================
+  # Snapshot-specific operations
+  # =============================================================================
+  /api/release-tracks/{id}/snapshots/{modified}:
+    get:
+      summary: 'Get a specific snapshot by modified timestamp'
+      operationId: 'release-tracks-snapshot-get'
+      description: |
+        Retrieve a historical snapshot identified by its modified timestamp.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          description: 'ISO 8601 timestamp'
+          schema:
+            type: string
+        - name: include
+          in: query
+          schema:
+            type: string
+            enum:
+              - members
+              - staged
+              - candidates
+              - all
+            default: members
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum:
+              - snapshot
+              - bundle
+              - workbench
+            default: snapshot
+      responses:
+        '200':
+          description: 'Snapshot retrieved successfully'
+        '404':
+          description: 'Snapshot not found'
+
+    delete:
+      summary: 'Delete a specific snapshot'
+      operationId: 'release-tracks-snapshot-delete'
+      description: |
+        Delete a snapshot by its modified timestamp.
+        Cannot delete tagged snapshots.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'Snapshot deleted successfully'
+        '400':
+          description: 'Cannot delete tagged snapshot'
+        '404':
+          description: 'Snapshot not found'
+
+  /api/release-tracks/{id}/snapshots/{modified}/meta:
+    post:
+      summary: 'Update metadata on a specific snapshot'
+      operationId: 'release-tracks-update-meta-by-modified'
+      description: |
+        Update metadata on a historical snapshot.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Metadata updated successfully'
+
+  /api/release-tracks/{id}/snapshots/{modified}/contents:
+    post:
+      summary: 'Update contents on a specific snapshot'
+      operationId: 'release-tracks-update-contents-by-modified'
+      description: |
+        Update member contents on a historical snapshot.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Contents updated successfully'
+
+  /api/release-tracks/{id}/snapshots/{modified}/clone:
+    post:
+      summary: 'Clone a specific snapshot into a new release track'
+      operationId: 'release-tracks-clone-by-modified'
+      description: |
+        Create a new release track by cloning a historical snapshot.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: 'Release track cloned successfully'
+
+  /api/release-tracks/{id}/snapshots/{modified}/bump:
+    post:
+      summary: 'Tag a specific snapshot'
+      operationId: 'release-tracks-bump-by-modified'
+      description: |
+        Tag a historical snapshot with a version number.
+        Request body validated via Zod in controller.
+      tags:
+        - 'Release Tracks'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: modified
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Snapshot tagged successfully'
+        '501':
+          description: 'Not yet implemented'

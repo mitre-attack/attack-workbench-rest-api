@@ -68,6 +68,8 @@ tags:
     description: 'Operations on system status'
   - name: 'Reports'
     description: 'Operations for generating analytical reports on ATT&CK data'
+  - name: 'Release Tracks'
+    description: 'Operations on release tracks (versioned STIX object releases with workflow management)'
 
 paths:
   # ATT&CK Objects
@@ -281,6 +283,91 @@ paths:
   # STIX Bundles
   /api/stix-bundles:
     $ref: 'paths/stix-bundles-paths.yml#/paths/~1api~1stix-bundles'
+
+  # Release Tracks
+  /api/release-tracks/ephemeral/{domain}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1ephemeral~1{domain}'
+
+  /api/release-tracks:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks'
+
+  /api/release-tracks/new:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1new'
+
+  /api/release-tracks/new-from-bundle:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1new-from-bundle'
+
+  /api/release-tracks/import:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1import'
+
+  /api/release-tracks/{id}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}'
+
+  /api/release-tracks/{id}/meta:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1meta'
+
+  /api/release-tracks/{id}/contents:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1contents'
+
+  /api/release-tracks/{id}/clone:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1clone'
+
+  /api/release-tracks/{id}/bump:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1bump'
+
+  /api/release-tracks/{id}/bump/preview:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1bump~1preview'
+
+  /api/release-tracks/{id}/candidates:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates'
+
+  /api/release-tracks/{id}/candidates/review:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1review'
+
+  /api/release-tracks/{id}/candidates/promote:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1promote'
+
+  /api/release-tracks/{id}/candidates/{objectRef}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1{objectRef}'
+
+  /api/release-tracks/{id}/candidates/{objectRef}/update-version:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1{objectRef}~1update-version'
+
+  /api/release-tracks/{id}/staged:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1staged'
+
+  /api/release-tracks/{id}/staged/demote:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1staged~1demote'
+
+  /api/release-tracks/{id}/config:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1config'
+
+  /api/release-tracks/{id}/objects/{objectRef}/versions:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1objects~1{objectRef}~1versions'
+
+  /api/release-tracks/{id}/composition:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1composition'
+
+  /api/release-tracks/{id}/snapshots/create:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1create'
+
+  /api/release-tracks/{id}/snapshots/preview:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1preview'
+
+  /api/release-tracks/{id}/snapshots/{modified}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}'
+
+  /api/release-tracks/{id}/snapshots/{modified}/meta:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1meta'
+
+  /api/release-tracks/{id}/snapshots/{modified}/contents:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1contents'
+
+  /api/release-tracks/{id}/snapshots/{modified}/clone:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1clone'
+
+  /api/release-tracks/{id}/snapshots/{modified}/bump:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1bump'
 
   # System Configuration
   /api/config/system-version:
