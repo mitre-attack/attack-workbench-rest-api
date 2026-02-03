@@ -77,11 +77,16 @@ router
     releaseTracksController.updateMetadataByLatest,
   );
 
+/**
+ * !!IMPORTANT
+ * The following endpoint is considered dangerous. It is intended for retroactive hotfixes only. Thus, only admins may use it.
+ * The main workflow for enrolling new member objects into members is through the candidate-staging promotion cycle.
+ */
 router
   .route('/release-tracks/:id/contents')
   .post(
     authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
+    authz.requireRole(authz.admin),
     releaseTracksController.updateContentsByLatest,
   );
 
