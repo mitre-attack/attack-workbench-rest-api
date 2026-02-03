@@ -43,11 +43,7 @@ async function _doBump(trackId, snapshot, options) {
   const versionHistory = snapshot.version_history || [];
 
   // Calculate version
-  const version = versionUtils.calculateNextVersion(
-    versionHistory,
-    options.type,
-    options.version,
-  );
+  const version = versionUtils.calculateNextVersion(versionHistory, options.type, options.version);
 
   // Validate monotonic progression
   versionUtils.validateVersionProgression(version, versionHistory);
@@ -132,7 +128,7 @@ async function _doBump(trackId, snapshot, options) {
   // Update registry counters
   await registryRepo.updateByTrackId(trackId, {
     latest_tagged_version: version,
-    tagged_release_count: (versionHistory.length + 1),
+    tagged_release_count: versionHistory.length + 1,
     updated_at: now,
   });
 
