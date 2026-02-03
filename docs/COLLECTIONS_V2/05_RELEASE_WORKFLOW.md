@@ -342,11 +342,14 @@ Keep whichever version has the newer `modified` timestamp.
 
 ##### 4. `abort` (Tagging/Release Operations Only)
 
+[](./05_RELEASE_WORKFLOW.md#4-abort-taggingrelease-operations-only)
 **Only available for `staged_to_members` during tagging/release operations.**
 
 If a conflict occurs during a tagging/release operation (`POST /api/release-tracks/:id/bump`), reject and abort the entire release. The snapshot will NOT be tagged, and no immutable snapshot will be created.
 
-**Example:**
+**The error response will include ALL conflicting objects**, not just the first one encountered. This allows editors to see the full scope of conflicts that must be resolved before the release can proceed.
+
+**Example with single conflict:**
 ```javascript
 // Current state:
 // - members: attack-pattern--T1234, modified: 2024-01-15
@@ -360,27 +363,61 @@ POST /api/release-tracks/release-track--123/bump
 // ERROR Response:
 {
   "error": "ReleaseConflictError",
-  "message": "Cannot complete release due to promotion conflict",
+  "message": "Cannot complete release: 1 conflict(s) detected",
   "conflicts": [
     {
       "object_ref": "attack-pattern--T1234",
       "incumbent_version": "2024-01-15T10:00:00Z",
-      "incoming_version": "2024-02-20T10:00:00Z",
-      "tier": "members"
+      "incoming_version": "2024-02-20T10:00:00Z"
     }
-  ],
-  "resolution": "Resolve conflicts manually before releasing, or change promotion_conflicts.staged_to_members policy"
+  ]
+}
+```
+
+**Example with multiple conflicts:**
+```javascript
+// Current state:
+// - members: attack-pattern--T1234, modified: 2024-01-15
+// - members: attack-pattern--T5678, modified: 2024-01-16
+// - staged: attack-pattern--T1234, modified: 2024-02-20
+// - staged: attack-pattern--T5678, modified: 2024-02-21
+// - staged: attack-pattern--T9999, modified: 2024-02-22 (no conflict)
+
+// Tagging request:
+POST /api/release-tracks/release-track--123/bump
+{ "type": "minor" }
+
+// Result with abort - shows ALL conflicts:
+// ERROR Response:
+{
+  "error": "ReleaseConflictError",
+  "message": "Cannot complete release: 2 conflict(s) detected",
+  "conflicts": [
+    {
+      "object_ref": "attack-pattern--T1234",
+      "incumbent_version": "2024-01-15T10:00:00Z",
+      "incoming_version": "2024-02-20T10:00:00Z"
+    },
+    {
+      "object_ref": "attack-pattern--T5678",
+      "incumbent_version": "2024-01-16T10:00:00Z",
+      "incoming_version": "2024-02-21T10:00:00Z"
+    }
+  ]
 }
 
 // State unchanged:
 // - Snapshot NOT tagged
 // - No new version history entry
 // - Objects remain in current tiers
+// - Editor must resolve both conflicts before retrying
 ```
 
 **Use case:** "Never accidentally overwrite released content during a release; require explicit conflict resolution"
 
 **Why abort is important:** Once a snapshot is tagged and released, it becomes immutable. The `abort` policy ensures that releases don't inadvertently overwrite existing released content, providing an additional safety guardrail for critical release operations.
+
+**Why report all conflicts:** When multiple conflicts exist, reporting all of them in a single error response allows editors to address all issues at once, rather than discovering them one at a time through repeated release attempts. This significantly improves the workflow efficiency when dealing with complex release scenarios.
 
 #### Configuring Conflict Resolution Policies
 
@@ -459,12 +496,13 @@ GET /api/release-tracks/:id?include=all
 
 ### 6. Preview Release
 
-Compute a release preview, which outputs a verbose diff of what will change in the next release.
+Compute a release preview, which outputs a verbose diff of what will change in the next release. **This endpoint will detect and report all conflicts** that would prevent the release from proceeding, allowing editors to resolve issues before attempting to tag.
+
 ```
 GET /api/release-tracks/:id/bump/preview
 ```
 
-**Response:**
+**Response (success - no conflicts):**
 ```json
 {
   "current_version": "1.1",
@@ -506,6 +544,35 @@ GET /api/release-tracks/:id/bump/preview
   }
 }
 ```
+
+**Response (with conflicts detected):**
+```json
+{
+  "track_id": "release-track--123",
+  "snapshot_modified": "2024-01-15T16:20:00.000Z",
+  "is_already_tagged": false,
+  "current_version": null,
+  "next_version_minor": "1.2",
+  "next_version_major": "2.0",
+  "staged_count": 3,
+  "members_count": 2,
+  "candidates_count": 1,
+  "conflicts": [
+    {
+      "object_ref": "attack-pattern--T1234",
+      "incumbent_version": "2024-01-15T10:00:00Z",
+      "incoming_version": "2024-02-20T10:00:00Z"
+    },
+    {
+      "object_ref": "attack-pattern--T5678",
+      "incumbent_version": "2024-01-16T10:00:00Z",
+      "incoming_version": "2024-02-21T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Note:** When the `staged_to_members` conflict policy is set to `abort` and conflicts are detected, the preview will include a `conflicts` array listing **all** conflicting objects, not just the first one encountered.
 
 ### 7. Bump with Staging
 

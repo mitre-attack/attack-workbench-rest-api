@@ -235,7 +235,7 @@ exports.previewBump = async function previewBump(trackId, _format) {
         staged_count: staged.length,
         members_count: existingMembers.length,
         candidates_count: (snapshot.candidates || []).length,
-        conflict_error: err.message,
+        conflicts: err.conflicts || [], // Include full conflicts array
       };
     }
   }
