@@ -11,7 +11,7 @@
 // Phase 1: Track management, snapshot CRUD, config → snapshot-service
 // Phase 2: Candidates, staged, object versions    → standard-track-service
 // Phase 3: Auto-promotion, workflow               → workflow-service
-// Phase 4: Bump/tag, versioning                   → versioning-service (TODO)
+// Phase 4: Bump/tag, versioning                   → versioning-service
 // Phase 5: Virtual track composition              → virtual-track-service (TODO)
 // Phase 6: Export, ephemeral                       → export-service, ephemeral-service (TODO)
 // =============================================================================
@@ -19,6 +19,7 @@
 const { NotImplementedError } = require('../../exceptions');
 const snapshotService = require('./snapshot-service');
 const standardTrackService = require('./standard-track-service');
+const versioningService = require('./versioning-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -145,19 +146,19 @@ exports.demoteStaged = function demoteStaged(trackId, objectRefs, userId) {
 };
 
 // -----------------------------------------------------------------------------
-// Versioning  (Phase 4 → versioning-service, TODO)
+// Versioning  (Phase 4 → versioning-service)
 // -----------------------------------------------------------------------------
 
-exports.bumpLatest = async function bumpLatest(_trackId, _options) {
-  notImplemented('bumpLatest');
+exports.bumpLatest = function bumpLatest(trackId, options) {
+  return versioningService.bumpLatest(trackId, options);
 };
 
-exports.bumpByModified = async function bumpByModified(_trackId, _modified, _options) {
-  notImplemented('bumpByModified');
+exports.bumpByModified = function bumpByModified(trackId, modified, options) {
+  return versioningService.bumpByModified(trackId, modified, options);
 };
 
-exports.previewBump = async function previewBump(_trackId, _format) {
-  notImplemented('previewBump');
+exports.previewBump = function previewBump(trackId, format) {
+  return versioningService.previewBump(trackId, format);
 };
 
 // -----------------------------------------------------------------------------

@@ -125,6 +125,14 @@ class ReleaseTrackDynamicRepository {
   async tagSnapshotInPlace(trackId, modified, versionData) {
     try {
       const Model = this._getModel(trackId);
+
+      const setOps = { version: versionData.version };
+
+      // Merge additional atomic operations (e.g., staged → members promotion)
+      if (versionData.additionalOps) {
+        Object.assign(setOps, versionData.additionalOps);
+      }
+
       const result = await Model.findOneAndUpdate(
         {
           id: trackId,
@@ -132,7 +140,7 @@ class ReleaseTrackDynamicRepository {
           version: null, // Guard: only tag untagged snapshots
         },
         {
-          $set: { version: versionData.version },
+          $set: setOps,
           $push: { version_history: versionData.versionHistoryEntry },
         },
         {
