@@ -18,6 +18,16 @@ const conflictResolution = require('../../lib/release-tracks/conflict-resolution
 const logger = require('../../lib/logger');
 const { NotFoundError, BadRequestError } = require('../../exceptions');
 
+// Lazy-load workflowService to avoid circular dependency
+// (workflow-service imports snapshot-service, which is also imported here)
+let workflowService;
+function getWorkflowService() {
+  if (!workflowService) {
+    workflowService = require('./workflow-service');
+  }
+  return workflowService;
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
@@ -114,13 +124,20 @@ exports.addCandidates = async function addCandidates(trackId, objectRefs, userId
 
   const mergedCandidates = [...existingCandidates, ...newEntries];
 
-  const snapshot = await snapshotService.cloneSnapshot(trackId, source, {
+  let snapshot = await snapshotService.cloneSnapshot(trackId, source, {
     candidates: mergedCandidates,
   });
 
   logger.verbose(
     `StandardTrackService: Added ${newEntries.length} candidate(s) to track "${trackId}"`,
   );
+
+  // Evaluate auto-promotion for newly added candidates (Phase 3)
+  const autoPromotedSnapshot = await getWorkflowService().evaluateAutoPromotion(trackId, snapshot);
+  if (autoPromotedSnapshot) {
+    snapshot = autoPromotedSnapshot;
+  }
+
   return snapshot;
 };
 
@@ -222,17 +239,20 @@ exports.reviewCandidates = async function reviewCandidates(trackId, reviewData, 
     };
   });
 
-  const snapshot = await snapshotService.cloneSnapshot(trackId, source, {
+  let snapshot = await snapshotService.cloneSnapshot(trackId, source, {
     candidates: updatedCandidates,
   });
-
-  // NOTE: Auto-promotion via workflowService.evaluateAutoPromotion will be
-  // integrated in Phase 3. For now, status transitions are persisted without
-  // automatic promotion to staged.
 
   logger.verbose(
     `StandardTrackService: Reviewed candidates "${from}" → "${to}" in track "${trackId}"`,
   );
+
+  // Evaluate auto-promotion after status transition (Phase 3)
+  const autoPromotedSnapshot = await getWorkflowService().evaluateAutoPromotion(trackId, snapshot);
+  if (autoPromotedSnapshot) {
+    snapshot = autoPromotedSnapshot;
+  }
+
   return snapshot;
 };
 

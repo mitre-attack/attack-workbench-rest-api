@@ -10,7 +10,7 @@
 //
 // Phase 1: Track management, snapshot CRUD, config → snapshot-service
 // Phase 2: Candidates, staged, object versions    → standard-track-service
-// Phase 3: Auto-promotion, workflow               → workflow-service (TODO)
+// Phase 3: Auto-promotion, workflow               → workflow-service
 // Phase 4: Bump/tag, versioning                   → versioning-service (TODO)
 // Phase 5: Virtual track composition              → virtual-track-service (TODO)
 // Phase 6: Export, ephemeral                       → export-service, ephemeral-service (TODO)
