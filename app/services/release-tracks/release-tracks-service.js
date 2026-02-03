@@ -12,7 +12,7 @@
 // Phase 2: Candidates, staged, object versions    → standard-track-service
 // Phase 3: Auto-promotion, workflow               → workflow-service
 // Phase 4: Bump/tag, versioning                   → versioning-service
-// Phase 5: Virtual track composition              → virtual-track-service (TODO)
+// Phase 5: Virtual track composition              → virtual-track-service
 // Phase 6: Export, ephemeral                       → export-service, ephemeral-service (TODO)
 // =============================================================================
 
@@ -20,6 +20,7 @@ const { NotImplementedError } = require('../../exceptions');
 const snapshotService = require('./snapshot-service');
 const standardTrackService = require('./standard-track-service');
 const versioningService = require('./versioning-service');
+const virtualTrackService = require('./virtual-track-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -174,19 +175,19 @@ exports.updateConfig = function updateConfig(trackId, config, userId) {
 };
 
 // -----------------------------------------------------------------------------
-// Virtual tracks  (Phase 5 → virtual-track-service, TODO)
+// Virtual tracks  (Phase 5 → virtual-track-service)
 // -----------------------------------------------------------------------------
 
-exports.updateComposition = async function updateComposition(_trackId, _composition, _userId) {
-  notImplemented('updateComposition');
+exports.updateComposition = function updateComposition(trackId, composition, userId) {
+  return virtualTrackService.updateComposition(trackId, composition, userId);
 };
 
-exports.createVirtualSnapshot = async function createVirtualSnapshot(_trackId, _options) {
-  notImplemented('createVirtualSnapshot');
+exports.createVirtualSnapshot = function createVirtualSnapshot(trackId, options) {
+  return virtualTrackService.createVirtualSnapshot(trackId, options);
 };
 
-exports.previewVirtualSnapshot = async function previewVirtualSnapshot(_trackId) {
-  notImplemented('previewVirtualSnapshot');
+exports.previewVirtualSnapshot = function previewVirtualSnapshot(trackId) {
+  return virtualTrackService.previewVirtualSnapshot(trackId);
 };
 
 // -----------------------------------------------------------------------------
