@@ -129,6 +129,15 @@ Each release track snapshot will be tracked as an individual MongoDB Document in
     promotion_conflicts: {
       candidates_to_staged: "prefer_latest",  // "always_overwrite" | "always_reject" | "prefer_latest"
       staged_to_members: "abort"              // "always_overwrite" | "always_reject" | "prefer_latest" | "abort"
+    },
+    // Member sync strategy - controls auto-enrollment of new member object revisions
+    // See 08_MEMBER_SYNC_STRATEGIES.md for comprehensive documentation
+    member_sync: {
+      strategy: "track_latest",              // "track_latest" | "manual"
+      supplant: {
+        behavior: "replace",                 // "replace" | "queue" | "ignore"
+        status_policy: "reset"               // "reset" | "preserve"
+      }
     }
   },
 

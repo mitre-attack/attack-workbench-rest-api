@@ -12,6 +12,7 @@ This document provides the complete API reference for Release Tracks V2 (formerl
 - [05_RELEASE_WORKFLOW.md](./05_RELEASE_WORKFLOW.md) - Workflow integration and candidacy
 - [06_ENTITIES.md](./06_ENTITIES.md) - Database schemas and data models
 - [07_OUTPUT_FORMATS.md](./07_OUTPUT_FORMATS.md) - Output format specifications
+- [08_MEMBER_SYNC_STRATEGIES.md](./08_MEMBER_SYNC_STRATEGIES.md) - Automatic tracking of member object revisions
 
 **Quick Navigation:**
 - [Ephemeral Release Tracks](#ephemeral-release-tracks)

@@ -8,6 +8,9 @@ This document describes how object workflow states integrate with the release tr
 
 **Note on Terminology:** We use **release track** instead of "collection" to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [02_TERMINOLOGY.md](./02_TERMINOLOGY.md) for the complete terminology guide.
 
+**Related Documentation:**
+- [08_MEMBER_SYNC_STRATEGIES.md](./08_MEMBER_SYNC_STRATEGIES.md) - Automatic tracking of new member object revisions
+
 ## Core Concepts
 
 ### Object Workflow States (Release Track-Centric)
