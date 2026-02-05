@@ -178,6 +178,21 @@ const conflictPolicySchema = z.enum([
   'abort',
 ]);
 
+// Member sync schemas
+const memberSyncStrategySchema = z.enum(['track_latest', 'manual']);
+const memberSyncSupplantBehaviorSchema = z.enum(['replace', 'queue', 'ignore']);
+const memberSyncStatusPolicySchema = z.enum(['reset', 'preserve']);
+
+const memberSyncSupplantSchema = z.object({
+  behavior: memberSyncSupplantBehaviorSchema.optional(),
+  status_policy: memberSyncStatusPolicySchema.optional(),
+});
+
+const memberSyncConfigSchema = z.object({
+  strategy: memberSyncStrategySchema.optional(),
+  supplant: memberSyncSupplantSchema.optional(),
+});
+
 // =============================================================================
 // Request body schemas (used inline by controller handlers)
 // =============================================================================
@@ -325,6 +340,7 @@ const updateConfigBodySchema = z.object({
   auto_promote: z.boolean().optional(),
   include_candidates_in_snapshots: z.boolean().optional(),
   promotion_conflicts: promotionConflictsSchema.optional(),
+  member_sync: memberSyncConfigSchema.optional(),
 });
 
 /** PUT /release-tracks/:id/composition */
@@ -367,6 +383,9 @@ module.exports = {
   deduplicationStrategySchema,
   resolutionStrategySchema,
   conflictPolicySchema,
+  memberSyncStrategySchema,
+  memberSyncSupplantBehaviorSchema,
+  memberSyncStatusPolicySchema,
 
   // Request body schemas
   createTrackBodySchema,
@@ -390,4 +409,6 @@ module.exports = {
   snapshotScheduleSchema,
   objectRefEntrySchema,
   promotionConflictsSchema,
+  memberSyncConfigSchema,
+  memberSyncSupplantSchema,
 };

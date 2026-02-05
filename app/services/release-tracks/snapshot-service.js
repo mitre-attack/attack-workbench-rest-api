@@ -429,6 +429,20 @@ exports.updateConfig = async function updateConfig(trackId, config, _userId) {
       ...config.promotion_conflicts,
     };
   }
+  if (config.member_sync !== undefined) {
+    const existingMemberSync = existing.member_sync || {};
+    mergedConfig.member_sync = {
+      ...existingMemberSync,
+      ...config.member_sync,
+    };
+    // Nested merge for supplant sub-object
+    if (config.member_sync.supplant !== undefined) {
+      mergedConfig.member_sync.supplant = {
+        ...(existingMemberSync.supplant || {}),
+        ...config.member_sync.supplant,
+      };
+    }
+  }
 
   return exports.cloneSnapshot(trackId, source, { config: mergedConfig });
 };

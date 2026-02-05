@@ -202,6 +202,35 @@ const includeSecondaryObjectsSchema = new mongoose.Schema(includeSecondaryObject
   _id: false,
 });
 
+// --- Member sync sub-schemas ---
+
+const memberSyncSupplantDefinition = {
+  behavior: {
+    type: String,
+    enum: ['replace', 'queue', 'ignore'],
+    default: 'replace',
+  },
+  status_policy: {
+    type: String,
+    enum: ['reset', 'preserve'],
+    default: 'reset',
+  },
+};
+const memberSyncSupplantSchema = new mongoose.Schema(memberSyncSupplantDefinition, { _id: false });
+
+const memberSyncDefinition = {
+  strategy: {
+    type: String,
+    enum: ['track_latest', 'manual'],
+    default: 'track_latest',
+  },
+  supplant: {
+    type: memberSyncSupplantSchema,
+    default: () => ({}),
+  },
+};
+const memberSyncSchema = new mongoose.Schema(memberSyncDefinition, { _id: false });
+
 const configDefinition = {
   candidacy_threshold: {
     type: String,
@@ -213,6 +242,10 @@ const configDefinition = {
   include_secondary_objects: { type: includeSecondaryObjectsSchema, default: undefined },
   promotion_conflicts: {
     type: promotionConflictsSchema,
+    default: () => ({}),
+  },
+  member_sync: {
+    type: memberSyncSchema,
     default: () => ({}),
   },
 };
