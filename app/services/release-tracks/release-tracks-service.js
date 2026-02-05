@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-// TODO remove the above eslint rule after all sub-services have been implemented
 'use strict';
 
 // =============================================================================
@@ -13,7 +11,7 @@
 // Phase 3: Auto-promotion, workflow               → workflow-service
 // Phase 4: Bump/tag, versioning                   → versioning-service
 // Phase 5: Virtual track composition              → virtual-track-service
-// Phase 6: Export, ephemeral                       → export-service, ephemeral-service (TODO)
+// Phase 6: Export, ephemeral, bundle import        → export-service, ephemeral-service, bundle-import-service
 // =============================================================================
 
 const { NotImplementedError } = require('../../exceptions');
@@ -21,6 +19,9 @@ const snapshotService = require('./snapshot-service');
 const standardTrackService = require('./standard-track-service');
 const versioningService = require('./versioning-service');
 const virtualTrackService = require('./virtual-track-service');
+const exportService = require('./export-service');
+const ephemeralService = require('./ephemeral-service');
+const bundleImportService = require('./bundle-import-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -40,20 +41,33 @@ exports.createTrack = function createTrack(data) {
   return snapshotService.createTrack(data);
 };
 
-exports.createTrackFromBundle = async function createTrackFromBundle(_bundleData) {
-  notImplemented('createTrackFromBundle');
+// Phase 6 → bundle-import-service
+exports.createTrackFromBundle = function createTrackFromBundle(bundleData) {
+  return bundleImportService.createTrackFromBundle(bundleData);
 };
 
+// eslint-disable-next-line no-unused-vars
 exports.importTrack = async function importTrack(_data) {
   notImplemented('importTrack');
 };
 
-exports.getLatestSnapshot = function getLatestSnapshot(trackId, options) {
-  return snapshotService.getLatestSnapshot(trackId, options);
+// Phase 6: Format-aware snapshot retrieval
+// If options.format is specified, the raw snapshot is hydrated and formatted
+// via export-service. Otherwise the raw snapshot is returned as before.
+exports.getLatestSnapshot = async function getLatestSnapshot(trackId, options) {
+  const snapshot = await snapshotService.getLatestSnapshot(trackId, options);
+  if (options && options.format) {
+    return exportService.exportSnapshot(snapshot, options.format, options);
+  }
+  return snapshot;
 };
 
-exports.getSnapshotByModified = function getSnapshotByModified(trackId, modified, options) {
-  return snapshotService.getSnapshotByModified(trackId, modified, options);
+exports.getSnapshotByModified = async function getSnapshotByModified(trackId, modified, options) {
+  const snapshot = await snapshotService.getSnapshotByModified(trackId, modified, options);
+  if (options && options.format) {
+    return exportService.exportSnapshot(snapshot, options.format, options);
+  }
+  return snapshot;
 };
 
 exports.updateMetadata = function updateMetadata(trackId, updates, userId) {
@@ -99,11 +113,11 @@ exports.deleteSnapshot = function deleteSnapshot(trackId, modified) {
 };
 
 // -----------------------------------------------------------------------------
-// Ephemeral  (Phase 6 → ephemeral-service, TODO)
+// Ephemeral  (Phase 6 → ephemeral-service)
 // -----------------------------------------------------------------------------
 
-exports.getEphemeralBundle = async function getEphemeralBundle(_domain, _format) {
-  notImplemented('getEphemeralBundle');
+exports.getEphemeralBundle = function getEphemeralBundle(domain, format) {
+  return ephemeralService.getEphemeralBundle(domain, format);
 };
 
 // -----------------------------------------------------------------------------
