@@ -609,9 +609,7 @@ This event-driven approach ensures that member sync is reactive and automatic, r
 
 ## Default Configuration
 
-### Defaults for New Release Tracks
-
-Newly created release tracks will use the following default member sync configuration:
+Release tracks use the following default member sync configuration:
 
 ```javascript
 {
@@ -639,24 +637,6 @@ The defaults were chosen to balance convenience with safety:
 2. **`replace`** is the default because most teams want to focus on the latest work, not accumulate stale revisions that clutter the workflow.
 
 3. **`reset`** is the default because it's safer. New revisions might introduce issues that weren't present in the previous revision. Requiring re-review ensures that changes receive appropriate scrutiny.
-
-### Migrating Existing Release Tracks
-
-Existing release tracks (created before this feature) will default to:
-
-```javascript
-{
-  member_sync: {
-    strategy: "manual",  // Preserves backward-compatible behavior
-    supplant: {
-      behavior: "replace",
-      status_policy: "reset"
-    }
-  }
-}
-```
-
-This ensures that existing workflows are not disrupted. Teams can opt into `track_latest` by explicitly updating their configuration.
 
 ---
 
@@ -874,7 +854,7 @@ config: {
     strategy: {
       type: String,
       enum: ["track_latest", "manual"],
-      default: "track_latest"  // For new tracks
+      default: "track_latest"
     },
     supplant: {
       behavior: {
