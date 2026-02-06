@@ -22,6 +22,7 @@ const virtualTrackService = require('./virtual-track-service');
 const exportService = require('./export-service');
 const ephemeralService = require('./ephemeral-service');
 const bundleImportService = require('./bundle-import-service');
+const memberSyncService = require('./member-sync-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -210,4 +211,22 @@ exports.previewVirtualSnapshot = function previewVirtualSnapshot(trackId) {
 
 exports.listObjectVersions = function listObjectVersions(trackId, objectRef) {
   return standardTrackService.listObjectVersions(trackId, objectRef);
+};
+
+// -----------------------------------------------------------------------------
+// Member sync  (Phase 7 → member-sync-service)
+//
+// Member sync auto-initializes when this module is loaded via the
+// memberSyncService import. It subscribes to all STIX object created/updated
+// events on the EventBus and automatically enrolls new object revisions
+// as candidates when the object is a member of a release track.
+// -----------------------------------------------------------------------------
+
+/**
+ * Manually trigger member sync for a STIX object modification.
+ * Typically not needed since member-sync-service subscribes to EventBus events
+ * automatically. Useful for testing or manual re-processing.
+ */
+exports.handleObjectModified = function handleObjectModified(event) {
+  return memberSyncService.handleObjectModified(event);
 };
