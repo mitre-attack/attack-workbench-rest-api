@@ -238,7 +238,6 @@ const configDefinition = {
     default: 'reviewed',
   },
   auto_promote: { type: Boolean, default: true },
-  include_candidates_in_snapshots: { type: Boolean, default: false },
   include_secondary_objects: { type: includeSecondaryObjectsSchema, default: undefined },
   promotion_conflicts: {
     type: promotionConflictsSchema,

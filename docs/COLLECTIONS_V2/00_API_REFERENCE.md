@@ -625,14 +625,15 @@ PUT /api/release-tracks/:id/config
 ```json
 {
   "candidacy_threshold": "work-in-progress" | "awaiting-review" | "reviewed",
-  "auto_promote": true | false,
-  "include_candidates_in_snapshots": true | false
+  "auto_promote": true | false
 }
 ```
 
 ---
 
 ## Preview & Dry Run
+
+> **Note on `include` Query Parameter:** The `include` query parameter (used on snapshot retrieval endpoints to filter which tiers are returned) is **NOT supported** on bump preview or dry-run operations. Bump previews and dry-runs are intended to show the user exactly what *will* happen when a bump occurs; ad-hoc filters would be misleading because they do not affect the actual release outcome.
 
 ### Preview Next Release (Read-Only)
 
@@ -931,14 +932,20 @@ GET /api/release-tracks/:id/snapshots/preview
 
 ## Query Variations
 
-All `GET` endpoints for release tracks and snapshots support these query parameters:
+### Snapshot Retrieval Endpoints
+
+The following retrieval endpoints support `include` and `format` query parameters:
+
+- `GET /api/release-tracks/:id` (get latest snapshot)
+- `GET /api/release-tracks/:id/snapshots/:modified` (get specific snapshot)
+- `GET /api/release-tracks/ephemeral/:domain` (get ephemeral bundle)
 
 **Include Parameter** (controls which tiers are returned):
 ```
 GET /api/release-tracks/:id                            # Default: members only
-GET /api/release-tracks/:id?include=staged             # Include staged tier
-GET /api/release-tracks/:id?include=candidates         # Include candidates tier
-GET /api/release-tracks/:id?include=all                # Include all tiers
+GET /api/release-tracks/:id?include=staged             # Members and staged tiers
+GET /api/release-tracks/:id?include=candidates         # Members and candidates tiers
+GET /api/release-tracks/:id?include=all                # All tiers (members, staged, candidates)
 ```
 
 **Format Parameter** (controls output format):
@@ -952,3 +959,12 @@ GET /api/release-tracks/:id?format=workbench           # Workbench format with m
 ```
 GET /api/release-tracks/:id?include=all&format=workbench
 ```
+
+### Bump Operations (Preview & Dry Run)
+
+The `include` query parameter is **NOT supported** on bump preview or dry-run endpoints:
+
+- `GET /api/release-tracks/:id/bump/preview` — only `format` is supported
+- `POST /api/release-tracks/:id/bump` with `dry_run: true` — only `format` is supported (via request body)
+
+These endpoints are designed to show exactly what *will* happen during a release bump. Allowing ad-hoc tier filters would be misleading because they do not affect the actual release outcome.

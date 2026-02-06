@@ -421,8 +421,6 @@ exports.updateConfig = async function updateConfig(trackId, config, _userId) {
   if (config.candidacy_threshold !== undefined)
     mergedConfig.candidacy_threshold = config.candidacy_threshold;
   if (config.auto_promote !== undefined) mergedConfig.auto_promote = config.auto_promote;
-  if (config.include_candidates_in_snapshots !== undefined)
-    mergedConfig.include_candidates_in_snapshots = config.include_candidates_in_snapshots;
   if (config.promotion_conflicts !== undefined) {
     mergedConfig.promotion_conflicts = {
       ...(existing.promotion_conflicts || {}),

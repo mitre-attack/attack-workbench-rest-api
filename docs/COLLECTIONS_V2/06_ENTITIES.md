@@ -121,7 +121,6 @@ Each release track snapshot will be tracked as an individual MongoDB Document in
   config: {
     candidacy_threshold: "awaiting-review",  // "work-in-progress" | "awaiting-review" | "reviewed"
     auto_promote: true,                       // Auto-promote reviewed objects to staged
-    include_candidates_in_snapshots: false,   // Whether snapshots include candidates
     include_secondary_objects: {
       enabled: true,
       status_threshold: "reviewed"

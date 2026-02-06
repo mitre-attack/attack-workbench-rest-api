@@ -338,7 +338,6 @@ const promotionConflictsSchema = z.object({
 const updateConfigBodySchema = z.object({
   candidacy_threshold: candidacyThresholdSchema.optional(),
   auto_promote: z.boolean().optional(),
-  include_candidates_in_snapshots: z.boolean().optional(),
   promotion_conflicts: promotionConflictsSchema.optional(),
   member_sync: memberSyncConfigSchema.optional(),
 });
