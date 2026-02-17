@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { detectionStrategySchema } = require('@mitre-attack/attack-data-model');
-
 const detectionStrategiesController = require('../controllers/detection-strategies-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -22,7 +20,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(detectionStrategySchema),
+    validateWorkspaceStixData('x-mitre-detection-strategy'),
     detectionStrategiesController.create,
   );
 
@@ -49,7 +47,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(detectionStrategySchema),
+    validateWorkspaceStixData('x-mitre-detection-strategy'),
     detectionStrategiesController.updateFull,
   )
   .delete(

@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { dataSourceSchema } = require('@mitre-attack/attack-data-model');
-
 const dataSourcesController = require('../controllers/data-sources-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(dataSourceSchema),
+    validateWorkspaceStixData('x-mitre-data-source'),
     dataSourcesController.create,
   );
 
@@ -44,7 +42,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(dataSourceSchema),
+    validateWorkspaceStixData('x-mitre-data-source'),
     dataSourcesController.updateFull,
   )
   .delete(

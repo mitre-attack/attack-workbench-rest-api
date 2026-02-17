@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { assetSchema } = require('@mitre-attack/attack-data-model');
-
 const assetsController = require('../controllers/assets-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(assetSchema),
+    validateWorkspaceStixData('x-mitre-asset'),
     assetsController.create,
   );
 
@@ -44,7 +42,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(assetSchema),
+    validateWorkspaceStixData('x-mitre-asset'),
     assetsController.updateFull,
   )
   .delete(authn.authenticate, authz.requireRole(authz.admin), assetsController.deleteVersionById);

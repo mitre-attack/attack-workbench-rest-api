@@ -4,6 +4,7 @@ const { z, ZodError } = require('zod');
 const { StatusCodes } = require('http-status-codes');
 const logger = require('../lib/logger');
 const { processValidationIssues } = require('../services/system/validate-service');
+const { STIX_SCHEMAS } = require('../lib/validation-schemas');
 const {
   createAttackIdSchema,
   stixTypeToAttackIdMapping,
@@ -57,111 +58,15 @@ function createWorkspaceSchema(stixType) {
   return workspaceSchema;
 }
 
-function extractStringLiteralFromStixTypeZodSchema(zodSchema) {
-  // Method 1: Direct shape access (works for most schemas)
-  if (zodSchema.shape?.type?.def?.values?.[0]) {
-    return zodSchema.shape.type.def.values[0];
-  }
-  // Method 2: Through _zod.def.in.def (works for schemas with .transform())
-  else if (zodSchema._zod?.def?.in?.def?.shape?.type?.def?.values?.[0]) {
-    return zodSchema._zod.def.in.def.shape.type.def.values[0];
-  }
-  // Method 3: Works for schemas that support multiple types, i.e., softwareSchema -> [tool, malware]
-  else if (zodSchema.shape?.type.def.options) {
-    const stixTypes = [];
-    for (const opt of zodSchema.shape.type.def.options) {
-      stixTypes.push(opt.def.values[0]);
-    }
-    return stixTypes;
-  } else {
-    throw new Error('Could not extract STIX type from schema');
-  }
-}
-
 /**
- * Factory function that creates a combined workspace+STIX schema with conditional partial validation
- * @param {z.ZodObject} stixSchema - The STIX object schema to validate against
- * @param {string} workflowState - The workflow state to determine validation strictness
- * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
- * @returns {z.ZodObject} Combined schema with workspace and conditional stix validation
- */
-/**
- * Factory function that creates a combined workspace+STIX schema with conditional partial validation
- * @param {z.ZodObject} stixSchema - The STIX object schema to validate against
- * @param {string} workflowState - The workflow state to determine validation strictness
- * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
- * @returns {z.ZodObject} Combined schema with workspace and conditional stix validation
- */
-function createWorkspaceStixSchema(
-  stixSchema,
-  workflowState,
-  omitStixFields = ['x_mitre_attack_spec_version', 'external_references'],
-) {
-  logger.debug('Creating combined workspace+STIX schema:', { workflowState, omitStixFields });
-
-  try {
-    // Extract the STIX type from the schema with fallback for transformed schemas
-    const stixTypeStringLiteral = extractStringLiteralFromStixTypeZodSchema(stixSchema);
-
-    logger.debug('Extracted STIX type from schema:', { stixTypeStringLiteral });
-
-    // Apply partial validation for work-in-progress, full validation otherwise
-    const usePartialValidation = workflowState === 'work-in-progress';
-    logger.debug('Validation mode:', { workflowState, usePartialValidation });
-
-    let stixValidationSchema = usePartialValidation ? stixSchema.partial() : stixSchema;
-
-    // Build omit object from array of field names
-    if (omitStixFields.length > 0) {
-      const omitObject = omitStixFields.reduce((acc, field) => {
-        acc[field] = true;
-        return acc;
-      }, {});
-      stixValidationSchema = stixValidationSchema.omit(omitObject);
-    }
-
-    const combinedSchema = z.object({
-      workspace: createWorkspaceSchema(stixTypeStringLiteral),
-      stix: stixValidationSchema,
-    });
-
-    logger.debug('Successfully created combined schema');
-    return combinedSchema;
-  } catch (error) {
-    logger.warn('Could not extract STIX type from schema, using basic validation:', {
-      error: error.message,
-      workflowState,
-      omitStixFields,
-    });
-
-    let stixValidationSchema =
-      workflowState === 'work-in-progress' ? stixSchema.partial() : stixSchema;
-
-    // Apply omit in error case as well
-    if (omitStixFields.length > 0) {
-      const omitObject = omitStixFields.reduce((acc, field) => {
-        acc[field] = true;
-        return acc;
-      }, {});
-      stixValidationSchema = stixValidationSchema.omit(omitObject);
-    }
-
-    return z.object({
-      workspace: workspaceSchema,
-      stix: stixValidationSchema,
-    });
-  }
-}
-
-/**
- * Middleware for parsing the request body using a specified STIX schema from the ATT&CK Data Model.
- * Both the `workspace` and `stix` keys are checked.
- * @param {z.ZodObject|z.ZodObject[]} oneOrMoreZodSchemas - Single schema or array of schemas to validate against
+ * Middleware for validating the request body against a pre-composed STIX schema.
+ * Wraps the STIX schema with a workspace schema and parses the request body.
+ * @param {z.ZodObject} stixSchema - Pre-composed STIX schema (with omit/partial/checks already applied)
  * @param {Object} options - Configuration options
  * @param {boolean} options.enabled - Whether validation is enabled (defaults to true)
  * @returns {Function} Express middleware function
  */
-function middleware(oneOrMoreZodSchemas, options = {}) {
+function middleware(stixSchema, options = {}) {
   const { enabled = true } = options;
 
   return (req, res, next) => {
@@ -181,59 +86,13 @@ function middleware(oneOrMoreZodSchemas, options = {}) {
     });
 
     try {
-      // Extract workflow state from request body
-      const workflowState = req.body?.workspace?.workflow?.state || 'reviewed'; // Default to strict validation
-      logger.debug('Determined workflow state:', {
-        workflowState,
-        isDefault: !req.body?.workspace?.workflow?.state,
+      const stixType = req.body?.stix?.type;
+
+      // Wrap the pre-composed STIX schema with the workspace schema
+      const combinedSchema = z.object({
+        workspace: createWorkspaceSchema(stixType),
+        stix: stixSchema,
       });
-
-      // Determine which schema to use based on request STIX type
-      const requestStixType = req.body?.stix?.type;
-      logger.debug('Request STIX type:', { requestStixType });
-
-      let finalSchema;
-
-      // Handle array of schemas - find the one that matches the request type
-      if (Array.isArray(oneOrMoreZodSchemas)) {
-        logger.debug('Multiple schemas provided, finding matching schema for request type');
-
-        for (const schema of oneOrMoreZodSchemas) {
-          try {
-            const schemaStixType = extractStringLiteralFromStixTypeZodSchema(schema);
-            logger.debug('Checking schema with type:', { schemaStixType });
-
-            // Check if this schema matches the request type
-            if (
-              (typeof schemaStixType === 'string' && schemaStixType === requestStixType) ||
-              (Array.isArray(schemaStixType) && schemaStixType.includes(requestStixType))
-            ) {
-              logger.debug('Found matching schema for request type:', {
-                requestStixType,
-                schemaStixType,
-              });
-              finalSchema = schema;
-              break;
-            }
-          } catch (error) {
-            logger.debug('Could not extract type from schema, skipping:', { error: error.message });
-            continue;
-          }
-        }
-
-        if (!finalSchema) {
-          throw new Error(
-            `No matching schema found for STIX type: ${requestStixType}. Available schemas: ${oneOrMoreZodSchemas.length}`,
-          );
-        }
-      } else {
-        // Single schema - use it directly
-        logger.debug('Single schema provided, using directly');
-        finalSchema = oneOrMoreZodSchemas;
-      }
-
-      // Create schema with conditional validation based on workflow state
-      const combinedSchema = createWorkspaceStixSchema(finalSchema, workflowState);
 
       logger.debug('Attempting to parse request body with combined schema');
       combinedSchema.parse(req.body);
@@ -301,15 +160,110 @@ function middleware(oneOrMoreZodSchemas, options = {}) {
 }
 
 /**
+ * Get the schema to use for validating a STIX object.
+ *
+ * Some STIX types define both a "base" schema and "checks" (refinements),
+ * while others only define a single schema (no refinements). This helper
+ * composes the correct schema based on the STIX type and workflow status.
+ *
+ * Composition order (for schemas with checks):
+ *   base → .omit() → .partial() (if WIP) → .check(checks)
+ *
+ * This ordering is critical because Zod v4.3.6+ disallows .omit(), .pick(),
+ * and .partial() on schemas that already have .check() applied.
+ *
+ * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
+ * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
+ * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
+ * @returns {Object|null} Zod schema, or null if the STIX type is unknown
+ */
+function getSchema(
+  stixType,
+  status,
+  omitStixFields = ['x_mitre_attack_spec_version', 'external_references'],
+) {
+  const admSchemaRef = STIX_SCHEMAS[stixType];
+  if (!admSchemaRef) return null;
+
+  const isPartial = status === 'work-in-progress';
+  let stixSchema;
+
+  if (admSchemaRef.base && admSchemaRef.checks) {
+    // Schema with refinements: compose in the safe order (omit/partial BEFORE check)
+    stixSchema = admSchemaRef.base;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
+
+    // Re-apply refinements last
+    stixSchema = stixSchema.check(admSchemaRef.checks);
+  } else {
+    // Simple schema (no refinements): safe to call .omit() and .partial() directly
+    stixSchema = admSchemaRef;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
+  }
+
+  logger.debug('Resolved STIX schema:', { stixType, status, isPartial, omitStixFields });
+  return stixSchema;
+}
+
+/**
  * Pre-configured validation middleware factory that uses runtime configuration.
  * The middleware reads the config value at request time to support dynamic config changes (e.g., during tests).
+ *
+ * @param {string|string[]} expectedStixType - The STIX type(s) this endpoint accepts
+ *   (e.g. "attack-pattern" or ["tool", "malware"] for software)
+ * @returns {Function} Express middleware function
  */
-function validateWorkspaceStixData(oneOrMoreZodSchemas) {
+function validateWorkspaceStixData(expectedStixType) {
+  const allowedTypes = Array.isArray(expectedStixType) ? expectedStixType : [expectedStixType];
+
   return (req, res, next) => {
     // Read config at request time to allow dynamic changes
     const config = require('../config/config');
     const enabled = config.validateRequests.withAttackDataModel;
-    const middlewareFn = middleware(oneOrMoreZodSchemas, { enabled });
+    const requestStixType = req.body?.stix?.type;
+    const workflowState = req.body?.workspace?.workflow?.state || 'reviewed';
+
+    // Verify the request's STIX type is one this endpoint accepts
+    if (!allowedTypes.includes(requestStixType)) {
+      return next(
+        new Error(
+          `Unexpected STIX type "${requestStixType}". This endpoint accepts: ${allowedTypes.join(', ')}`,
+        ),
+      );
+    }
+
+    const finalSchema = getSchema(requestStixType, workflowState);
+    if (!finalSchema) {
+      return next(
+        new Error(
+          `No schema found for STIX type "${requestStixType}". Request body is probably invalid.`,
+        ),
+      );
+    }
+
+    const middlewareFn = middleware(finalSchema, { enabled });
     return middlewareFn(req, res, next);
   };
 }
@@ -317,8 +271,6 @@ function validateWorkspaceStixData(oneOrMoreZodSchemas) {
 module.exports = {
   /** Express middleware factory for workspace+STIX validation */
   validateWorkspaceStixData,
-  /** Factory function for creating combined workspace+STIX schemas */
-  createWorkspaceStixSchema,
   /** Basic workspace schema without dynamic attackId validation */
   workspaceSchema,
 };

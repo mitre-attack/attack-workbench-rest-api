@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { dataComponentSchema } = require('@mitre-attack/attack-data-model');
-
 const dataComponentsController = require('../controllers/data-components-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(dataComponentSchema),
+    validateWorkspaceStixData('x-mitre-data-component'),
     dataComponentsController.create,
   );
 
@@ -60,7 +58,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(dataComponentSchema),
+    validateWorkspaceStixData('x-mitre-data-component'),
     dataComponentsController.updateFull,
   )
   .delete(

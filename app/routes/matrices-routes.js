@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { matrixSchema } = require('@mitre-attack/attack-data-model');
-
 const matricesController = require('../controllers/matrices-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -22,7 +20,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(matrixSchema),
+    validateWorkspaceStixData('x-mitre-matrix'),
     matricesController.create,
   );
 
@@ -45,7 +43,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(matrixSchema),
+    validateWorkspaceStixData('x-mitre-matrix'),
     matricesController.updateFull,
   )
   .delete(authn.authenticate, authz.requireRole(authz.admin), matricesController.deleteVersionById);
