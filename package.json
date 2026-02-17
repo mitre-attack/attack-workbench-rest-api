@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^13.0.1",
-    "@mitre-attack/attack-data-model": "^4.5.1",
+    "@mitre-attack/attack-data-model": "^4.9.0",
     "async": "^3.2.6",
     "async-await-retry": "^2.1.0",
     "body-parser": "^2.2.1",
@@ -73,7 +73,7 @@
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
-    "zod": "4.2.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@codedependant/semantic-release-docker": "^5.1.1",
