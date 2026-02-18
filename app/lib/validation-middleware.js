@@ -9,9 +9,7 @@ const {
   createAttackIdSchema,
   stixTypeToAttackIdMapping,
 } = require('@mitre-attack/attack-data-model/dist/schemas/common/property-schemas/attack-id');
-const {
-  BadRequestError,
-} = require('../exceptions');
+const { BadRequestError } = require('../exceptions');
 /**
  * Basic workspace schema (without rigid attack ID validation)
  * @type {z.ZodObject}
