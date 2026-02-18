@@ -45,7 +45,7 @@ class ReportsService {
    * target_ref, and relationship_type.
    * @returns {Promise<Map>} Map of relationship keys to arrays of parallel relationships
    */
-  async getParallelRelationships(options = {lookupRefs: true}) {
+  async getParallelRelationships(options = { lookupRefs: true }) {
     const relationshipMap = await relationshipsRepository.retrieveParallelRelationships();
 
     // Add identity information to each relationship in the map
