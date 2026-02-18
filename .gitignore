@@ -1,3 +1,6 @@
+# A place to store artifacts during local development (scripts, datasets, dotenv files, etc.)
+.nocommit/**/*
+
 # Logs
 logs
 *.log
