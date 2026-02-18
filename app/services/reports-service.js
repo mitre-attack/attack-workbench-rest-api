@@ -45,11 +45,34 @@ class ReportsService {
    * target_ref, and relationship_type.
    * @returns {Promise<Map>} Map of relationship keys to arrays of parallel relationships
    */
-  async getParallelRelationships() {
+  async getParallelRelationships(options = {lookupRefs: true}) {
     const relationshipMap = await relationshipsRepository.retrieveParallelRelationships();
 
     // Add identity information to each relationship in the map
     for (const relationships of relationshipMap.values()) {
+      // Get source and target objects
+      if (options.lookupRefs) {
+        for (const document of relationships) {
+          if (Array.isArray(document.source_objects)) {
+            if (document.source_objects.length === 0) {
+              document.source_objects = undefined;
+            } else {
+              document.source_objects.sort((a, b) => b.stix.modified - a.stix.modified);
+              document.source_object = document.source_objects[0];
+              document.source_objects = undefined;
+            }
+          }
+          if (Array.isArray(document.target_objects)) {
+            if (document.target_objects.length === 0) {
+              document.target_objects = undefined;
+            } else {
+              document.target_objects.sort((a, b) => b.stix.modified - a.stix.modified);
+              document.target_object = document.target_objects[0];
+              document.target_objects = undefined;
+            }
+          }
+        }
+      }
       await identitiesService.addCreatedByAndModifiedByIdentitiesToAll(relationships);
     }
 
