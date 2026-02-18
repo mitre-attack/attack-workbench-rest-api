@@ -1,5 +1,6 @@
 'use strict';
 const { STIX_SCHEMAS } = require('../../lib/validation-schemas');
+const logger = require('../../lib/logger');
 
 /**
  * Configuration for transforming validation errors (to warnings or suppression)
@@ -60,24 +61,71 @@ exports.ERROR_TRANSFORMATION_RULES = ERROR_TRANSFORMATION_RULES;
 /**
  * Get the schema to use for validating a STIX object.
  *
- * Some STIX types define both a "partial" (work-in-progress) and "full" schema,
- * while others only define a single schema. This helper resolves the correct
- * schema based on the STIX type and object status.
+ * Some STIX types define both a "base" schema and "checks" (refinements),
+ * while others only define a single schema (no refinements). This helper
+ * composes the correct schema based on the STIX type and workflow status.
  *
- * @param {string} type - The STIX `type` being validated (e.g. "attack-pattern")
- * @param {string} status - The object status (e.g. "work-in-progress", "awaiting-review", "reviewed")
- * @returns {Object} Zod schema
+ * Composition order (for schemas with checks):
+ *   base → .omit() → .partial() (if WIP) → .check(checks)
+ *
+ * This ordering is critical because Zod v4.3.6+ disallows .omit(), .pick(),
+ * and .partial() on schemas that already have .check() applied.
+ *
+ * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
+ * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
+ * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
+ * @returns {Object|null} Zod schema, or null if the STIX type is unknown
  */
-function getSchema(type, status) {
-  const entry = STIX_SCHEMAS[type];
-  if (!entry) return null;
+function getSchema(
+  stixType,
+  status,
+  omitStixFields = ['x_mitre_attack_spec_version', 'external_references'],
+) {
+  const admSchemaRef = STIX_SCHEMAS[stixType];
+  if (!admSchemaRef) return null;
 
-  if (entry.partial && entry.full) {
-    return status === 'work-in-progress' ? entry.partial : entry.full;
+  const isPartial = status === 'work-in-progress';
+  let stixSchema;
+
+  if (admSchemaRef.base && admSchemaRef.checks) {
+    // Schema with refinements: compose in the safe order (omit/partial BEFORE check)
+    stixSchema = admSchemaRef.base;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
+
+    // Re-apply refinements last
+    stixSchema = stixSchema.check(admSchemaRef.checks);
   } else {
-    return status === 'work-in-progress' ? entry.partial() : entry;
+    // Simple schema (no refinements): safe to call .omit() and .partial() directly
+    stixSchema = admSchemaRef;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
   }
+
+  logger.debug('Resolved STIX schema:', { stixType, status, isPartial, omitStixFields });
+  return stixSchema;
 }
+exports.getSchema = getSchema;
 
 /**
  * Check if a validation error should be transformed (converted to warning or suppressed)
