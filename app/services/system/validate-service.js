@@ -1,48 +1,5 @@
 'use strict';
-
-const {
-  tacticSchema,
-  techniqueSchema,
-  techniquePartialSchema,
-  groupSchema,
-  malwareSchema,
-  toolSchema,
-  mitigationSchema,
-  assetSchema,
-  dataSourceSchema,
-  campaignSchema,
-  dataComponentSchema,
-  detectionStrategySchema,
-  analyticSchema,
-  matrixSchema,
-  relationshipSchema,
-  collectionSchema,
-  markingDefinitionSchema,
-  relationshipPartialSchema,
-  campaignPartialSchema,
-  groupPartialSchema,
-  malwarePartialSchema,
-  toolPartialSchema,
-} = require('@mitre-attack/attack-data-model/dist');
-
-const STIX_SCHEMAS = {
-  'x-mitre-tactic': tacticSchema,
-  'attack-pattern': { partial: techniquePartialSchema, full: techniqueSchema },
-  'intrusion-set': { partial: groupPartialSchema, full: groupSchema },
-  malware: { partial: malwarePartialSchema, full: malwareSchema },
-  tool: { partial: toolPartialSchema, full: toolSchema },
-  campaign: { partial: campaignPartialSchema, full: campaignSchema },
-  relationship: { partial: relationshipPartialSchema, full: relationshipSchema },
-  'course-of-action': mitigationSchema,
-  'marking-definition': markingDefinitionSchema,
-  'x-mitre-asset': assetSchema,
-  'x-mitre-data-source': dataSourceSchema,
-  'x-mitre-data-component': dataComponentSchema,
-  'x-mitre-detection-strategy': detectionStrategySchema,
-  'x-mitre-analytic': analyticSchema,
-  'x-mitre-matrix': matrixSchema,
-  'x-mitre-collection': collectionSchema,
-};
+const { STIX_SCHEMAS } = require('../../lib/validation-schemas');
 
 /**
  * Configuration for transforming validation errors (to warnings or suppression)
