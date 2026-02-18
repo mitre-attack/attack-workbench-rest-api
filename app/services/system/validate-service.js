@@ -76,8 +76,8 @@ function getSchema(type, status) {
     return status === 'work-in-progress' ? entry.partial : entry.full;
   } else {
     return status === 'work-in-progress' ? entry.partial() : entry;
-    }
   }
+}
 
 /**
  * Check if a validation error should be transformed (converted to warning or suppressed)
