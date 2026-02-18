@@ -76,8 +76,8 @@ function getSchema(type, status) {
     return status === 'work-in-progress' ? entry.partial : entry.full;
   } else {
     return status === 'work-in-progress' ? entry.partial() : entry;
+    }
   }
-}
 
 /**
  * Check if a validation error should be transformed (converted to warning or suppressed)
@@ -208,7 +208,6 @@ exports.validateStixObject = function (payload) {
 
   // Validate STIX data
   const stixResult = stixSchema.safeParse(stix);
-  // const stixResult = baseSchema.safeParse(stix);
 
   if (stixResult.success) {
     return {
