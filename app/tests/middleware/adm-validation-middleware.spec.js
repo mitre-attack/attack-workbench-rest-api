@@ -325,8 +325,7 @@ describe('ADM Validation Middleware', function () {
 
       // Should fail validation
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
-      expect(res.body.details).toBeDefined();
+      expect(res.body.message).toBeDefined();
     });
   });
 

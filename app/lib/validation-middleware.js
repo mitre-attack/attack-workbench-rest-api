@@ -9,7 +9,9 @@ const {
   createAttackIdSchema,
   stixTypeToAttackIdMapping,
 } = require('@mitre-attack/attack-data-model/dist/schemas/common/property-schemas/attack-id');
-
+const {
+  BadRequestError,
+} = require('../exceptions');
 /**
  * Basic workspace schema (without rigid attack ID validation)
  * @type {z.ZodObject}
@@ -248,7 +250,7 @@ function validateWorkspaceStixData(expectedStixType) {
     // Verify the request's STIX type is one this endpoint accepts
     if (!allowedTypes.includes(requestStixType)) {
       return next(
-        new Error(
+        new BadRequestError(
           `Unexpected STIX type "${requestStixType}". This endpoint accepts: ${allowedTypes.join(', ')}`,
         ),
       );
@@ -257,7 +259,7 @@ function validateWorkspaceStixData(expectedStixType) {
     const finalSchema = getSchema(requestStixType, workflowState);
     if (!finalSchema) {
       return next(
-        new Error(
+        new BadRequestError(
           `No schema found for STIX type "${requestStixType}". Request body is probably invalid.`,
         ),
       );
