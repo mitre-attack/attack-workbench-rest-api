@@ -72,6 +72,8 @@ jobs:
 
       - name: Run regression tests with code coverage
         run: npm run coverage:cobertura
+        env:
+          MONGOSTORE_CRYPTO_SECRET: 'ThisisASecretKeyForTestingPurposesOnly1234567890!@#$'
 
       - name: Upload Coverage to CodeCov
         uses: codecov/codecov-action@v4
