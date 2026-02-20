@@ -10,13 +10,30 @@ const packageJson = require('../../package.json');
 //   - Restarting the server will force the users to login again
 //   - Sessions cannot be shared across server instances
 // Setting the SESSION_SECRET environment variable will override this generated value
-function generateSecret() {
-  const stringBase = 'base64';
-  const byteLength = 48;
-  const buffer = crypto.randomBytes(byteLength);
-  const secret = buffer.toString(stringBase);
+function generateSecret(length = 48) {
+  const SPECIAL = "!@#$%^&*()_+-=[]{};':\"\\|,.<>/?";
+  if (length < 8) throw new Error("length must be >= 8");
 
-  return secret;
+  // run until we have a secret that matches the complexity requirements
+  while (true) {
+    // remove the last two characters to ensure we can add the special characters
+    const base = crypto.randomBytes(length).toString("base64").slice(0, length - 2);
+
+    const s1 = SPECIAL[crypto.randomInt(SPECIAL.length)];
+    const s2 = SPECIAL[crypto.randomInt(SPECIAL.length)];
+
+    const secret = base + s1 + s2;
+
+    if (
+      secret.length >= 8 &&
+      (secret.match(/[A-Z]/g) || []).length >= 2 &&
+      (secret.match(/[a-z]/g) || []).length >= 2 &&
+      (secret.match(/[0-9]/g) || []).length >= 2 &&
+      (secret.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g) || []).length >= 2
+    ) {
+      return secret;
+    }
+  }
 }
 
 const defaultSessionSecret = generateSecret();
