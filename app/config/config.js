@@ -11,13 +11,16 @@ const packageJson = require('../../package.json');
 //   - Sessions cannot be shared across server instances
 // Setting the SESSION_SECRET environment variable will override this generated value
 function generateSecret(length = 48) {
-  const SPECIAL = "!@#$%^&*()_+-=[]{};':\"\\|,.<>/?";
-  if (length < 8) throw new Error("length must be >= 8");
+  const SPECIAL = '!@#$%^&*()_+-=[]{};\':"\\|,.<>/?';
+  if (length < 8) throw new Error('length must be >= 8');
 
   // run until we have a secret that matches the complexity requirements
   while (true) {
     // remove the last two characters to ensure we can add the special characters
-    const base = crypto.randomBytes(length).toString("base64").slice(0, length - 2);
+    const base = crypto
+      .randomBytes(length)
+      .toString('base64')
+      .slice(0, length - 2);
 
     const s1 = SPECIAL[crypto.randomInt(SPECIAL.length)];
     const s2 = SPECIAL[crypto.randomInt(SPECIAL.length)];
@@ -29,7 +32,7 @@ function generateSecret(length = 48) {
       (secret.match(/[A-Z]/g) || []).length >= 2 &&
       (secret.match(/[a-z]/g) || []).length >= 2 &&
       (secret.match(/[0-9]/g) || []).length >= 2 &&
-      (secret.match(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g) || []).length >= 2
+      (secret.match(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/g) || []).length >= 2
     ) {
       return secret;
     }
