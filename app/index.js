@@ -131,7 +131,7 @@ exports.initializeApp = async function () {
   // Configure server-side sessions
   const session = require('express-session');
   const MongoStore = require('connect-mongo');
-  const { createWebCryptoAdapter } = require("connect-mongo");
+  const { createWebCryptoAdapter } = require('connect-mongo');
   const mongoose = require('mongoose');
 
   // Generate unique session cookie name based on container hostname
