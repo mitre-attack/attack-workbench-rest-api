@@ -178,13 +178,14 @@ paths:
             default: members
         - name: format
           in: query
-          description: 'Output format'
+          description: 'Output format: snapshot (raw), bundle (STIX 2.1), workbench (with metadata), filesystemstore (not implemented)'
           schema:
             type: string
             enum:
               - snapshot
               - bundle
               - workbench
+              - filesystemstore
             default: snapshot
       responses:
         '200':

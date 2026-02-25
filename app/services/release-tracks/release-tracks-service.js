@@ -53,20 +53,23 @@ exports.importTrack = async function importTrack(_data) {
 };
 
 // Phase 6: Format-aware snapshot retrieval
-// If options.format is specified, the raw snapshot is hydrated and formatted
-// via export-service. Otherwise the raw snapshot is returned as before.
+// - 'snapshot' format (or no format): returns raw snapshot as stored
+// - 'bundle'/'workbench' formats: hydrates and transforms via export-service
+// - 'filesystemstore': blocked at controller level (NotImplementedError)
 exports.getLatestSnapshot = async function getLatestSnapshot(trackId, options) {
   const snapshot = await snapshotService.getLatestSnapshot(trackId, options);
-  if (options && options.format) {
-    return exportService.exportSnapshot(snapshot, options.format, options);
+  const format = options?.format;
+  if (format && format !== 'snapshot') {
+    return exportService.exportSnapshot(snapshot, format, options);
   }
   return snapshot;
 };
 
 exports.getSnapshotByModified = async function getSnapshotByModified(trackId, modified, options) {
   const snapshot = await snapshotService.getSnapshotByModified(trackId, modified, options);
-  if (options && options.format) {
-    return exportService.exportSnapshot(snapshot, options.format, options);
+  const format = options?.format;
+  if (format && format !== 'snapshot') {
+    return exportService.exportSnapshot(snapshot, format, options);
   }
   return snapshot;
 };

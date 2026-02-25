@@ -61,7 +61,7 @@ function parseOptionalQuery(value, schema, defaultValue) {
  */
 function parseSnapshotQueryParams(query) {
   return {
-    format: parseOptionalQuery(query.format, formatQuerySchema, 'bundle'),
+    format: parseOptionalQuery(query.format, formatQuerySchema, 'snapshot'),
     include: parseOptionalQuery(query.include, includeQuerySchema, undefined),
     releases: query.releases === 'only' ? 'only' : undefined,
     version: parseOptionalQuery(query.version, xMitreVersionSchema, undefined),
@@ -182,6 +182,15 @@ exports.importReleaseTrack = async function importReleaseTrack(_req, _res, next)
 exports.retrieveLatestSnapshot = async function retrieveLatestSnapshot(req, res, next) {
   try {
     const queryOptions = parseSnapshotQueryParams(req.query);
+
+    // filesystemstore format is not yet implemented
+    if (queryOptions.format === 'filesystemstore') {
+      return next(
+        new NotImplementedError('release-tracks-controller', 'retrieveLatestSnapshot', {
+          message: 'The filesystemstore format is not yet implemented',
+        }),
+      );
+    }
 
     const result = await releaseTracksService.getLatestSnapshot(req.params.id, queryOptions);
     logger.debug(`Success: Retrieved latest snapshot for track ${req.params.id}`);

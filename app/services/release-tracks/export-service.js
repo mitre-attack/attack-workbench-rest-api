@@ -12,11 +12,18 @@
 // This service performs cross-service READS (permitted by the event-driven
 // architecture — see docs/CROSS_SERVICE_READS_PATTERN.md) by querying STIX
 // repositories directly. It does NOT write to any external repository.
+//
+// DTO transformations are encapsulated in Zod transform schemas. See
+// app/lib/release-tracks/export-schemas.js for schema definitions.
 // =============================================================================
 
-const uuid = require('uuid');
 const types = require('../../lib/types');
 const logger = require('../../lib/logger');
+const {
+  bundleTransformSchema,
+  workbenchTransformSchema,
+  filesystemStoreTransformSchema,
+} = require('../../lib/release-tracks/export-schemas');
 
 // ---------------------------------------------------------------------------
 // Repository map — lazy-loaded to avoid circular dependency issues at startup.
@@ -105,102 +112,38 @@ exports.hydrateMembers = async function hydrateMembers(entries) {
 };
 
 // =============================================================================
-// Format helpers
+// Format helpers (delegating to Zod transform schemas)
 // =============================================================================
-
-/**
- * Build a lookup from (object_ref::object_modified_ms) → tier name.
- * Used by the workbench formatter to annotate each object with its tier.
- */
-function buildTierLookup(snapshot) {
-  const lookup = {};
-  for (const m of snapshot.members || []) {
-    lookup[`${m.object_ref}::${new Date(m.object_modified).getTime()}`] = 'released';
-  }
-  for (const s of snapshot.staged || []) {
-    lookup[`${s.object_ref}::${new Date(s.object_modified).getTime()}`] = 'staged';
-  }
-  for (const c of snapshot.candidates || []) {
-    lookup[`${c.object_ref}::${new Date(c.object_modified).getTime()}`] = 'candidate';
-  }
-  return lookup;
-}
 
 /**
  * Format as a standard STIX 2.1 bundle.
  *
  * Only includes `stix` properties — no workspace data or workflow metadata.
+ * Transformation logic is defined in export-schemas.js.
  */
 exports.formatAsBundle = function formatAsBundle(snapshot, hydratedObjects) {
-  return {
-    type: 'bundle',
-    id: `bundle--${uuid.v4()}`,
-    objects: hydratedObjects.map((doc) => doc.stix),
-  };
+  return bundleTransformSchema.parse({ snapshot, hydratedObjects });
 };
 
 /**
  * Format as a workbench-optimized response with full metadata.
  *
  * Includes `stix` + `workspace` properties and tier annotations.
- * The `include` option controls whether staged/candidates are included.
+ * Transformation logic is defined in export-schemas.js.
  */
 exports.formatAsWorkbench = function formatAsWorkbench(snapshot, hydratedObjects) {
-  const tierLookup = buildTierLookup(snapshot);
-
-  const objects = hydratedObjects.map((doc) => {
-    const key = `${doc.stix.id}::${new Date(doc.stix.modified).getTime()}`;
-    return {
-      stix: doc.stix,
-      workspace: doc.workspace || {},
-      metadata: {
-        collection_tier: tierLookup[key] || 'released',
-        object_type: doc.stix.type,
-        object_name: doc.stix.name || doc.stix.id,
-      },
-    };
-  });
-
-  return {
-    collection: {
-      id: snapshot.id,
-      version: snapshot.version,
-      name: snapshot.name,
-      modified: snapshot.modified,
-    },
-    objects,
-    summary: {
-      released_count: (snapshot.members || []).length,
-      staged_count: (snapshot.staged || []).length,
-      candidate_count: (snapshot.candidates || []).length,
-    },
-  };
+  return workbenchTransformSchema.parse({ snapshot, hydratedObjects });
 };
 
 /**
  * Format as a FileSystemStore-compatible directory structure.
  *
  * Objects are grouped by STIX type, each with a filename and content property.
+ * Transformation logic is defined in export-schemas.js.
  * See docs/COLLECTIONS_V2/07_OUTPUT_FORMATS.md for specification.
  */
 exports.formatAsFilesystemStore = function formatAsFilesystemStore(snapshot, hydratedObjects) {
-  const structure = {};
-
-  for (const doc of hydratedObjects) {
-    const type = doc.stix.type;
-    if (!structure[type]) structure[type] = [];
-    structure[type].push({
-      filename: `${doc.stix.id}.json`,
-      content: doc.stix,
-    });
-  }
-
-  return {
-    format: 'filesystemstore',
-    track_id: snapshot.id,
-    version: snapshot.version,
-    structure,
-  };
+  return filesystemStoreTransformSchema.parse({ snapshot, hydratedObjects });
 };
 
 // =============================================================================
@@ -223,9 +166,6 @@ exports.exportSnapshot = async function exportSnapshot(snapshot, format, options
   const members = snapshot.members || [];
 
   if (format === 'bundle') {
-    if (members.length === 0) {
-      return { type: 'bundle', id: `bundle--${uuid.v4()}`, objects: [] };
-    }
     const hydratedMembers = await exports.hydrateMembers(members);
     return exports.formatAsBundle(snapshot, hydratedMembers);
   }
@@ -240,22 +180,11 @@ exports.exportSnapshot = async function exportSnapshot(snapshot, format, options
       allRefs.push(...(snapshot.candidates || []));
     }
 
-    if (allRefs.length === 0) {
-      return exports.formatAsWorkbench(snapshot, []);
-    }
     const hydratedAll = await exports.hydrateMembers(allRefs);
     return exports.formatAsWorkbench(snapshot, hydratedAll);
   }
 
   if (format === 'filesystemstore') {
-    if (members.length === 0) {
-      return {
-        format: 'filesystemstore',
-        track_id: snapshot.id,
-        version: snapshot.version,
-        structure: {},
-      };
-    }
     const hydratedMembers = await exports.hydrateMembers(members);
     return exports.formatAsFilesystemStore(snapshot, hydratedMembers);
   }
