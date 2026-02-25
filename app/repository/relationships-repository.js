@@ -130,7 +130,10 @@ class RelationshipsRepository extends BaseRepository {
   }
 
   async retrieveParallelRelationships() {
-    const all_relationships = await this.retrieveAll({ versions: 'latest' });
+    const all_relationships = await this.retrieveAll({
+      versions: 'latest',
+      lookupRefs: true,
+    });
 
     // Create a mapping of rel_key (source_ref--relationship_type--target_ref)
     // to an array of relationships that share it.

@@ -131,6 +131,7 @@ exports.initializeApp = async function () {
   // Configure server-side sessions
   const session = require('express-session');
   const MongoStore = require('connect-mongo');
+  const { createWebCryptoAdapter } = require('connect-mongo');
   const mongoose = require('mongoose');
 
   // Generate unique session cookie name based on container hostname
@@ -149,11 +150,11 @@ exports.initializeApp = async function () {
     secret: config.session.secret,
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
+    store: MongoStore.MongoStore.create({
       client: mongoose.connection.getClient(),
-      crypto: {
+      cryptoAdapter: createWebCryptoAdapter({
         secret: config.session.mongoStoreCryptoSecret,
-      },
+      }),
     }),
   };
   app.use(session(sessionOptions));

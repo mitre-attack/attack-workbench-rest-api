@@ -10,6 +10,7 @@ const packageJson = require('../../package.json');
 //   - Restarting the server will force the users to login again
 //   - Sessions cannot be shared across server instances
 // Setting the SESSION_SECRET environment variable will override this generated value
+
 function generateSecret() {
   const stringBase = 'base64';
   const byteLength = 48;
