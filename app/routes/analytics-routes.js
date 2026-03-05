@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { analyticSchema } = require('@mitre-attack/attack-data-model');
-
 const analyticsController = require('../controllers/analytics-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(analyticSchema),
+    validateWorkspaceStixData('x-mitre-analytic'),
     analyticsController.create,
   );
 
@@ -44,7 +42,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(analyticSchema),
+    validateWorkspaceStixData('x-mitre-analytic'),
     analyticsController.updateFull,
   )
   .delete(

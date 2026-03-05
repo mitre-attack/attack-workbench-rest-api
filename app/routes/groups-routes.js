@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { groupSchema } = require('@mitre-attack/attack-data-model');
-
 const groupsController = require('../controllers/groups-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -22,7 +20,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(groupSchema),
+    validateWorkspaceStixData('intrusion-set'),
     groupsController.create,
   );
 
@@ -45,7 +43,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(groupSchema),
+    validateWorkspaceStixData('intrusion-set'),
     groupsController.updateFull,
   )
   .delete(authn.authenticate, authz.requireRole(authz.admin), groupsController.deleteVersionById);

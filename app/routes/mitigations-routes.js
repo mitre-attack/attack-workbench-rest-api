@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { mitigationSchema } = require('@mitre-attack/attack-data-model');
-
 const mitigationsController = require('../controllers/mitigations-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(mitigationSchema),
+    validateWorkspaceStixData('course-of-action'),
     mitigationsController.create,
   );
 
@@ -44,7 +42,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(mitigationSchema),
+    validateWorkspaceStixData('course-of-action'),
     mitigationsController.updateFull,
   )
   .delete(

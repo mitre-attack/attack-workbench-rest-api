@@ -1,42 +1,6 @@
 'use strict';
-
-const {
-  tacticSchema,
-  techniqueSchema,
-  groupSchema,
-  malwareSchema,
-  toolSchema,
-  mitigationSchema,
-  assetSchema,
-  dataSourceSchema,
-  campaignSchema,
-  dataComponentSchema,
-  detectionStrategySchema,
-  analyticSchema,
-  matrixSchema,
-  relationshipSchema,
-  collectionSchema,
-  markingDefinitionSchema,
-} = require('@mitre-attack/attack-data-model');
-
-const STIX_SCHEMAS = {
-  'x-mitre-tactic': tacticSchema,
-  'attack-pattern': techniqueSchema,
-  'intrusion-set': groupSchema,
-  malware: malwareSchema,
-  tool: toolSchema,
-  campaign: campaignSchema,
-  relationship: relationshipSchema,
-  'course-of-action': mitigationSchema,
-  'marking-definition': markingDefinitionSchema,
-  'x-mitre-asset': assetSchema,
-  'x-mitre-data-source': dataSourceSchema,
-  'x-mitre-data-component': dataComponentSchema,
-  'x-mitre-detection-strategy': detectionStrategySchema,
-  'x-mitre-analytic': analyticSchema,
-  'x-mitre-matrix': matrixSchema,
-  'x-mitre-collection': collectionSchema,
-};
+const { STIX_SCHEMAS } = require('../../lib/validation-schemas');
+const logger = require('../../lib/logger');
 
 /**
  * Configuration for transforming validation errors (to warnings or suppression)
@@ -93,6 +57,75 @@ const ERROR_TRANSFORMATION_RULES = [
   // Add more rules here as needed
 ];
 exports.ERROR_TRANSFORMATION_RULES = ERROR_TRANSFORMATION_RULES;
+
+/**
+ * Get the schema to use for validating a STIX object.
+ *
+ * Some STIX types define both a "base" schema and "checks" (refinements),
+ * while others only define a single schema (no refinements). This helper
+ * composes the correct schema based on the STIX type and workflow status.
+ *
+ * Composition order (for schemas with checks):
+ *   base → .omit() → .partial() (if WIP) → .check(checks)
+ *
+ * This ordering is critical because Zod v4.3.6+ disallows .omit(), .pick(),
+ * and .partial() on schemas that already have .check() applied.
+ *
+ * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
+ * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
+ * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
+ * @returns {Object|null} Zod schema, or null if the STIX type is unknown
+ */
+function getSchema(
+  stixType,
+  status,
+  omitStixFields = ['x_mitre_attack_spec_version', 'external_references'],
+) {
+  const admSchemaRef = STIX_SCHEMAS[stixType];
+  if (!admSchemaRef) return null;
+
+  const isPartial = status === 'work-in-progress';
+  let stixSchema;
+
+  if (admSchemaRef.base && admSchemaRef.checks) {
+    // Schema with refinements: compose in the safe order (omit/partial BEFORE check)
+    stixSchema = admSchemaRef.base;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
+
+    // Re-apply refinements last
+    stixSchema = stixSchema.check(admSchemaRef.checks);
+  } else {
+    // Simple schema (no refinements): safe to call .omit() and .partial() directly
+    stixSchema = admSchemaRef;
+
+    if (omitStixFields.length > 0) {
+      const omitObject = omitStixFields.reduce((acc, field) => {
+        acc[field] = true;
+        return acc;
+      }, {});
+      stixSchema = stixSchema.omit(omitObject);
+    }
+
+    if (isPartial) {
+      stixSchema = stixSchema.partial();
+    }
+  }
+
+  logger.debug('Resolved STIX schema:', { stixType, status, isPartial, omitStixFields });
+  return stixSchema;
+}
+exports.getSchema = getSchema;
 
 /**
  * Check if a validation error should be transformed (converted to warning or suppressed)
@@ -218,12 +251,11 @@ exports.validateStixObject = function (payload) {
     };
   }
 
-  // Apply partial validation for work-in-progress
-  const stixSchema = status === 'work-in-progress' ? baseSchema.partial() : baseSchema;
+  // Get the schema to run
+  const stixSchema = getSchema(type, status);
 
   // Validate STIX data
   const stixResult = stixSchema.safeParse(stix);
-  // const stixResult = baseSchema.safeParse(stix);
 
   if (stixResult.success) {
     return {

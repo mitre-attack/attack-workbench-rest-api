@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { techniqueSchema } = require('@mitre-attack/attack-data-model');
-
 const techniquesController = require('../controllers/techniques-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(techniqueSchema),
+    validateWorkspaceStixData('attack-pattern'),
     techniquesController.create,
   );
 
@@ -44,7 +42,7 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(techniqueSchema),
+    validateWorkspaceStixData('attack-pattern'),
     techniquesController.updateFull,
   )
   .delete(

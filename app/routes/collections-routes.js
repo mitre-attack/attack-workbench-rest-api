@@ -2,8 +2,6 @@
 
 const express = require('express');
 
-const { collectionSchema } = require('@mitre-attack/attack-data-model');
-
 const collectionsController = require('../controllers/collections-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
@@ -21,7 +19,7 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(collectionSchema),
+    validateWorkspaceStixData('x-mitre-collection'),
     collectionsController.create,
   );
 
