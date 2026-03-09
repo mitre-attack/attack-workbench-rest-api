@@ -5,7 +5,6 @@ const express = require('express');
 const relationshipsController = require('../controllers/relationships-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -19,7 +18,6 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('relationship'),
     relationshipsController.create,
   );
 
@@ -42,7 +40,6 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('relationship'),
     relationshipsController.updateFull,
   )
   .delete(

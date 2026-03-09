@@ -1,62 +1,5 @@
 'use strict';
-const { STIX_SCHEMAS } = require('../../lib/validation-schemas');
-const logger = require('../../lib/logger');
-
-/**
- * Configuration for transforming validation errors (to warnings or suppression)
- * Add new rules here to convert specific validation errors to warnings or suppress them entirely
- *
- * stixType can be:
- * - A single STIX type string (e.g., 'x-mitre-tactic')
- * - An array of STIX types (e.g., ['attack-pattern', 'x-mitre-tactic'])
- * - 'all' to match any STIX type
- */
-const ERROR_TRANSFORMATION_RULES = [
-  // x_mitre_modified_by_ref is handled by the backend
-  {
-    fieldPath: ['stix', 'x_mitre_modified_by_ref'],
-    errorCode: 'invalid_value',
-    stixType: 'all',
-    suppressError: true,
-  },
-  // Just raise a warning for x_mitre_shortname, letting users know that the value may not comply with the ADM predefined tactic names
-  {
-    fieldPath: ['stix', 'x_mitre_shortname'],
-    errorCode: 'invalid_value',
-    stixType: 'x-mitre-tactic',
-    warningMessage:
-      'Tactic shortname does not match predefined ATT&CK tactics. This may prevent compatibility with official ATT&CK data but can be used for custom taxonomies.',
-  },
-  // Users cannot set domain membership on some objects - in such cases, x_mitre_domains is set when the content in a STIX bundle
-  {
-    fieldPath: ['stix', 'x_mitre_domains'],
-    errorCode: 'invalid_type',
-    stixType: ['intrusion-set', 'campaign', 'x-mitre-matrix', 'x-mitre-detection-strategy'],
-    suppressError: true,
-  },
-  // Users cannot set x_mitre_attack_spec_version - this is handled by the backend
-  {
-    fieldPath: ['stix', 'x_mitre_attack_spec_version'],
-    errorCode: 'invalid_type',
-    stixType: 'all',
-    suppressError: true,
-  },
-  // Users cannot set object_marking_refs on campaigns
-  {
-    fieldPath: ['stix', 'object_marking_refs'],
-    errorCode: 'invalid_type',
-    stixType: ['campaign', 'identity'],
-    suppressError: true,
-  },
-  {
-    fieldPath: ['stix', 'created_by_ref'],
-    errorCode: 'invalid_type',
-    stixType: ['campaign', 'x-mitre-matrix', 'x-mitre-asset', 'course-of-action'],
-    suppressError: true,
-  },
-  // Add more rules here as needed
-];
-exports.ERROR_TRANSFORMATION_RULES = ERROR_TRANSFORMATION_RULES;
+const { STIX_SCHEMAS, ERROR_TRANSFORMATION_RULES } = require('../../lib/validation-schemas');
 
 /**
  * Get the schema to use for validating a STIX object.
@@ -66,64 +9,33 @@ exports.ERROR_TRANSFORMATION_RULES = ERROR_TRANSFORMATION_RULES;
  * composes the correct schema based on the STIX type and workflow status.
  *
  * Composition order (for schemas with checks):
- *   base → .omit() → .partial() (if WIP) → .check(checks)
+ *   base → .partial() (if WIP) → .check(checks)
  *
  * This ordering is critical because Zod v4.3.6+ disallows .omit(), .pick(),
  * and .partial() on schemas that already have .check() applied.
  *
+ * For WIP objects, all fields are made optional via .partial().
+ * For non-WIP objects, the raw ADM schema is used as-is. Server-controlled
+ * field errors are handled post-validation by ERROR_TRANSFORMATION_RULES.
+ *
  * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
  * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
- * @param {string[]} omitStixFields - Array of STIX field names to omit from validation
  * @returns {Object|null} Zod schema, or null if the STIX type is unknown
  */
-function getSchema(
-  stixType,
-  status,
-  omitStixFields = ['x_mitre_attack_spec_version', 'external_references'],
-) {
+function getSchema(stixType, status) {
   const admSchemaRef = STIX_SCHEMAS[stixType];
   if (!admSchemaRef) return null;
 
-  const isPartial = status === 'work-in-progress';
-  let stixSchema;
+  const isWip = status === 'work-in-progress';
 
   if (admSchemaRef.base && admSchemaRef.checks) {
-    // Schema with refinements: compose in the safe order (omit/partial BEFORE check)
-    stixSchema = admSchemaRef.base;
-
-    if (omitStixFields.length > 0) {
-      const omitObject = omitStixFields.reduce((acc, field) => {
-        acc[field] = true;
-        return acc;
-      }, {});
-      stixSchema = stixSchema.omit(omitObject);
-    }
-
-    if (isPartial) {
-      stixSchema = stixSchema.partial();
-    }
-
-    // Re-apply refinements last
-    stixSchema = stixSchema.check(admSchemaRef.checks);
-  } else {
-    // Simple schema (no refinements): safe to call .omit() and .partial() directly
-    stixSchema = admSchemaRef;
-
-    if (omitStixFields.length > 0) {
-      const omitObject = omitStixFields.reduce((acc, field) => {
-        acc[field] = true;
-        return acc;
-      }, {});
-      stixSchema = stixSchema.omit(omitObject);
-    }
-
-    if (isPartial) {
-      stixSchema = stixSchema.partial();
-    }
+    // Schema with refinements: compose in the safe order (partial BEFORE check)
+    const base = isWip ? admSchemaRef.base.partial() : admSchemaRef.base;
+    return base.check(admSchemaRef.checks);
   }
 
-  logger.debug('Resolved STIX schema:', { stixType, status, isPartial, omitStixFields });
-  return stixSchema;
+  // Simple schema (no refinements)
+  return isWip ? admSchemaRef.partial() : admSchemaRef;
 }
 exports.getSchema = getSchema;
 

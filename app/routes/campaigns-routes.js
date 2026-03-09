@@ -5,7 +5,6 @@ const express = require('express');
 const campaignsController = require('../controllers/campaigns-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     campaignsController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('campaign'),
-    campaignsController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), campaignsController.create);
 
 router
   .route('/campaigns/:stixId')
@@ -39,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     campaignsController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('campaign'),
-    campaignsController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), campaignsController.updateFull)
   .delete(
     authn.authenticate,
     authz.requireRole(authz.admin),

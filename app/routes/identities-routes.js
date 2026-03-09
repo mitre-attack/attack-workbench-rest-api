@@ -5,7 +5,6 @@ const express = require('express');
 const identitiesController = require('../controllers/identities-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     identitiesController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('identity'),
-    identitiesController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), identitiesController.create);
 
 router
   .route('/identities/:stixId')
@@ -39,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     identitiesController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('identity'),
-    identitiesController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), identitiesController.updateFull)
   .delete(
     authn.authenticate,
     authz.requireRole(authz.admin),

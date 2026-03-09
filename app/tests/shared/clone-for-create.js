@@ -39,6 +39,11 @@ function cloneForCreate(attackObject) {
     delete cloned.workspace.attack_id;
   }
 
+  // Remove server-controlled x_mitre_attack_spec_version (backend sets this)
+  if (cloned.stix) {
+    delete cloned.stix.x_mitre_attack_spec_version;
+  }
+
   // Remove MITRE ATT&CK external references (backend controls these)
   if (cloned.stix && cloned.stix.external_references) {
     cloned.stix.external_references = cloned.stix.external_references.filter(

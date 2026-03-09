@@ -71,6 +71,11 @@ tags:
   - name: 'Release Tracks'
     description: 'Operations on release tracks (versioned STIX object releases with workflow management)'
 
+components:
+  parameters:
+    dryRun:
+      $ref: 'components/query-parameters.yml#/components/parameters/dryRun'
+
 paths:
   # ATT&CK Objects
   /api/attack-objects:

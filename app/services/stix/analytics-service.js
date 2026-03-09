@@ -305,7 +305,8 @@ class AnalyticsService extends BaseService {
    * @throws {Exceptions.NotFoundError} If a referenced data component does not exist
    * @returns {Promise<void>}
    */
-  async beforeUpdate(stixId, stixModified, data, existingDocument) {
+  // eslint-disable-next-line no-unused-vars
+  async beforeUpdate(stixId, stixModified, data, existingDocument, options) {
     // Initialize embedded_relationships if not present
     if (!data.workspace) {
       data.workspace = {};

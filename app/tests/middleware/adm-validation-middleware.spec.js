@@ -224,7 +224,7 @@ describe('ADM Validation Middleware', function () {
       // Make a field invalid
       syntheticStix.x_mitre_is_subtechnique = 'not-a-boolean'; // Should be boolean
 
-      const requestBody = {
+      let requestBody = {
         workspace: {
           workflow: {
             state: 'work-in-progress',
@@ -233,15 +233,17 @@ describe('ADM Validation Middleware', function () {
         stix: syntheticStix,
       };
 
+      requestBody = cloneForCreate(requestBody);
+
       const res = await request(app)
         .post(endpoint)
         .send(requestBody)
         .set('Accept', 'application/json')
         .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
-      // Should fail validation
+      // Should fail ADM validation in the service layer
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.message).toBeDefined();
       expect(res.body.details).toBeDefined();
       expect(Array.isArray(res.body.details)).toBe(true);
     });
@@ -280,7 +282,7 @@ describe('ADM Validation Middleware', function () {
       // Remove a required field
       delete syntheticStix.name;
 
-      const requestBody = {
+      let requestBody = {
         workspace: {
           workflow: {
             state: 'reviewed',
@@ -288,6 +290,8 @@ describe('ADM Validation Middleware', function () {
         },
         stix: syntheticStix,
       };
+
+      requestBody = cloneForCreate(requestBody);
 
       const res = await request(app)
         .post(endpoint)
@@ -297,7 +301,7 @@ describe('ADM Validation Middleware', function () {
 
       // Should fail validation because 'name' is required in full validation
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.message).toBeDefined();
       expect(res.body.details).toBeDefined();
       expect(Array.isArray(res.body.details)).toBe(true);
     });
@@ -305,8 +309,36 @@ describe('ADM Validation Middleware', function () {
     it('should reject data with invalid field values in reviewed state', async function () {
       const syntheticStix = createSyntheticStix(stixType);
 
-      // Make a field invalid
-      syntheticStix.type = 'invalid-type'; // Wrong type
+      // Make a field invalid (wrong type for boolean field)
+      syntheticStix.x_mitre_is_subtechnique = 'not-a-boolean';
+
+      let requestBody = {
+        workspace: {
+          workflow: {
+            state: 'reviewed',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      requestBody = cloneForCreate(requestBody);
+
+      const res = await request(app)
+        .post(endpoint)
+        .send(requestBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      // Should fail ADM validation
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('ADM validation failed');
+    });
+
+    it('should reject data with wrong STIX type for endpoint', async function () {
+      const syntheticStix = createSyntheticStix(stixType);
+
+      // Set wrong STIX type — caught by service before ADM validation
+      syntheticStix.type = 'invalid-type';
 
       const requestBody = {
         workspace: {
@@ -323,9 +355,8 @@ describe('ADM Validation Middleware', function () {
         .set('Accept', 'application/json')
         .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
-      // Should fail validation
+      // Should fail with InvalidTypeError (plain string response)
       expect(res.status).toBe(400);
-      expect(res.body.message).toBeDefined();
     });
   });
 
@@ -455,7 +486,7 @@ describe('ADM Validation Middleware', function () {
         .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.message).toBeDefined();
     });
   });
 
@@ -541,7 +572,7 @@ describe('ADM Validation Middleware', function () {
         .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.message).toBeDefined();
     });
   });
 
@@ -570,11 +601,11 @@ describe('ADM Validation Middleware', function () {
         .set('Accept', 'application/json')
         .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`);
 
-      // Should NOT return 400 with "Invalid data" error because ADM validation is disabled
+      // Should NOT return 400 with "ADM validation failed" error because ADM validation is disabled
       // The request will likely fail at the database level (missing required field),
       // but it should NOT fail with ADM validation error
       if (res.status === 400 && res.headers['content-type']?.includes('json')) {
-        expect(res.body.error).not.toBe('Invalid data');
+        expect(res.body.message).not.toBe('ADM validation failed');
       }
 
       // Re-enable ADM validation
@@ -590,7 +621,7 @@ describe('ADM Validation Middleware', function () {
       // Remove required field
       delete syntheticStix.name;
 
-      const requestBody = {
+      let requestBody = {
         workspace: {
           workflow: {
             state: 'reviewed',
@@ -598,6 +629,8 @@ describe('ADM Validation Middleware', function () {
         },
         stix: syntheticStix,
       };
+
+      requestBody = cloneForCreate(requestBody);
 
       const res = await request(app)
         .post(endpoint)
@@ -607,8 +640,205 @@ describe('ADM Validation Middleware', function () {
 
       // Should return 400 with validation error
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Invalid data');
+      expect(res.body.message).toBe('ADM validation failed');
       expect(res.body.details).toBeDefined();
+    });
+  });
+
+  describe('Server-controlled field stripping', function () {
+    it('should silently strip x_mitre_attack_spec_version from client input', async function () {
+      const syntheticStix = createSyntheticStix(stixType);
+
+      // Explicitly set a server-controlled field — should be silently stripped
+      syntheticStix.x_mitre_attack_spec_version = '999.0';
+
+      let requestBody = {
+        workspace: {
+          workflow: {
+            state: 'work-in-progress',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      requestBody = cloneForCreate(requestBody);
+
+      const res = await request(app)
+        .post(endpoint)
+        .send(requestBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      // Should succeed — the server strips the field and sets the correct value
+      expect(res.status).toBe(201);
+      expect(res.body.stix.x_mitre_attack_spec_version).toBeDefined();
+      expect(res.body.stix.x_mitre_attack_spec_version).not.toBe('999.0');
+    });
+
+    it('should silently strip ATT&CK external references from client input', async function () {
+      const syntheticStix = createSyntheticStix(stixType);
+
+      // Add a client-provided ATT&CK ref and a user ref
+      syntheticStix.external_references = [
+        { source_name: 'mitre-attack', external_id: 'T9999', url: 'https://fake.url' },
+        { source_name: 'my-source', description: 'User reference' },
+      ];
+
+      let requestBody = {
+        workspace: {
+          workflow: {
+            state: 'work-in-progress',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      requestBody = cloneForCreate(requestBody);
+
+      const res = await request(app)
+        .post(endpoint)
+        .send(requestBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      // Should succeed — server strips the ATT&CK ref and generates the correct one
+      expect(res.status).toBe(201);
+      // The server-generated ATT&CK ref should be at index 0
+      expect(res.body.stix.external_references[0].source_name).toBe('mitre-attack');
+      // The client's fake ATT&CK ref URL should NOT be present
+      expect(res.body.stix.external_references[0].url).not.toBe('https://fake.url');
+      // The user's custom ref should still be present
+      const userRef = res.body.stix.external_references.find(
+        (ref) => ref.source_name === 'my-source',
+      );
+      expect(userRef).toBeDefined();
+    });
+  });
+
+  describe('dryRun support', function () {
+    it('should return composed object without persisting on POST with dryRun=true', async function () {
+      const syntheticStix = createSyntheticStix(stixType);
+
+      let requestBody = {
+        workspace: {
+          workflow: {
+            state: 'work-in-progress',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      requestBody = cloneForCreate(requestBody);
+
+      const res = await request(app)
+        .post(`${endpoint}?dryRun=true`)
+        .send(requestBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.stix).toBeDefined();
+      expect(res.body.stix.type).toBe(stixType);
+      // Server-controlled fields should be composed
+      expect(res.body.stix.x_mitre_attack_spec_version).toBeDefined();
+      // Mongoose internals should not be exposed
+      expect(res.body._id).toBeUndefined();
+      expect(res.body.__v).toBeUndefined();
+      expect(res.body.__t).toBeUndefined();
+    });
+
+    it('should return validation error on POST with dryRun=true and invalid data', async function () {
+      const syntheticStix = createSyntheticStix(stixType);
+
+      // Make data invalid — wrong type for a boolean field
+      syntheticStix.x_mitre_is_subtechnique = 'not-a-boolean';
+
+      let requestBody = {
+        workspace: {
+          workflow: {
+            state: 'reviewed',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      requestBody = cloneForCreate(requestBody);
+
+      const res = await request(app)
+        .post(`${endpoint}?dryRun=true`)
+        .send(requestBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      // Should fail ADM validation even in dry-run mode
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('ADM validation failed');
+    });
+
+    it('should return composed object without persisting on PUT with dryRun=true', async function () {
+      // First, create an object to update
+      const syntheticStix = createSyntheticStix(stixType);
+
+      let createBody = {
+        workspace: {
+          workflow: {
+            state: 'work-in-progress',
+          },
+        },
+        stix: syntheticStix,
+      };
+
+      createBody = cloneForCreate(createBody);
+
+      const createRes = await request(app)
+        .post(endpoint)
+        .send(createBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+        .expect(201);
+
+      const createdObject = createRes.body;
+
+      // Now do a dry-run update
+      let updateBody = {
+        workspace: {
+          workflow: {
+            state: 'work-in-progress',
+          },
+        },
+        stix: {
+          ...createdObject.stix,
+          name: 'Dry Run Updated Name',
+        },
+      };
+
+      updateBody = cloneForCreate(updateBody);
+
+      const res = await request(app)
+        .put(
+          `${endpoint}/${createdObject.stix.id}/modified/${createdObject.stix.modified}?dryRun=true`,
+        )
+        .send(updateBody)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.stix).toBeDefined();
+      expect(res.body.stix.name).toBe('Dry Run Updated Name');
+      // Mongoose internals should not be exposed
+      expect(res.body._id).toBeUndefined();
+      expect(res.body.__v).toBeUndefined();
+      expect(res.body.__t).toBeUndefined();
+
+      // Verify the object was NOT actually persisted by fetching the original
+      const getRes = await request(app)
+        .get(`${endpoint}/${createdObject.stix.id}/modified/${createdObject.stix.modified}`)
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+      expect(getRes.status).toBe(200);
+      // Original name should be unchanged
+      expect(getRes.body.stix.name).not.toBe('Dry Run Updated Name');
     });
   });
 
@@ -620,7 +850,7 @@ describe('ADM Validation Middleware', function () {
       delete syntheticStix.name; // Missing required field
       syntheticStix.x_mitre_is_subtechnique = 'invalid'; // Wrong type
 
-      const requestBody = {
+      let requestBody = {
         workspace: {
           workflow: {
             state: 'reviewed',
@@ -629,6 +859,8 @@ describe('ADM Validation Middleware', function () {
         stix: syntheticStix,
       };
 
+      requestBody = cloneForCreate(requestBody);
+
       const res = await request(app)
         .post(endpoint)
         .send(requestBody)
@@ -636,7 +868,7 @@ describe('ADM Validation Middleware', function () {
         .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Invalid data');
+      expect(res.body.message).toBe('ADM validation failed');
       expect(res.body.details).toBeDefined();
       expect(Array.isArray(res.body.details)).toBe(true);
       expect(res.body.details.length).toBeGreaterThan(0);

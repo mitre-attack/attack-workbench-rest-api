@@ -5,7 +5,6 @@ const express = require('express');
 const analyticsController = require('../controllers/analytics-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     analyticsController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-analytic'),
-    analyticsController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), analyticsController.create);
 
 router
   .route('/analytics/:stixId')
@@ -39,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     analyticsController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-analytic'),
-    analyticsController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), analyticsController.updateFull)
   .delete(
     authn.authenticate,
     authz.requireRole(authz.admin),

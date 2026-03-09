@@ -7,7 +7,6 @@ const attackIdGenerator = require('../../lib/attack-id-generator');
 const {
   createAttackExternalReference,
   findAttackExternalReference,
-  validateAttackExternalReference,
 } = require('../../lib/external-reference-builder');
 const {
   DatabaseError,
@@ -16,9 +15,10 @@ const {
   InvalidQueryStringParameterError,
   InvalidTypeError,
   OrganizationIdentityNotSetError,
-  ImmutablePropertyError,
   InvalidPostOperationError,
+  ValidationError,
 } = require('../../exceptions');
+const { getSchema, processValidationIssues } = require('../system/validate-service');
 const ServiceWithHooks = require('./hooks.service');
 
 // Import required repositories
@@ -315,222 +315,311 @@ class BaseService extends ServiceWithHooks {
     return documents;
   }
 
-  // TODO add JSDoc
-  // explain what the method handles
-  // calls beforeCreate --> {own create logic} --> afterCreate --> emitCreatedEvent
+  /**
+   * Fields that are always server-controlled, regardless of STIX type or operation.
+   * Declared as a static class property for discoverability and future expansion.
+   *
+   * Note: Fields like `created_by_ref`, `x_mitre_modified_by_ref`, and `object_marking_refs`
+   * are intentionally NOT here — they are only server-controlled in certain contexts
+   * (e.g., new objects only, specific STIX types) or use merge semantics (marking definitions).
+   * Their handling remains in the existing composition logic of create() and updateFull().
+   *
+   * Future additions: 'id', 'created', 'modified' (when server takes control of these)
+   */
+  static ALWAYS_STRIPPED_STIX_FIELDS = ['x_mitre_attack_spec_version'];
+
+  /**
+   * Silently strips universally server-controlled fields from client input.
+   *
+   * The API is idempotent with respect to these fields: clients can send them
+   * and they'll be ignored. The server always composes the correct values during
+   * the subsequent composition and set-server-controlled-fields pipeline stages.
+   *
+   * @param {Object} data - The incoming request data ({ stix, workspace })
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.preserveAttackId] - If true, preserve workspace.attack_id
+   *   and ATT&CK external references (plumbing for future admin override scenarios)
+   */
+  stripServerControlledFields(data, options = {}) {
+    const stix = data.stix;
+    if (!stix) return;
+
+    // Strip universally server-controlled STIX fields
+    for (const field of BaseService.ALWAYS_STRIPPED_STIX_FIELDS) {
+      delete stix[field];
+    }
+
+    if (!options.preserveAttackId) {
+      // Strip workspace.attack_id — server generates/carries forward
+      if (data.workspace) {
+        delete data.workspace.attack_id;
+      }
+
+      // Filter ATT&CK source refs from external_references; preserve user-provided refs.
+      // The server will generate the correct ATT&CK ref and prepend it at index 0.
+      if (stix.external_references) {
+        stix.external_references = stix.external_references.filter(
+          (ref) => !config.attackSourceNames.includes(ref.source_name),
+        );
+      }
+    }
+  }
+
+  /**
+   * Validates the fully-composed STIX object against the ADM schema.
+   *
+   * This runs AFTER all server-controlled fields have been populated (external_references,
+   * x_mitre_attack_spec_version, created_by_ref, etc.) and BEFORE the repository save.
+   * Because the object is fully composed, the raw ADM schema validates cleanly —
+   * ERROR_TRANSFORMATION_RULES suppression rules naturally don't fire since the
+   * server-controlled fields are present. Only warning rules (e.g., x_mitre_shortname)
+   * may apply.
+   *
+   * @param {Object} data - The composed request data ({ stix, workspace })
+   * @returns {{ errors: Array, warnings: Array }} Validation results
+   */
+  validateComposedObject(data) {
+    const empty = { errors: [], warnings: [] };
+    if (!config.validateRequests.withAttackDataModel) return empty;
+
+    const stixType = data.stix?.type;
+    const status = data.workspace?.workflow?.state || 'reviewed';
+
+    const schema = getSchema(stixType, status);
+    if (!schema) return empty;
+
+    const result = schema.safeParse(data.stix);
+    if (result.success) return empty;
+
+    return processValidationIssues(result.error.issues, stixType);
+  }
+
+  /**
+   * Creates a new STIX object or a new version of an existing object.
+   *
+   * Pipeline stages:
+   *   1. ANALYZE REQUEST — validate type, determine new vs new-version
+   *   2. COMPOSE OBJECT — strip server-controlled fields, generate ATT&CK ID + external refs
+   *   3. SET SERVER-CONTROLLED FIELDS — spec version, identity refs, marking definitions
+   *   4. LIFECYCLE HOOKS — subclass data transformations (beforeCreate)
+   *   5. VALIDATE WITH ADM — full schema validation on the composed object
+   *   6. PERSIST — save document, run afterCreate hook, emit event (skip if dryRun)
+   *
+   * @param {Object} data - The request data ({ stix, workspace })
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.import] - If true, use the import path (STIX bundle import)
+   * @param {string} [options.userAccountId] - The authenticated user's account ID
+   * @param {string} [options.parentTechniqueId] - Parent technique ATT&CK ID (for subtechniques)
+   * @param {boolean} [options.dryRun] - If true, compose and validate but skip persistence
+   * @returns {Object} The created document (or composed data if dryRun) with warnings array
+   */
   async create(data, options) {
+    options = options || {};
+
+    // ──────────────────────────────────────────────
+    // 1. ANALYZE REQUEST
+    // ──────────────────────────────────────────────
     if (data?.stix?.type !== this.type) {
       throw new InvalidTypeError();
     }
 
-    options = options || {};
+    if (options.import) {
+      return this._createFromImport(data, options);
+    }
 
-    if (!options.import) {
-      // Extracting some fields from the payload - we will need these later
-      const attackIdInExternalReferences = attackIdGenerator.extractAttackIdFromExternalReferences(
-        data.stix,
-      );
-      const attackIdInWorkspace = data.workspace?.attack_id;
-      const isSubtechnique = data.stix?.x_mitre_is_subtechnique === true;
-      const parentTechniqueId = options?.parentTechniqueId;
-
-      // Check if we're creating a new version of an existing object (same stix.id)
-      let existingVersion = null;
-      if (data.stix?.id) {
-        // Look for any existing version with the same stix.id
-        const existingVersions = await this.repository.retrieveAllById(data.stix.id);
-        if (existingVersions && existingVersions.length > 0) {
-          existingVersion = existingVersions[0]; // Get any version to extract the attack_id
-          logger.debug(
-            `Found existing version(s) with stix.id: ${data.stix.id}, will reuse attack_id: ${existingVersion.workspace?.attack_id}`,
-          );
-        }
-      }
-
-      // SECTION START: CHECKING ILLEGAL OPS
-      if (existingVersion) {
-        // POST for existing object (new version/snapshot): Allow client to provide attack_id if it matches
-        const existingAttackId = existingVersion.workspace?.attack_id;
-
-        if (attackIdInWorkspace && attackIdInWorkspace !== existingAttackId) {
-          logger.warn(
-            `Immutable property: user attempted to change workspace.attack_id from ${existingAttackId} to ${attackIdInWorkspace}`,
-          );
-          throw new ImmutablePropertyError('workspace.attack_id', {
-            details: `Expected '${existingAttackId}' but received '${attackIdInWorkspace}'`,
-          });
-        }
-
-        if (attackIdInExternalReferences && attackIdInExternalReferences !== existingAttackId) {
-          logger.warn(
-            `Immutable property: user attempted to change external_references[0].external_id from ${existingAttackId} to ${attackIdInExternalReferences}`,
-          );
-          throw new ImmutablePropertyError('external_references[0].external_id', {
-            details: `Expected '${existingAttackId}' but received '${attackIdInExternalReferences}'`,
-          });
-        }
-
-        // Client provided matching values or no values - both are fine
-        // We'll use the existing attack_id
-      } else {
-        // POST for new object: Reject any client-provided attack_id
-        if (attackIdInExternalReferences) {
-          logger.warn(
-            'Immutable property: user attempted to set backend-controlled property, external_references.0.external_id',
-          );
-          throw new ImmutablePropertyError('external_references.0.external_id');
-        } else if (attackIdInWorkspace) {
-          logger.warn(
-            'Immutable property: user attempted to set backend-controlled property, workspace.attack_id',
-          );
-          throw new ImmutablePropertyError('workspace.attack_id');
-        }
-      }
-
-      if (data.stix?.external_references) {
-        // Filter out any MITRE ATT&CK external references (we'll add the correct one below)
-        data.stix.external_references = data.stix.external_references.filter(
-          (ref) => !config.attackSourceNames.includes(ref.source_name),
-        );
-      } else {
-        data.stix.external_references = [];
-      }
-      // SECTION END: CHECKING ILLEGAL OPS
-
-      // Generate or reuse the ATT&CK ID
-      if (attackIdGenerator.requiresAttackId(this.type)) {
-        let attackId;
-
-        if (existingVersion) {
-          // Reuse the attack_id from the existing version
-          attackId = existingVersion.workspace.attack_id;
-          logger.debug(`Reusing ATT&CK ID from existing version: ${attackId}`);
-        } else {
-          // Validate subtechnique requirements
-          if (isSubtechnique && !parentTechniqueId) {
-            const errorMessage =
-              'Subtechniques require a parentTechniqueId query parameter. Provide the parent technique ATT&CK ID (e.g., T1234).';
-            logger.error(errorMessage);
-            throw new InvalidPostOperationError(errorMessage);
-          }
-          if (!isSubtechnique && parentTechniqueId) {
-            const errorMessage =
-              'parentTechniqueId query parameter is only valid for subtechniques (x_mitre_is_subtechnique: true).';
-            logger.error(errorMessage);
-            throw new InvalidPostOperationError(errorMessage);
-          }
-
-          // Generate a new ATT&CK ID
-          attackId = await attackIdGenerator.generateAttackId(
-            this.type,
-            this.repository,
-            isSubtechnique,
-            parentTechniqueId,
-          );
-          logger.debug(`Generated new ATT&CK ID: ${attackId}`);
-        }
-
-        data.workspace = data.workspace || {};
-        data.workspace.attack_id = attackId;
-      }
-
-      // Generate and add the ATT&CK external reference
-      const attackRef = createAttackExternalReference(data);
-      if (attackRef) {
-        data.stix.external_references.unshift(attackRef);
-      }
-      logger.debug(
-        `Generated and set the MITRE ATT&CK external reference: ${JSON.stringify(attackRef)}`,
-      );
-
-      // Set the ATT&CK Spec Version
-      data.stix.x_mitre_attack_spec_version =
-        data.stix.x_mitre_attack_spec_version ?? config.app.attackSpecVersion;
-      logger.debug(
-        `Set the ATT&CK specification version: ${data.stix.x_mitre_attack_spec_version}`,
-      );
-
-      // Record the user account that created the object
-      if (options.userAccountId) {
-        data.workspace.workflow.created_by_user_account = options.userAccountId;
-        logger.debug(`Recorded the user account that created the object: ${options.userAccountId}`);
-      }
-
-      // Set the default marking definitions
-      await this.setDefaultMarkingDefinitionsForObject(data);
-      logger.debug(`Set the default marking definition for object`);
-
-      // Get the organization identity
-      const organizationIdentityRef = await this.retrieveOrganizationIdentityRef();
-
-      // Check for an existing object
-      let existingObject;
-      if (data.stix.id) {
-        existingObject = await this.repository.retrieveOneById(data.stix.id);
-      }
-
-      if (existingObject) {
-        // New version of an existing object
-        // Only set the x_mitre_modified_by_ref property
-        data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+    // Determine if this is a new object or a new version of an existing object
+    let existingVersion = null;
+    if (data.stix?.id) {
+      // TODO change this to repository's get latest method - there should be a method for that
+      const existingVersions = await this.repository.retrieveAllById(data.stix.id);
+      if (existingVersions?.length > 0) {
+        existingVersion = existingVersions[0];
         logger.debug(
-          'Found existing object with matching STIX ID - setting x_mitre_modified_by_ref',
-        );
-      } else {
-        // New object
-        // Assign a new STIX id if not already provided
-        if (!data.stix.id) {
-          data.stix.id = `${data.stix.type}--${uuid.v4()}`;
-        }
-        logger.debug(`Did not find existing object - setting STIX ID: ${data.stix.id}`);
-
-        // Set the created_by_ref and x_mitre_modified_by_ref properties
-        data.stix.created_by_ref = organizationIdentityRef;
-        logger.debug(
-          `Did not find existing object - setting created_by_ref: ${data.stix.created_by_ref}`,
-        );
-        data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
-        logger.debug(
-          `Did not find existing object - setting modified_by_ref: ${data.stix.x_mitre_modified_by_ref}`,
-        );
-      }
-    } else {
-      // IMPORT PATH: When importing STIX bundles, extract ATT&CK ID from external_references
-      // and propagate it to workspace.attack_id for efficient querying
-      const attackIdInExternalReferences = attackIdGenerator.extractAttackIdFromExternalReferences(
-        data.stix,
-      );
-      if (attackIdInExternalReferences) {
-        data.workspace = data.workspace || {};
-        data.workspace.attack_id = attackIdInExternalReferences;
-        logger.debug(
-          `Import path: Extracted ATT&CK ID from external_references and set workspace.attack_id to ${attackIdInExternalReferences}`,
+          `Found existing version(s) with stix.id: ${data.stix.id}, will reuse attack_id: ${existingVersion.workspace?.attack_id}`,
         );
       }
     }
+    // TODO: diff analysis — compare posted fields vs existingVersion fields
 
-    // LIFECYCLE HOOK: beforeCreate
-    // Subclasses can prepare data before core creation logic
+    // ──────────────────────────────────────────────
+    // 2. COMPOSE OBJECT
+    // ──────────────────────────────────────────────
+    this.stripServerControlledFields(data, options);
+    data.stix.external_references = data.stix.external_references || [];
+
+    // Generate or reuse the ATT&CK ID
+    if (attackIdGenerator.requiresAttackId(this.type)) {
+      let attackId;
+
+      if (existingVersion) {
+        // Reuse the attack_id from the existing version
+        attackId = existingVersion.workspace.attack_id;
+        logger.debug(`Reusing ATT&CK ID from existing version: ${attackId}`);
+      } else {
+        const isSubtechnique = data.stix?.x_mitre_is_subtechnique === true;
+        const parentTechniqueId = options?.parentTechniqueId;
+
+        // Validate subtechnique requirements
+        if (isSubtechnique && !parentTechniqueId) {
+          throw new InvalidPostOperationError(
+            'Subtechniques require a parentTechniqueId query parameter. Provide the parent technique ATT&CK ID (e.g., T1234).',
+          );
+        }
+        if (!isSubtechnique && parentTechniqueId) {
+          throw new InvalidPostOperationError(
+            'parentTechniqueId query parameter is only valid for subtechniques (x_mitre_is_subtechnique: true).',
+          );
+        }
+
+        // Generate a new ATT&CK ID
+        attackId = await attackIdGenerator.generateAttackId(
+          this.type,
+          this.repository,
+          isSubtechnique,
+          parentTechniqueId,
+        );
+        logger.debug(`Generated new ATT&CK ID: ${attackId}`);
+      }
+
+      data.workspace = data.workspace || {};
+      data.workspace.attack_id = attackId;
+    }
+
+    // Generate and prepend the ATT&CK external reference
+    const attackRef = createAttackExternalReference(data);
+    if (attackRef) {
+      data.stix.external_references.unshift(attackRef);
+    }
+
+    // ──────────────────────────────────────────────
+    // 3. SET SERVER-CONTROLLED FIELDS
+    // ──────────────────────────────────────────────
+    // 3a. STIX fields
+    data.stix.x_mitre_attack_spec_version = config.app.attackSpecVersion;
+    // TODO: data.stix.modified = new Date().toISOString() (when server controls timestamps)
+
+    const organizationIdentityRef = await this.retrieveOrganizationIdentityRef();
+
+    // Check for an existing object (may differ from existingVersion if stix.id was just generated)
+    let existingObject;
+    if (data.stix.id) {
+      existingObject = await this.repository.retrieveOneById(data.stix.id);
+    }
+
+    if (existingObject) {
+      // New version of an existing object — only set modified_by
+      data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+    } else {
+      // Brand-new object — set ID, created_by, modified_by
+      if (!data.stix.id) {
+        data.stix.id = `${data.stix.type}--${uuid.v4()}`;
+      }
+      data.stix.created_by_ref = organizationIdentityRef;
+      data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+    }
+
+    // 3b. Metadata fields
+    if (options.userAccountId) {
+      data.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+    await this.setDefaultMarkingDefinitionsForObject(data);
+
+    // ──────────────────────────────────────────────
+    // 4. LIFECYCLE HOOKS
+    // ──────────────────────────────────────────────
     await this.beforeCreate(data, options);
 
-    // Core creation: Save the document
+    // ──────────────────────────────────────────────
+    // 5. VALIDATE WITH ADM
+    // ──────────────────────────────────────────────
+    const { errors, warnings } = this.validateComposedObject(data);
+
+    if (errors.length > 0) {
+      throw new ValidationError('ADM validation failed', { details: errors, warnings });
+    }
+
+    // ──────────────────────────────────────────────
+    // 6. PERSIST (skip if dry-run)
+    // ──────────────────────────────────────────────
+    if (options.dryRun) {
+      return { ...data, warnings };
+    }
+
     const createdDocument = await this.repository.save(data);
-
-    // LIFECYCLE HOOK: afterCreate
-    // Subclasses can handle post-creation logic
     await this.afterCreate(createdDocument, options);
-
-    // EVENT EMISSION: Emit created event for other services to react
     await this.emitCreatedEvent(createdDocument, options);
 
-    return createdDocument;
+    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
+    result.warnings = warnings;
+    return result;
   }
 
-  async updateFull(stixId, stixModified, data) {
+  /**
+   * Import path for create(): handles STIX bundle imports where the object
+   * already has server-controlled fields populated by the source system.
+   *
+   * @param {Object} data - The request data ({ stix, workspace })
+   * @param {Object} options - Options passed from create()
+   * @returns {Object} The created document
+   * @private
+   */
+  async _createFromImport(data, options) {
+    // Extract ATT&CK ID from external_references and propagate to workspace.attack_id
+    const attackIdInExternalReferences = attackIdGenerator.extractAttackIdFromExternalReferences(
+      data.stix,
+    );
+    if (attackIdInExternalReferences) {
+      data.workspace = data.workspace || {};
+      data.workspace.attack_id = attackIdInExternalReferences;
+    }
+
+    const { errors, warnings } = this.validateComposedObject(data);
+
+    if (errors.length > 0) {
+      throw new ValidationError('ADM validation failed', { details: errors, warnings });
+    }
+
+    if (options.dryRun) {
+      return { ...data, warnings };
+    }
+
+    await this.beforeCreate(data, options);
+    const createdDocument = await this.repository.save(data);
+    await this.afterCreate(createdDocument, options);
+    await this.emitCreatedEvent(createdDocument, options);
+
+    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
+    result.warnings = warnings;
+    return result;
+  }
+
+  /**
+   * Updates an existing STIX object version in-place.
+   *
+   * Pipeline stages:
+   *   1. ANALYZE REQUEST — retrieve existing document by stixId + modified
+   *   2. COMPOSE OBJECT — strip server-controlled fields, compose from existing document
+   *   3. SET SERVER-CONTROLLED FIELDS — (future: bump modified timestamp)
+   *   4. LIFECYCLE HOOKS — subclass data transformations (beforeUpdate)
+   *   5. VALIDATE WITH ADM — full schema validation on the composed object
+   *   6. PERSIST — merge and save document, run afterUpdate hook, emit event (skip if dryRun)
+   *
+   * @param {string} stixId - The STIX ID of the object to update
+   * @param {string} stixModified - The modified timestamp identifying the specific version
+   * @param {Object} data - The request data ({ stix, workspace })
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.dryRun] - If true, compose and validate but skip persistence
+   * @returns {Object|null} The updated document (or composed data if dryRun), null if not found
+   */
+  async updateFull(stixId, stixModified, data, options) {
+    options = options || {};
+
+    // ──────────────────────────────────────────────
+    // 1. ANALYZE REQUEST
+    // ──────────────────────────────────────────────
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }
-
     if (!stixModified) {
       throw new MissingParameterError('modified');
     }
@@ -539,62 +628,66 @@ class BaseService extends ServiceWithHooks {
     if (!document) {
       return null;
     }
+    // TODO: diff analysis — detect field-level changes vs document
+    // TODO: if no changes detected, short-circuit (no-op)
 
-    // LIFECYCLE HOOK: beforeUpdate
-    // Subclasses can prepare data before core update logic
-    await this.beforeUpdate(stixId, stixModified, data, document);
+    // ──────────────────────────────────────────────
+    // 2. COMPOSE OBJECT
+    // ──────────────────────────────────────────────
+    this.stripServerControlledFields(data, options);
 
-    // Handle ATT&CK external reference for UPDATE operations
-    // On update, clients CAN provide ATT&CK external references, but they must match the existing data
-    // and cannot be modified
-    if (data.workspace?.attack_id) {
-      // Validate that workspace.attack_id hasn't changed
-      if (data.workspace.attack_id !== document.workspace.attack_id) {
-        throw new ImmutablePropertyError('workspace.attack_id', {
-          details: `Expected '${document.workspace.attack_id}' but received '${data.workspace.attack_id}'`,
-        });
-      }
+    // Compose server-controlled fields from existing document
+    data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
+
+    if (document.workspace?.attack_id) {
+      data.workspace = data.workspace || {};
+      data.workspace.attack_id = document.workspace.attack_id;
     }
 
-    if (data.stix?.external_references && attackIdGenerator.requiresAttackId(this.type)) {
-      const clientAttackRef = findAttackExternalReference(data.stix.external_references);
-      const expectedAttackRef = createAttackExternalReference(document);
-
-      if (clientAttackRef && expectedAttackRef) {
-        // Validate that the client-provided ATT&CK reference matches expectations
-        const validation = validateAttackExternalReference(clientAttackRef, expectedAttackRef);
-        if (!validation.isValid) {
-          throw new ImmutablePropertyError('stix.external_references[0] (ATT&CK reference)', {
-            details: validation.error,
-          });
-        }
-
-        // If client didn't provide URL but should have, add it
-        if (expectedAttackRef.url && !clientAttackRef.url) {
-          clientAttackRef.url = expectedAttackRef.url;
-        }
-      } else if (!clientAttackRef && expectedAttackRef) {
-        // Client didn't provide ATT&CK reference - add it
-        data.stix.external_references.unshift(expectedAttackRef);
-      }
+    // Compose external_references: prepend existing ATT&CK ref onto user's refs
+    data.stix.external_references = data.stix.external_references || [];
+    const existingAttackRef = findAttackExternalReference(document.stix.external_references);
+    if (existingAttackRef) {
+      data.stix.external_references.unshift(existingAttackRef);
     }
+
+    // ──────────────────────────────────────────────
+    // 3. SET SERVER-CONTROLLED FIELDS
+    // ──────────────────────────────────────────────
+    // TODO: bump stix.modified if diff analysis detects changes
+    // TODO: set x_mitre_modified_by_ref to current user's org identity
+
+    // ──────────────────────────────────────────────
+    // 4. LIFECYCLE HOOKS
+    // ──────────────────────────────────────────────
+    await this.beforeUpdate(stixId, stixModified, data, document, options);
+
+    // ──────────────────────────────────────────────
+    // 5. VALIDATE WITH ADM
+    // ──────────────────────────────────────────────
+    const { errors, warnings } = this.validateComposedObject(data);
+
+    if (errors.length > 0) {
+      throw new ValidationError('ADM validation failed', { details: errors, warnings });
+    }
+
+    // ──────────────────────────────────────────────
+    // 6. PERSIST (skip if dry-run)
+    // ──────────────────────────────────────────────
+    if (options.dryRun) return { ...data, warnings };
 
     const newDocument = await this.repository.updateAndSave(document, data);
 
     if (newDocument === document) {
-      // LIFECYCLE HOOK: afterUpdate
-      // Subclasses can handle post-update logic
       await this.afterUpdate(newDocument, document);
-
-      // EVENT EMISSION: Emit updated event for other services to react
       await this.emitUpdatedEvent(newDocument, document);
-
-      // Document successfully saved
-      return newDocument;
+      const result = newDocument.toObject ? newDocument.toObject() : newDocument;
+      result.warnings = warnings;
+      return result;
     } else {
       throw new DatabaseError({
         details: 'Document could not be saved',
-        document, // Pass along the document that could not be saved
+        document,
       });
     }
   }

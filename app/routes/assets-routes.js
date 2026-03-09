@@ -5,7 +5,6 @@ const express = require('express');
 const assetsController = require('../controllers/assets-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     assetsController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-asset'),
-    assetsController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), assetsController.create);
 
 router
   .route('/assets/:stixId')
@@ -39,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     assetsController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-asset'),
-    assetsController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), assetsController.updateFull)
   .delete(authn.authenticate, authz.requireRole(authz.admin), assetsController.deleteVersionById);
 
 module.exports = router;

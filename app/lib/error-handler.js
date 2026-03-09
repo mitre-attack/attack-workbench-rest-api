@@ -29,6 +29,7 @@ const {
   InvalidTypeError,
   ImmutablePropertyError,
   InvalidPostOperationError,
+  ValidationError,
   DefaultMarkingDefinitionsNotFoundError,
   AlreadyReleasedError,
   InvalidVersionError,
@@ -93,6 +94,7 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof PropertyNotAllowedError ||
     err instanceof CannotUpdateStaticObjectError ||
     err instanceof BadRequestError ||
+    err instanceof ValidationError ||
     err instanceof InvalidVersionError ||
     err instanceof NoTaggedSnapshotsError ||
     err instanceof InvalidComponentTypeError

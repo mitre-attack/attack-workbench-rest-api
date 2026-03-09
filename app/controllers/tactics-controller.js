@@ -86,18 +86,22 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const tacticData = req.body;
 
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
   // Create the tactic
   try {
     const tactic = await tacticsService.create(tacticData, options);
+
+    if (options.dryRun) {
+      return res.status(200).send(tactic);
+    }
 
     logger.debug('Success: Created tactic with id ' + tactic.stix.id);
     return res.status(201).send(tactic);
@@ -108,32 +112,35 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create tactic. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create tactic. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const tacticData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
     const tactic = await tacticsService.updateFull(
       req.params.stixId,
       req.params.modified,
       tacticData,
+      options,
     );
 
     if (!tactic) {
       return res.status(404).send('tactic not found.');
-    } else {
-      logger.debug('Success: Updated tactic with id ' + tactic.stix.id);
+    }
+
+    if (options.dryRun) {
       return res.status(200).send(tactic);
     }
+
+    logger.debug('Success: Updated tactic with id ' + tactic.stix.id);
+    return res.status(200).send(tactic);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update tactic. Server error.');
+    return next(err);
   }
 };
 

@@ -6,8 +6,6 @@ const matricesController = require('../controllers/matrices-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
 
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
-
 const router = express.Router();
 
 router
@@ -17,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     matricesController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-matrix'),
-    matricesController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), matricesController.create);
 
 router
   .route('/matrices/:stixId')
@@ -40,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     matricesController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-matrix'),
-    matricesController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), matricesController.updateFull)
   .delete(authn.authenticate, authz.requireRole(authz.admin), matricesController.deleteVersionById);
 
 router

@@ -165,7 +165,8 @@ class DetectionStrategiesService extends BaseService {
    * Prepare detection strategy data before update
    * Detect changes in x_mitre_analytic_refs and update outbound embedded_relationships
    */
-  async beforeUpdate(stixId, stixModified, data, existingDocument) {
+  // eslint-disable-next-line no-unused-vars
+  async beforeUpdate(stixId, stixModified, data, existingDocument, options) {
     this._assertAnalyticRefsAreUnique(data);
 
     const oldAnalyticRefs = existingDocument.stix?.x_mitre_analytic_refs || [];

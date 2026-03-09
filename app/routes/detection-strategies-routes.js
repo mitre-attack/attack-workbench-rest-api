@@ -6,8 +6,6 @@ const detectionStrategiesController = require('../controllers/detection-strategi
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
 
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
-
 const router = express.Router();
 
 router
@@ -20,7 +18,6 @@ router
   .post(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-detection-strategy'),
     detectionStrategiesController.create,
   );
 
@@ -47,7 +44,6 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('x-mitre-detection-strategy'),
     detectionStrategiesController.updateFull,
   )
   .delete(

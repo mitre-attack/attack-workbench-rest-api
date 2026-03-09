@@ -18,6 +18,22 @@ const attackObjectDefinition = {
 // Create the schema
 const options = {
   collection: 'attackObjects',
+  toJSON: {
+    transform(_doc, ret) {
+      delete ret._id;
+      delete ret.__v;
+      delete ret.__t;
+      return ret;
+    },
+  },
+  toObject: {
+    transform(_doc, ret) {
+      delete ret._id;
+      delete ret.__v;
+      delete ret.__t;
+      return ret;
+    },
+  },
 };
 const attackObjectSchema = new mongoose.Schema(attackObjectDefinition, options);
 

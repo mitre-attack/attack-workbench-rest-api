@@ -32,6 +32,8 @@ exports.validate = async function (req, res) {
       return res.status(StatusCodes.BAD_REQUEST).json({ errors });
     } else {
       const result = validateService.validateStixObject(req.body);
+      result.deprecated = true;
+      result.deprecationNotice = 'Use ?dryRun=true on POST/PUT endpoints instead.';
       res.json(result);
     }
   } catch (error) {

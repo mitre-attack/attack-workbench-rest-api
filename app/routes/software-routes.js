@@ -5,7 +5,6 @@ const express = require('express');
 const softwareController = require('../controllers/software-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     softwareController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(['tool', 'malware']),
-    softwareController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), softwareController.create);
 
 router
   .route('/software/:stixId')
@@ -39,12 +33,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     softwareController.retrieveVersionById,
   )
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData(['tool', 'malware']),
-    softwareController.updateFull,
-  )
+  .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), softwareController.updateFull)
   .delete(authn.authenticate, authz.requireRole(authz.admin), softwareController.deleteVersionById);
 
 module.exports = router;

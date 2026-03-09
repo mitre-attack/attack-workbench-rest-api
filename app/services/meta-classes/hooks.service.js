@@ -80,8 +80,9 @@ class ServiceWithHooks {
    * @param {string} _stixModified - The modified timestamp
    * @param {object} _data - The update data
    * @param {object} _existingDocument - The existing document
+   * @param {object} [_options] - Options (e.g., { dryRun: true })
    */
-  async beforeUpdate(_stixId, _stixModified, _data, _existingDocument) {
+  async beforeUpdate(_stixId, _stixModified, _data, _existingDocument, _options) {
     // Default: no-op
   }
 

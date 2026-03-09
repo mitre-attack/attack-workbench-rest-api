@@ -5,7 +5,6 @@ const express = require('express');
 const mitigationsController = require('../controllers/mitigations-controller');
 const authn = require('../lib/authn-middleware');
 const authz = require('../lib/authz-middleware');
-const { validateWorkspaceStixData } = require('../lib/validation-middleware');
 
 const router = express.Router();
 
@@ -16,12 +15,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     mitigationsController.retrieveAll,
   )
-  .post(
-    authn.authenticate,
-    authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('course-of-action'),
-    mitigationsController.create,
-  );
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), mitigationsController.create);
 
 router
   .route('/mitigations/:stixId')
@@ -42,7 +36,6 @@ router
   .put(
     authn.authenticate,
     authz.requireRole(authz.editorOrHigher),
-    validateWorkspaceStixData('course-of-action'),
     mitigationsController.updateFull,
   )
   .delete(
