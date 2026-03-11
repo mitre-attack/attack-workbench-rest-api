@@ -95,16 +95,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const dataSourceData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the data source
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const dataSource = await dataSourcesService.create(dataSourceData, options);
+    if (options.dryRun) {
+      return res.status(200).send(dataSource);
+    }
     logger.debug('Success: Created data source with id ' + dataSource.stix.id);
     return res.status(201).send(dataSource);
   } catch (err) {
@@ -120,26 +122,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const dataSourceData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the data source
   try {
     const dataSource = await dataSourcesService.updateFull(
       req.params.stixId,
       req.params.modified,
       dataSourceData,
+      options,
     );
     if (!dataSource) {
       return res.status(404).send('Data source not found.');
-    } else {
-      logger.debug('Success: Updated data source with id ' + dataSource.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(dataSource);
     }
+    logger.debug('Success: Updated data source with id ' + dataSource.stix.id);
+    return res.status(200).send(dataSource);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update data source. Server error.');
+    return next(err);
   }
 };
 

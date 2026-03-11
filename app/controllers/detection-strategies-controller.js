@@ -77,14 +77,17 @@ exports.create = async function (req, res, next) {
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the detection strategy
   try {
     const detectionStrategy = await detectionStrategiesService.create(
       detectionStrategyData,
       options,
     );
+    if (options.dryRun) {
+      return res.status(200).send(detectionStrategy);
+    }
     logger.debug('Success: Created detection strategy with id ' + detectionStrategy.stix.id);
     return res.status(201).send(detectionStrategy);
   } catch (err) {
@@ -93,22 +96,24 @@ exports.create = async function (req, res, next) {
 };
 
 exports.updateFull = async function (req, res, next) {
-  // Get the data from the request
   const detectionStrategyData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the detection strategy
   try {
     const detectionStrategy = await detectionStrategiesService.updateFull(
       req.params.stixId,
       req.params.modified,
       detectionStrategyData,
+      options,
     );
     if (!detectionStrategy) {
       return res.status(404).send('Detection strategy not found.');
-    } else {
-      logger.debug('Success: Updated detection strategy with id ' + detectionStrategy.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(detectionStrategy);
     }
+    logger.debug('Success: Updated detection strategy with id ' + detectionStrategy.stix.id);
+    return res.status(200).send(detectionStrategy);
   } catch (err) {
     next(err);
   }

@@ -90,16 +90,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const mitigationData = req.body;
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the mitigation
   try {
     const mitigation = await mitigationsService.create(mitigationData, options);
+    if (options.dryRun) {
+      return res.status(200).send(mitigation);
+    }
     logger.debug('Success: Created mitigation with id ' + mitigation.stix.id);
     return res.status(201).send(mitigation);
   } catch (err) {
@@ -115,27 +117,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const mitigationData = req.body;
-
-  // Create the mitigation
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
     const mitigation = await mitigationsService.updateFull(
       req.params.stixId,
       req.params.modified,
       mitigationData,
+      options,
     );
     if (!mitigation) {
       return res.status(404).send('Mitigation not found.');
-    } else {
-      logger.debug('Success: Updated mitigation with id ' + mitigation.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(mitigation);
     }
+    logger.debug('Success: Updated mitigation with id ' + mitigation.stix.id);
+    return res.status(200).send(mitigation);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update mitigation. Server error.');
+    return next(err);
   }
 };
 

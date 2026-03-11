@@ -108,11 +108,14 @@ exports.create = async function (req, res, next) {
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the data component
   try {
     const dataComponent = await dataComponentsService.create(dataComponentData, options);
+    if (options.dryRun) {
+      return res.status(200).send(dataComponent);
+    }
     logger.debug('Success: Created data component with id ' + dataComponent.stix.id);
     return res.status(201).send(dataComponent);
   } catch (err) {
@@ -121,23 +124,24 @@ exports.create = async function (req, res, next) {
 };
 
 exports.updateFull = async function (req, res, next) {
-  // Get the data from the request
   const dataComponentData = req.body;
-
-  // Create the data component
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
     const dataComponent = await dataComponentsService.updateFull(
       req.params.stixId,
       req.params.modified,
       dataComponentData,
+      options,
     );
     if (!dataComponent) {
       return res.status(404).send('Data component not found.');
-    } else {
-      logger.debug('Success: Updated data component with id ' + dataComponent.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(dataComponent);
     }
+    logger.debug('Success: Updated data component with id ' + dataComponent.stix.id);
+    return res.status(200).send(dataComponent);
   } catch (err) {
     next(err);
   }

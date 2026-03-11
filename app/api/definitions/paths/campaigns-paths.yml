@@ -99,6 +99,8 @@ paths:
         If the `stix.id` property is not set, it creates a new campaign, generating a STIX id for it.
       tags:
         - 'Campaigns'
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:
@@ -226,6 +228,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:

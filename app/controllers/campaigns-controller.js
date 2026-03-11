@@ -89,17 +89,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const campaignData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the campaign
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
-
     const campaign = await campaignsService.create(campaignData, options);
+    if (options.dryRun) {
+      return res.status(200).send(campaign);
+    }
     logger.debug('Success: Created campaign with id ' + campaign.stix.id);
     return res.status(201).send(campaign);
   } catch (err) {
@@ -118,25 +119,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const campaignData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
+
   try {
     const campaign = await campaignsService.updateFull(
       req.params.stixId,
       req.params.modified,
       campaignData,
+      options,
     );
     if (!campaign) {
       return res.status(404).send('Campaign not found.');
-    } else {
-      logger.debug('Success: Updated campaign with id ' + campaign.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(campaign);
     }
+    logger.debug('Success: Updated campaign with id ' + campaign.stix.id);
+    return res.status(200).send(campaign);
   } catch (err) {
-    // Create the campaign
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update campaign. Server error.');
+    return next(err);
   }
 };
 

@@ -87,16 +87,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const identityData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the identity
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const identity = await identitiesService.create(identityData, options);
+    if (options.dryRun) {
+      return res.status(200).send(identity);
+    }
     logger.debug('Success: Created identity with id ' + identity.stix.id);
     return res.status(201).send(identity);
   } catch (err) {
@@ -112,26 +114,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const identityData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the identity
   try {
     const identity = await identitiesService.updateFull(
       req.params.stixId,
       req.params.modified,
       identityData,
+      options,
     );
     if (!identity) {
       return res.status(404).send('Identity not found.');
-    } else {
-      logger.debug('Success: Updated identity with id ' + identity.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(identity);
     }
+    logger.debug('Success: Updated identity with id ' + identity.stix.id);
+    return res.status(200).send(identity);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update identity. Server error.');
+    return next(err);
   }
 };
 

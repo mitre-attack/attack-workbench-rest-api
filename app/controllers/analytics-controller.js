@@ -95,11 +95,14 @@ exports.create = async function (req, res, next) {
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
   try {
-    // Create the analytic
     const analytic = await analyticsService.create(analyticData, options);
+    if (options.dryRun) {
+      return res.status(200).send(analytic);
+    }
     logger.debug('Success: Created analytic with id ' + analytic.stix.id);
     return res.status(201).send(analytic);
   } catch (err) {
@@ -109,17 +112,21 @@ exports.create = async function (req, res, next) {
 };
 
 exports.updateFull = async function (req, res, next) {
-  // Get the data from the request
   const analyticData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
     const analytic = await analyticsService.updateFull(
       req.params.stixId,
       req.params.modified,
       analyticData,
+      options,
     );
     if (!analytic) {
       return res.status(404).send('Analytic not found.');
+    }
+    if (options.dryRun) {
+      return res.status(200).send(analytic);
     }
     logger.debug('Success: Updated analytic with id ' + analytic.stix.id);
     return res.status(200).send(analytic);

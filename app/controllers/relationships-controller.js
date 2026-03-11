@@ -97,16 +97,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const relationshipData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the relationship
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const relationship = await relationshipsService.create(relationshipData, options);
+    if (options.dryRun) {
+      return res.status(200).send(relationship);
+    }
     logger.debug('Success: Created relationship with id ' + relationship.stix.id);
     return res.status(201).send(relationship);
   } catch (err) {
@@ -122,26 +124,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const relationshipData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the relationship
   try {
     const relationship = await relationshipsService.updateFull(
       req.params.stixId,
       req.params.modified,
       relationshipData,
+      options,
     );
     if (!relationship) {
       return res.status(404).send('Relationship not found.');
-    } else {
-      logger.debug('Success: Updated relationship with id ' + relationship.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(relationship);
     }
+    logger.debug('Success: Updated relationship with id ' + relationship.stix.id);
+    return res.status(200).send(relationship);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update relationship. Server error.');
+    return next(err);
   }
 };
 

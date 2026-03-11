@@ -93,15 +93,18 @@ exports.retrieveVersionById = async function (req, res) {
 };
 
 exports.create = async function (req, res) {
-  // Get the data from the request
   const assetData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const asset = await assetsService.create(assetData, options);
+    if (options.dryRun) {
+      return res.status(200).send(asset);
+    }
     logger.debug('Success: Created asset with id ' + asset.stix.id);
     return res.status(201).send(asset);
   } catch (err) {
@@ -117,21 +120,27 @@ exports.create = async function (req, res) {
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const assetData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
-    const asset = await assetsService.updateFull(req.params.stixId, req.params.modified, assetData);
+    const asset = await assetsService.updateFull(
+      req.params.stixId,
+      req.params.modified,
+      assetData,
+      options,
+    );
     if (!asset) {
       return res.status(404).send('Asset not found.');
-    } else {
-      logger.debug('Success: Updated asset with id ' + asset.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(asset);
     }
+    logger.debug('Success: Updated asset with id ' + asset.stix.id);
+    return res.status(200).send(asset);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update asset. Server error.');
+    return next(err);
   }
 };
 
