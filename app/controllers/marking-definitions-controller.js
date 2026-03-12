@@ -59,7 +59,7 @@ exports.retrieveById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   const markingDefinitionData = req.body;
   const options = {
     import: false,
@@ -82,8 +82,7 @@ exports.create = async function (req, res) {
       logger.warn('Unable to create marking definition: Stix id not allowed');
       return res.status(400).send('Stix id not allowed.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create marking definition. Server error.');
+      return next(err);
     }
   }
 };

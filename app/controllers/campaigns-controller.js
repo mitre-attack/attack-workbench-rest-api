@@ -88,7 +88,7 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   const campaignData = req.body;
   const options = {
     import: false,
@@ -113,8 +113,7 @@ exports.create = async function (req, res) {
       logger.warn('Invalid stix.type');
       return res.status(400).send('Unable to create campaign. stix.type must be campaign');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create campaign. Server error.');
+      return next(err);
     }
   }
 };

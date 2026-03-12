@@ -89,7 +89,7 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   const mitigationData = req.body;
   const options = {
     import: false,
@@ -111,8 +111,7 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create mitigation. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create mitigation. Server error.');
+      return next(err);
     }
   }
 };

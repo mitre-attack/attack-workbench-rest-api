@@ -87,7 +87,7 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   const matrixData = req.body;
   const options = {
     import: false,
@@ -109,8 +109,7 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create matrix. Duplicate stix.id and stix.modified properties.');
     }
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to create matrix. Server error.');
+    return next(err);
   }
 };
 

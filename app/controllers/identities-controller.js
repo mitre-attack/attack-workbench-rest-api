@@ -86,7 +86,7 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   const identityData = req.body;
   const options = {
     import: false,
@@ -108,8 +108,7 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create identity. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create identity. Server error.');
+      return next(err);
     }
   }
 };
