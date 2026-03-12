@@ -1,5 +1,7 @@
 'use strict';
 
+const logger = require('./logger');
+
 /**
  * Map STIX types to their corresponding ATT&CK website URL paths
  */
@@ -28,7 +30,8 @@ const STIX_TYPE_TO_URL_PATH = {
  * @returns {object} External reference object with source_name, external_id, and url
  */
 function buildAttackExternalReference(attackId, stixType, options = {}) {
-  if (!attackId || !stixType) {
+  if (!attackId && !stixType) {
+    logger.warn('buildAttackExternalReference called with no attackId or stixType');
     return null;
   }
 
@@ -52,6 +55,9 @@ function buildAttackExternalReference(attackId, stixType, options = {}) {
   const urlPath = STIX_TYPE_TO_URL_PATH[stixType];
   if (!urlPath) {
     // Type doesn't have a URL mapping, return reference without URL
+    logger.debug(
+      `No URL path mapping for STIX type '${stixType}'; omitting url from external reference`,
+    );
     return {
       source_name: 'mitre-attack',
       external_id: attackId,
@@ -118,7 +124,8 @@ function createAttackExternalReference(data) {
   const attackId = data.workspace?.attack_id;
   const stixType = data.stix?.type;
 
-  if (!attackId || !stixType) {
+  if (!attackId && !stixType) {
+    logger.warn('createAttackExternalReference called with no attackId or stixType');
     return null;
   }
 
