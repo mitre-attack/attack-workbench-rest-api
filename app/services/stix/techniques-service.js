@@ -6,8 +6,130 @@ const techniquesRepository = require('../../repository/techniques-repository');
 
 const { Technique: TechniqueType } = require('../../lib/types');
 const { BadlyFormattedParameterError, MissingParameterError } = require('../../exceptions');
+const EventBus = require('../../lib/event-bus');
+const EventConstants = require('../../lib/event-constants');
+const logger = require('../../lib/logger');
 
+/**
+ * Service for managing techniques and sub-techniques
+ *
+ * Event listeners:
+ * - x-mitre-tactic::shortname-changed - Updates kill_chain_phases.phase_name on all
+ *   technique documents when a tactic's x_mitre_shortname changes
+ */
 class TechniquesService extends BaseService {
+  /**
+   * Initialize event listeners.
+   * Called once on module load.
+   */
+  static initializeEventListeners() {
+    EventBus.on(
+      EventConstants.TACTIC_SHORTNAME_CHANGED,
+      TechniquesService.handleTacticShortnameChanged.bind(TechniquesService),
+    );
+
+    logger.info('TechniquesService: Event listeners initialized');
+  }
+
+  /**
+   * Handle a tactic x_mitre_shortname change by updating all technique documents
+   * whose kill_chain_phases contain the old phase_name.
+   *
+   * @param {Object} payload - Event payload
+   * @param {string} payload.tacticId - STIX ID of the updated tactic
+   * @param {string} payload.oldShortname - Previous x_mitre_shortname value
+   * @param {string} payload.newShortname - New x_mitre_shortname value
+   */
+  static async handleTacticShortnameChanged(payload) {
+    const { tacticId, oldShortname, newShortname, createNewVersion } = payload;
+
+    logger.info(
+      `TechniquesService: Propagating tactic shortname change '${oldShortname}' -> '${newShortname}' via ${createNewVersion ? 'new technique versions' : 'in-place update'}`,
+      { tacticId },
+    );
+
+    if (createNewVersion) {
+      await TechniquesService._propagateShortnameViaNewVersions(
+        tacticId,
+        oldShortname,
+        newShortname,
+      );
+    } else {
+      await TechniquesService._propagateShortnameInPlace(tacticId, oldShortname, newShortname);
+    }
+  }
+
+  /**
+   * Propagate a shortname change by creating a new version of each connected technique.
+   * Used when the tactic shortname changed via a create (POST) operation, keeping the
+   * technique history intact by appending rather than editing in-place.
+   *
+   * @param {string} tacticId - STIX ID of the updated tactic (for logging)
+   * @param {string} oldShortname - Previous x_mitre_shortname value
+   * @param {string} newShortname - New x_mitre_shortname value
+   */
+  static async _propagateShortnameViaNewVersions(tacticId, oldShortname, newShortname) {
+    const techniques = await techniquesRepository.retrieveAllLatestByPhaseName(oldShortname);
+
+    logger.info(
+      `TechniquesService: Creating new versions for ${techniques.length} technique(s) due to tactic shortname change`,
+      { tacticId, oldShortname, newShortname },
+    );
+
+    for (const technique of techniques) {
+      try {
+        // Clone stix shallowly — only kill_chain_phases needs to change
+        const newVersion = {
+          ...technique,
+          stix: {
+            ...technique.stix,
+            modified: new Date().toISOString(),
+            kill_chain_phases: (technique.stix.kill_chain_phases || []).map((phase) =>
+              phase.phase_name === oldShortname
+                ? { ...phase, phase_name: newShortname }
+                : { ...phase },
+            ),
+          },
+        };
+
+        await techniquesRepository.save(newVersion);
+
+        logger.info(
+          `TechniquesService: Created new version of technique ${technique.stix.id} with updated phase_name`,
+          { tacticId, oldShortname, newShortname },
+        );
+      } catch (error) {
+        logger.error(
+          `TechniquesService: Error creating new version of technique ${technique.stix?.id}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Propagate a shortname change by updating all technique documents in-place.
+   * Used when the tactic shortname changed via an update (PUT) operation.
+   *
+   * @param {string} tacticId - STIX ID of the updated tactic (for logging)
+   * @param {string} oldShortname - Previous x_mitre_shortname value
+   * @param {string} newShortname - New x_mitre_shortname value
+   */
+  static async _propagateShortnameInPlace(tacticId, oldShortname, newShortname) {
+    try {
+      const result = await techniquesRepository.updatePhaseName(oldShortname, newShortname);
+      logger.info(
+        `TechniquesService: Updated ${result.modifiedCount} technique document(s) in-place for tactic shortname change`,
+        { tacticId, oldShortname, newShortname },
+      );
+    } catch (error) {
+      logger.error(
+        `TechniquesService: Error updating techniques in-place for tactic shortname change '${oldShortname}' -> '${newShortname}':`,
+        error,
+      );
+    }
+  }
+
   static tacticsService = null;
 
   static tacticMatchesTechnique(technique) {
@@ -86,5 +208,7 @@ class TechniquesService extends BaseService {
     }
   }
 }
+
+TechniquesService.initializeEventListeners();
 
 module.exports = new TechniquesService(TechniqueType, techniquesRepository);

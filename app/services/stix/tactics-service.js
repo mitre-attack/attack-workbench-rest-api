@@ -6,7 +6,21 @@ const tacticsRepository = require('../../repository/tactics-repository');
 const { Tactic: TacticType } = require('../../lib/types');
 const techniquesService = require('./techniques-service');
 const { BadlyFormattedParameterError, MissingParameterError } = require('../../exceptions');
+const EventBus = require('../../lib/event-bus');
+const EventConstants = require('../../lib/event-constants');
+const logger = require('../../lib/logger');
 
+/**
+ * Service for managing tactics
+ *
+ * Lifecycle hooks:
+ * - beforeUpdate: Detects changes to x_mitre_shortname and stores old/new values
+ * - afterUpdate: Emits domain event when shortname changes so TechniquesService can
+ *   update kill_chain_phases.phase_name on all connected techniques
+ *
+ * Events emitted (listened to by TechniquesService):
+ * - x-mitre-tactic::shortname-changed
+ */
 class TacticsService extends BaseService {
   static techniquesService = null;
 
@@ -28,6 +42,94 @@ class TacticsService extends BaseService {
           tacticKillChainNames.includes(phase.kill_chain_name),
       );
     };
+  }
+
+  /**
+   * Detect shortname changes when creating a new version of an existing tactic.
+   * Compares against the current latest version; stores the change so afterCreate
+   * can emit the domain event.
+   */
+  // eslint-disable-next-line no-unused-vars
+  async beforeCreate(data, options) {
+    if (!data.stix?.id) {
+      return; // Brand-new tactic — no previous version to compare against
+    }
+
+    try {
+      const previousVersion = await tacticsRepository.retrieveLatestByStixId(data.stix.id);
+      if (!previousVersion) return;
+
+      const oldShortname = previousVersion.stix?.x_mitre_shortname;
+      const newShortname = data.stix?.x_mitre_shortname;
+
+      if (oldShortname && newShortname && oldShortname !== newShortname) {
+        this._shortnameChangeViaCreate = { oldShortname, newShortname };
+      }
+    } catch {
+      logger.debug(`TacticsService: No previous version found for tactic ${data.stix.id}`);
+    }
+  }
+
+  /**
+   * Emit a domain event when a new tactic version has a changed x_mitre_shortname.
+   * TechniquesService will create new technique versions to propagate the change.
+   */
+  // eslint-disable-next-line no-unused-vars
+  async afterCreate(document, options) {
+    if (this._shortnameChangeViaCreate) {
+      const { oldShortname, newShortname } = this._shortnameChangeViaCreate;
+
+      logger.info(
+        `TacticsService: New tactic version with x_mitre_shortname change '${oldShortname}' -> '${newShortname}', emitting event`,
+        { tacticId: document.stix.id },
+      );
+
+      await EventBus.emit(EventConstants.TACTIC_SHORTNAME_CHANGED, {
+        tacticId: document.stix.id,
+        oldShortname,
+        newShortname,
+        createNewVersion: true,
+      });
+
+      delete this._shortnameChangeViaCreate;
+    }
+  }
+
+  /**
+   * Detect changes to x_mitre_shortname before the update is persisted.
+   * Stores the old/new values so afterUpdate can emit the domain event.
+   */
+  // eslint-disable-next-line no-unused-vars
+  async beforeUpdate(stixId, stixModified, data, existingDocument, options) {
+    const oldShortname = existingDocument.stix?.x_mitre_shortname;
+    const newShortname = data.stix?.x_mitre_shortname;
+
+    if (oldShortname && newShortname && oldShortname !== newShortname) {
+      this._shortnameChange = { oldShortname, newShortname };
+    }
+  }
+
+  /**
+   * Emit a domain event when x_mitre_shortname changed so TechniquesService can
+   * update kill_chain_phases.phase_name on all connected techniques.
+   */
+  async afterUpdate(updatedDocument) {
+    if (this._shortnameChange) {
+      const { oldShortname, newShortname } = this._shortnameChange;
+
+      logger.info(
+        `TacticsService: x_mitre_shortname changed '${oldShortname}' -> '${newShortname}', emitting event`,
+        { tacticId: updatedDocument.stix.id },
+      );
+
+      await EventBus.emit(EventConstants.TACTIC_SHORTNAME_CHANGED, {
+        tacticId: updatedDocument.stix.id,
+        oldShortname,
+        newShortname,
+      });
+
+      delete this._shortnameChange;
+    }
   }
 
   static getPageOfData(data, options) {

@@ -130,6 +130,9 @@ module.exports = Object.freeze({
   // Data Source - Data Component relationship
   DATA_SOURCE_COMPONENTS_CHANGED: 'x-mitre-data-source::components-changed',
 
+  // Tactic - shortname change (phase_name in techniques)
+  TACTIC_SHORTNAME_CHANGED: 'x-mitre-tactic::shortname-changed',
+
   // Matrix - Tactics relationship
   MATRIX_TACTICS_CHANGED: 'x-mitre-matrix::tactics-changed',
 
