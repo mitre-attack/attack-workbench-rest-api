@@ -16,10 +16,13 @@ class TacticsService extends BaseService {
       //   1. The phase's kill_chain_name matches one of the tactic's kill chain names (which are derived from the tactic's x_mitre_domains)
       //   2. The phase's phase_name matches the tactic's x_mitre_shortname
       // Convert the tactic's domain names to kill chain names
+      if (!tactic.stix.x_mitre_domains?.length) {
+        return false;
+      }
       const tacticKillChainNames = tactic.stix.x_mitre_domains.map(
         (domain) => config.domainToKillChainMap[domain],
       );
-      return technique.stix.kill_chain_phases.some(
+      return technique.stix.kill_chain_phases?.some(
         (phase) =>
           phase.phase_name === tactic.stix.x_mitre_shortname &&
           tacticKillChainNames.includes(phase.kill_chain_name),
