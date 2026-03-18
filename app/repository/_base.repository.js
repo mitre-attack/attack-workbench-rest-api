@@ -97,6 +97,10 @@ class BaseRepository extends AbstractRepository {
         aggregation.push({ $limit: options.limit });
       }
 
+      // Aggregation bypasses Mongoose toJSON/toObject transforms, so we
+      // must strip internal fields explicitly via $project.
+      aggregation.push({ $project: { _id: 0, __v: 0, __t: 0 } });
+
       // Retrieve the documents
       const documents = await this.model.aggregate(aggregation).exec();
 
@@ -153,6 +157,10 @@ class BaseRepository extends AbstractRepository {
         { $match: query },
       ];
 
+      // Aggregation bypasses Mongoose toJSON/toObject transforms, so we
+      // must strip internal fields explicitly via $project.
+      aggregation.push({ $project: { _id: 0, __v: 0, __t: 0 } });
+
       // Bundle export needs ALL matching documents, not a paginated subset
       const documents = await this.model.aggregate(aggregation).exec();
 
@@ -171,17 +179,37 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
-  async retrieveAllById(stixId) {
+  async retrieveLatestByStixId(stixId) {
     try {
-      return await this.model.find({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
+      return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').exec();
     } catch (err) {
       throw new DatabaseError(err);
     }
   }
 
-  async retrieveLatestByStixId(stixId) {
+  async retrieveAllById(stixId) {
     try {
-      return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
+      // .lean() bypasses Mongoose toJSON/toObject transforms, so .select()
+      // is needed to exclude internal fields at the query level.
+      return await this.model
+        .find({ 'stix.id': stixId })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async retrieveLatestByStixIdLean(stixId) {
+    try {
+      return await this.model
+        .findOne({ 'stix.id': stixId })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
     } catch (err) {
       throw new DatabaseError(err);
     }
@@ -232,7 +260,7 @@ class BaseRepository extends AbstractRepository {
       }));
 
       // Use cursor for true streaming
-      const cursor = this.model.find({ $or: conditions }).lean().cursor();
+      const cursor = this.model.find({ $or: conditions }).select('-_id -__v -__t').lean().cursor();
 
       let count = 0;
       for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
@@ -301,7 +329,11 @@ class BaseRepository extends AbstractRepository {
         'stix.modified': object_modified,
       }));
 
-      const documents = await this.model.find({ $or: conditions }).lean().exec();
+      const documents = await this.model
+        .find({ $or: conditions })
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
 
       const queryTime = Date.now() - startTime;
       logger.debug(
@@ -340,6 +372,7 @@ class BaseRepository extends AbstractRepository {
       const document = new this.model(data);
       return await document.save();
     } catch (err) {
+      logger.error(`A database error occurred: ${err.message}`);
       if (err.name === 'MongoServerError' && err.code === 11000) {
         throw new DuplicateIdError({
           details: `Document with id '${data.stix.id}' already exists.`,

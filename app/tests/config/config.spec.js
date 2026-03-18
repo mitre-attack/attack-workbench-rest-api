@@ -4,7 +4,7 @@ process.env.JSON_CONFIG_PATH = './app/tests/config/test-config.json';
 const { expect } = require('expect');
 
 const config = require('../../config/config');
-const markingDefinitionsService = require('../../services/marking-definitions-service');
+const markingDefinitionsService = require('../../services/stix/marking-definitions-service');
 const database = require('../../lib/database-in-memory');
 const databaseConfiguration = require('../../lib/database-configuration');
 

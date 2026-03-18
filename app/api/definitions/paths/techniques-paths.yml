@@ -122,14 +122,28 @@ paths:
         This endpoint creates a new technique in the workspace.
         If the `stix.id` property is set, it creates a new version of an existing technique.
         If the `stix.id` property is not set, it creates a new technique, generating a STIX id for it.
+
+        For subtechniques (when `x_mitre_is_subtechnique` is true), you must provide the `parentTechniqueId` query parameter
+        to specify the parent technique's ATT&CK ID.
       tags:
         - 'Techniques'
+      parameters:
+        - name: parentTechniqueId
+          in: query
+          description: |
+            Parent technique ATT&CK ID (e.g., T1234). Required when creating subtechniques (`x_mitre_is_subtechnique: true`).
+          schema:
+            type: string
+            pattern: '^T\d{4}$'
+          example: 'T1234'
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '../components/techniques.yml#/components/schemas/technique'
+              # type: object
+              $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The technique has been successfully created.'
@@ -250,12 +264,14 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '../components/techniques.yml#/components/schemas/technique'
+              # type: object
+              $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The technique was updated.'

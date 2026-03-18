@@ -1,4 +1,4 @@
-const softwareService = require('../../../services/software-service');
+const softwareService = require('../../../services/stix/software-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API

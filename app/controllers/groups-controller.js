@@ -1,6 +1,6 @@
 'use strict';
 
-const groupsService = require('../services/groups-service');
+const groupsService = require('../services/stix/groups-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,
@@ -84,17 +84,19 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const groupData = req.body;
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the group
   try {
     const group = await groupsService.create(groupData, options);
+    if (options.dryRun) {
+      return res.status(200).send(group);
+    }
     logger.debug('Success: Created group with id ' + group.stix.id);
     return res.status(201).send(group);
   } catch (err) {
@@ -107,28 +109,32 @@ exports.create = async function (req, res) {
       logger.warn('Invalid stix.type');
       return res.status(400).send('Unable to create group. stix.type must be intrusion-set');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create group. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const groupData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
-    // Create the group
-    const group = await groupsService.updateFull(req.params.stixId, req.params.modified, groupData);
+    const group = await groupsService.updateFull(
+      req.params.stixId,
+      req.params.modified,
+      groupData,
+      options,
+    );
     if (!group) {
       return res.status(404).send('Group not found.');
-    } else {
-      logger.debug('Success: Updated group with id ' + group.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(group);
     }
+    logger.debug('Success: Updated group with id ' + group.stix.id);
+    return res.status(200).send(group);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update group. Server error.');
+    return next(err);
   }
 };
 

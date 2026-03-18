@@ -15,6 +15,8 @@ This guide provides comprehensive instructions for installing, configuring, and 
       - [Requirements](#requirements)
       - [Installation Steps](#installation-steps)
   - [Configuration](#configuration)
+    - [Environment Variables](#environment-variables)
+    - [Configuration File](#configuration-file)
   - [Authentication](#authentication)
   - [User Management](#user-management)
     - [User Roles and Permissions](#user-roles-and-permissions)
@@ -120,8 +122,53 @@ More infomation about configuration options is in the [configuration file docume
 
 ## Configuration
 
-The REST API can be configured using environment variables, a configuration file, or a combination of both.
-Read all about it in the [configuration docs](./docs/configuration.md).
+The REST API can be configured using environment variables, a configuration file, or a combination of both. Configuration file values take precedence over environment variables.
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| **PORT** | No | `3000` | Port the HTTP server should listen on |
+| **CORS_ALLOWED_ORIGINS** | No | `*` | Configures CORS policy. Accepts a comma-separated list of allowed domains. (`*` allows all domains; `disable` disables CORS entirely.) |
+| **NODE_ENV** | No | `development` | Environment that the app is running in |
+| **DATABASE_URL** | Yes | none | URL of the MongoDB server |
+| **AUTHN_MECHANISM** | No | `anonymous` | Mechanism to use for authenticating users |
+| **DEFAULT_INTERVAL** | No | `300` | How often collection indexes should check for updates (in seconds) |
+| **JSON_CONFIG_PATH** | No | `` | Location of a JSON file containing configuration values |
+| **LOG_LEVEL** | No | `info` | Level of messages to be written to the log (error, warn, http, info, verbose, debug) |
+| **WB_REST_STATIC_MARKING_DEFS_PATH** | No | `./app/lib/default-static-marking-definitions/` | Path to a directory containing static marking definitions |
+
+A typical value for DATABASE_URL when running locally is `mongodb://localhost/attack-workspace`.
+
+### Configuration File
+
+If the `JSON_CONFIG_PATH` environment variable is set, the app will read configuration settings from a JSON file at that location.
+
+| Property | Type | Corresponding Environment Variable |
+|----------|------|-----------------------------------|
+| **server.port** | int | PORT |
+| **server.corsAllowedOrigins** | string/array | CORS_ALLOWED_ORIGINS |
+| **app.env** | string | NODE_ENV |
+| **database.url** | string | DATABASE_URL |
+| **collectionIndex.defaultInterval** | int | DEFAULT_INTERVAL |
+| **logging.logLevel** | string | LOG_LEVEL |
+
+Example configuration file:
+
+```json
+{
+  "server": {
+    "port": 4000,
+    "corsAllowedOrigins": ["https://example.com", "https://workbench.example.com"]
+  },
+  "database": {
+    "url": "mongodb://localhost/attack-workspace"
+  },
+  "logging": {
+    "logLevel": "debug"
+  }
+}
+```
 
 ## Authentication
 

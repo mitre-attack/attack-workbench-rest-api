@@ -5,13 +5,13 @@ const { expect } = require('expect');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
-
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 
 async function readJson(path) {
   const data = await fs.readFile(require.resolve(path));
@@ -29,6 +29,10 @@ describe('Recent Activity API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

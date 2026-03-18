@@ -4,9 +4,9 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const config = require('../config/config');
-const identitiesService = require('../services/identities-service');
-const userAccountsService = require('../services/user-accounts-service');
-const systemConfigurationService = require('../services/system-configuration-service');
+const identitiesService = require('../services/stix/identities-service');
+const userAccountsService = require('../services/system/user-accounts-service');
+const systemConfigurationService = require('../services/system/system-configuration-service');
 const logger = require('../lib/logger');
 const AttackObject = require('../models/attack-object-model');
 const CollectionIndex = require('../models/collection-index-model');

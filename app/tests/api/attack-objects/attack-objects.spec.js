@@ -6,10 +6,11 @@ const { expect } = require('expect');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const AttackObject = require('../../../models/attack-object-model');
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 logger.level = 'debug';
 
 // test malware object
@@ -24,7 +25,8 @@ const malwareObject = {
     name: 'software-2',
     spec_version: '2.1',
     type: 'malware',
-    description: 'This is a malware type of software.',
+    description:
+      'This is a malware type of software, with a URL that it should not have (https://attack.mitre.org/software/SW0001)',
     is_family: false,
     object_marking_refs: ['marking-definition--c2a0b8f8-51d4-4702-8e42-ce7a65235bce'],
     x_mitre_version: '1.1',
@@ -54,6 +56,10 @@ describe('ATT&CK Objects API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

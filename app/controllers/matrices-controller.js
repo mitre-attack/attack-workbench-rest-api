@@ -1,6 +1,6 @@
 'use strict';
 
-const matricesService = require('../services/matrices-service');
+const matricesService = require('../services/stix/matrices-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,
@@ -87,17 +87,19 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const matrixData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the matrix
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const matrix = await matricesService.create(matrixData, options);
+    if (options.dryRun) {
+      return res.status(200).send(matrix);
+    }
     logger.debug('Success: Created matrix with id ' + matrix.stix.id);
     return res.status(201).send(matrix);
   } catch (err) {
@@ -107,32 +109,31 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create matrix. Duplicate stix.id and stix.modified properties.');
     }
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to create matrix. Server error.');
+    return next(err);
   }
 };
 
-exports.updateFull = async function (req, res) {
-  try {
-    // Get the data from the request
-    const matrixData = req.body;
+exports.updateFull = async function (req, res, next) {
+  const matrixData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-    // Update the matrix
+  try {
     const matrix = await matricesService.updateFull(
       req.params.stixId,
       req.params.modified,
       matrixData,
+      options,
     );
-
     if (!matrix) {
       return res.status(404).send('Matrix not found.');
     }
-
+    if (options.dryRun) {
+      return res.status(200).send(matrix);
+    }
     logger.debug('Success: Updated matrix with id ' + matrix.stix.id);
     return res.status(200).send(matrix);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update matrix. Server error.');
+    return next(err);
   }
 };
 

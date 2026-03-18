@@ -5,6 +5,7 @@ const { expect } = require('expect');
 const _ = require('lodash');
 const uuid = require('uuid');
 
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
@@ -13,7 +14,7 @@ logger.level = 'debug';
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const techniquesService = require('../../../services/techniques-service');
+const techniquesService = require('../../../services/stix/techniques-service');
 
 function asyncWait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -137,6 +138,10 @@ describe('Techniques Query API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

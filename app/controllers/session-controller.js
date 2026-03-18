@@ -1,6 +1,5 @@
 'use strict';
 
-//const sessionService = require('../services/session-service');
 const logger = require('../lib/logger');
 
 exports.retrieveCurrentSession = function (req, res) {

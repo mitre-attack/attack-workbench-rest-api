@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -49,6 +49,10 @@ describe('Assets API', function () {
   let passportCookie;
 
   before(async function () {
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
+
     // Establish the database connection
     // Use an in-memory database that we spin up for the test
     await database.initializeConnection();
@@ -211,7 +215,9 @@ describe('Assets API', function () {
   });
 
   it('POST /api/assets does not create an asset with the same id and modified date', async function () {
-    const body = asset1;
+    const body = cloneForCreate(asset1);
+    // Keep the same modified date to trigger duplicate detection
+    body.stix.modified = asset1.stix.modified;
     await request(app)
       .post('/api/assets')
       .send(body)
@@ -222,10 +228,7 @@ describe('Assets API', function () {
 
   let asset2;
   it('POST /api/assets should create a new version of an asset with a duplicate stix.id but different stix.modified date', async function () {
-    asset2 = _.cloneDeep(asset1);
-    asset2._id = undefined;
-    asset2.__t = undefined;
-    asset2.__v = undefined;
+    asset2 = cloneForCreate(asset1);
     const timestamp = new Date().toISOString();
     asset2.stix.modified = timestamp;
     const body = asset2;
@@ -244,10 +247,7 @@ describe('Assets API', function () {
 
   let asset3;
   it('POST /api/assets should create a new version of an asset with a duplicate stix.id but different stix.modified date', async function () {
-    asset3 = _.cloneDeep(asset1);
-    asset3._id = undefined;
-    asset3.__t = undefined;
-    asset3.__v = undefined;
+    asset3 = cloneForCreate(asset1);
     const timestamp = new Date().toISOString();
     asset3.stix.modified = timestamp;
     const body = asset3;

@@ -37,7 +37,7 @@ class AbstractRepository {
    * @param {*} stixId The unique identifier for the document.
    * @returns {Object} The retrieved document.
    */
-  async retrieveLatestByStixId(stixId) {
+  async retrieveLatestByStixIdLean(stixId) {
     throw new NotImplementedError(this.constructor.name, 'retrieveLatestByStixId');
   }
 

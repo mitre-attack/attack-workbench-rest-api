@@ -1,4 +1,4 @@
-const relationshipsService = require('../../../services/relationships-service');
+const relationshipsService = require('../../../services/stix/relationships-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API

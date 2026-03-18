@@ -1,6 +1,6 @@
 'use strict';
 
-const notesService = require('../services/notes-service');
+const notesService = require('../services/system/notes-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,
@@ -83,17 +83,19 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const noteData = req.body;
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the note
   try {
     const note = await notesService.create(noteData, options);
+    if (options.dryRun) {
+      return res.status(200).send(note);
+    }
     logger.debug('Success: Created note with id ' + note.stix.id);
     return res.status(201).send(note);
   } catch (err) {
@@ -103,28 +105,32 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create note. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create note. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateVersion = async function (req, res) {
-  // Get the data from the request
+exports.updateVersion = async function (req, res, next) {
   const noteData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the note
   try {
-    const note = await notesService.updateVersion(req.params.stixId, req.params.modified, noteData);
+    const note = await notesService.updateVersion(
+      req.params.stixId,
+      req.params.modified,
+      noteData,
+      options,
+    );
     if (!note) {
       return res.status(404).send('Note not found.');
-    } else {
-      logger.debug('Success: Updated note with id ' + note.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(note);
     }
+    logger.debug('Success: Updated note with id ' + note.stix.id);
+    return res.status(200).send(note);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update note. Server error.');
+    return next(err);
   }
 };
 

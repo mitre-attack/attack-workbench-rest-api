@@ -1,6 +1,6 @@
 'use strict';
 
-const recentActivityService = require('../services/recent-activity-service');
+const recentActivityService = require('../services/system/recent-activity-service');
 const logger = require('../lib/logger');
 
 exports.retrieveAll = async function (req, res) {

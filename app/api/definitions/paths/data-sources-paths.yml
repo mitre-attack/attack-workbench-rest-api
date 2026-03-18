@@ -123,12 +123,15 @@ paths:
         If the `stix.id` property is not set, it creates a new data source, generating a STIX id for it.
       tags:
         - 'Data Sources'
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '../components/data-sources.yml#/components/schemas/data-source'
+              # type: object
+              $ref: '../components/data-sources.yml#/components/schemas/data-source' # TODO delete after ADM integration complete
       responses:
         '201':
           description: 'The data source has been successfully created.'
@@ -263,12 +266,14 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '../components/data-sources.yml#/components/schemas/data-source'
+              # type: object
+              $ref: '../components/data-sources.yml#/components/schemas/data-source' # TODO delete after ADM integration complete
       responses:
         '200':
           description: 'The data source was updated.'

@@ -10,6 +10,7 @@ const packageJson = require('../../package.json');
 //   - Restarting the server will force the users to login again
 //   - Sessions cannot be shared across server instances
 // Setting the SESSION_SECRET environment variable will override this generated value
+
 function generateSecret() {
   const stringBase = 'base64';
   const byteLength = 48;
@@ -200,6 +201,20 @@ function loadConfig() {
         default: './app/api/definitions/openapi.yml',
       },
     },
+    validateRequests: {
+      withAttackDataModel: {
+        doc: 'Enable validation of POST and PUT request bodies using the ATT&CK Data Model',
+        format: Boolean,
+        default: false,
+        env: 'VALIDATE_WITH_ADM_SCHEMAS',
+      },
+      withOpenApi: {
+        doc: 'Enable validation of POST and PUT request bodies using the legacy OpenAPI YAML-based validation schemas',
+        format: Boolean,
+        default: true,
+        env: 'VALIDATE_WITH_LEGACY_SCHEMAS',
+      },
+    },
     collectionIndex: {
       defaultInterval: {
         doc: 'How often collection indexes should check for updates (in seconds). Only applies to new indexes added to the REST API, does not affect existing collection indexes',
@@ -225,10 +240,15 @@ function loadConfig() {
       },
     },
     scheduler: {
-      checkWorkbenchInterval: {
+      syncCollectionIndexesCron: {
         doc: 'Sets the interval in seconds for starting the scheduler.',
-        default: 10,
-        env: 'CHECK_WORKBENCH_INTERVAL',
+        default: '* * * * *', // every minute
+        env: 'SYNC_COLLECTION_INDEXES_CRON',
+      },
+      checkWipAttackIdsCron: {
+        doc: 'Cron pattern for checking WIP objects with ATT&CK IDs (e.g., "0 * * * *" for hourly).',
+        default: '0 * * * *', // every hour
+        env: 'CHECK_WIP_ATTACK_IDS_CRON',
       },
       enableScheduler: {
         format: Boolean,

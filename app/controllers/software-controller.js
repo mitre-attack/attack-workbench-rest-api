@@ -1,6 +1,6 @@
 'use strict';
 
-const softwareService = require('../services/software-service');
+const softwareService = require('../services/stix/software-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,
@@ -94,18 +94,19 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const softwareData = req.body;
-
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the software
   try {
-    const software = await await softwareService.create(softwareData, options);
+    const software = await softwareService.create(softwareData, options);
+    if (options.dryRun) {
+      return res.status(200).send(software);
+    }
     logger.debug('Success: Created software with id ' + software.stix.id);
     return res.status(201).send(software);
   } catch (err) {
@@ -120,37 +121,32 @@ exports.create = async function (req, res) {
         .status(400)
         .send(`Unable to create software, property ${err.propertyName} is not allowed`);
     } else {
-      console.log('create error');
-      console.log(err);
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create software. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const softwareData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
-    // Create the software
     const software = await softwareService.updateFull(
       req.params.stixId,
       req.params.modified,
       softwareData,
+      options,
     );
-
     if (!software) {
       return res.status(404).send('Software not found.');
-    } else {
-      logger.debug('Success: Updated software with id ' + software.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(software);
     }
+    logger.debug('Success: Updated software with id ' + software.stix.id);
+    return res.status(200).send(software);
   } catch (err) {
-    console.log('update full error');
-    console.log(err);
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update software. Server error.');
+    return next(err);
   }
 };
 

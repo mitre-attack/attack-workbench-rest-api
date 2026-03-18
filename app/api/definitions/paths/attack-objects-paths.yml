@@ -119,7 +119,80 @@ paths:
                     - $ref: '../components/marking-definitions.yml#/components/schemas/marking-definition'
                     - $ref: '../components/matrices.yml#/components/schemas/matrix'
                     - $ref: '../components/mitigations.yml#/components/schemas/mitigation'
-                    - $ref: '../components/relationships.yml#/components/schemas/relationship'
                     - $ref: '../components/software.yml#/components/schemas/software'
                     - $ref: '../components/tactics.yml#/components/schemas/tactic'
                     - $ref: '../components/techniques.yml#/components/schemas/technique'
+                    - $ref: '../components/analytics.yml#/components/schemas/analytic'
+                    - $ref: '../components/detection-strategies.yml#/components/schemas/detection-strategy'
+                    - $ref: '../components/assets.yml#/components/schemas/asset'
+                    - $ref: '../components/campaigns.yml#/components/schemas/campaign'
+                    - $ref: '../components/data-components.yml#/components/schemas/data-component'
+                    - $ref: '../components/data-sources.yml#/components/schemas/data-source'
+
+  /api/attack-objects/attack-id/next:
+    get:
+      summary: 'Get the next available ATT&CK ID for a STIX type'
+      operationId: 'attack-object-get-next-attack-id'
+      description: |
+        This endpoint generates the next available ATT&CK ID for a given STIX type.
+        This is useful for previewing what ID will be assigned before creating a new object.
+      tags:
+        - 'ATT&CK Objects'
+      parameters:
+        - name: type
+          in: query
+          required: true
+          description: |
+            The STIX type for which to generate an ATT&CK ID.
+            Must be a type that supports ATT&CK IDs.
+          schema:
+            type: string
+            enum:
+              - x-mitre-tactic
+              - attack-pattern
+              - intrusion-set
+              - malware
+              - tool
+              - course-of-action
+              - x-mitre-data-source
+              - x-mitre-data-component
+              - x-mitre-asset
+              - campaign
+              - x-mitre-detection-strategy
+              - x-mitre-analytic
+          example: 'x-mitre-tactic'
+        - name: parentRef
+          in: query
+          required: false
+          description: |
+            The STIX ID of the parent technique (required for generating subtechnique IDs).
+            Only applicable when type is 'attack-pattern' and you want a subtechnique ID.
+          schema:
+            type: string
+          example: 'attack-pattern--12345678-1234-1234-1234-123456789abc'
+      responses:
+        '200':
+          description: 'The next available ATT&CK ID for the specified type.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attack_id:
+                    type: string
+                    description: 'The next available ATT&CK ID'
+                    example: 'TA0042'
+        '400':
+          description: 'Bad request - missing or invalid type parameter, or type does not support ATT&CK IDs'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'Missing required query parameter: type'
+        '500':
+          description: 'Server error - unable to generate ATT&CK ID'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'Unable to generate next ATT&CK ID. Server error.'

@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -43,6 +43,10 @@ describe('Mitigations API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -196,10 +200,7 @@ describe('Mitigations API', function () {
 
   let mitigation2;
   it('POST /api/mitigations should create a new version of a mitigation with a duplicate stix.id but different stix.modified date', async function () {
-    mitigation2 = _.cloneDeep(mitigation1);
-    mitigation2._id = undefined;
-    mitigation2.__t = undefined;
-    mitigation2.__v = undefined;
+    mitigation2 = cloneForCreate(mitigation1);
     const timestamp = new Date().toISOString();
     mitigation2.stix.modified = timestamp;
     const body = mitigation2;
@@ -218,10 +219,7 @@ describe('Mitigations API', function () {
 
   let mitigation3;
   it('POST /api/mitigations should create a new version of a mitigation with a duplicate stix.id but different stix.modified date', async function () {
-    mitigation3 = _.cloneDeep(mitigation1);
-    mitigation3._id = undefined;
-    mitigation3.__t = undefined;
-    mitigation3.__v = undefined;
+    mitigation3 = cloneForCreate(mitigation1);
     const timestamp = new Date().toISOString();
     mitigation3.stix.modified = timestamp;
     const body = mitigation3;

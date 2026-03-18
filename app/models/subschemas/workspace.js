@@ -8,6 +8,21 @@ const collectionVersion = {
 };
 const collectionVersionSchema = new mongoose.Schema(collectionVersion, { _id: false });
 
+const embedddedRelationship = {
+  stix_id: { type: String, required: true },
+  attack_id: String, // Immutable, server-generated identifier - safe to denormalize
+  // Note: 'name' field removed - names are mutable and should be fetched on read
+  // Services that need names should fetch the full document using stix_id
+  direction: {
+    type: String,
+    // inbound: The embedded relationship points TO this document (I am referenced)
+    // outbound: The embedded relationship points FROM this document (I reference another)
+    enum: ['inbound', 'outbound'],
+    required: true,
+  },
+};
+const embeddedRelationshipSchema = new mongoose.Schema(embedddedRelationship, { _id: false });
+
 /**
  * Workspace property definition for most object types
  */
@@ -15,12 +30,13 @@ module.exports.common = {
   workflow: {
     state: {
       type: String,
-      enum: ['work-in-progress', 'awaiting-review', 'reviewed', 'static'],
+      enum: ['work-in-progress', 'awaiting-review', 'reviewed', 'static', 'draft'],
     },
     created_by_user_account: String,
   },
   attack_id: String,
   collections: [collectionVersionSchema],
+  embedded_relationships: { type: [embeddedRelationshipSchema] },
 };
 
 // x-mitre-collection workspace structure

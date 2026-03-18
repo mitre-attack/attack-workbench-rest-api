@@ -1,7 +1,7 @@
 'use strict';
 
 const superagent = require('superagent');
-const authenticationService = require('../services/authentication-service');
+const authenticationService = require('../services/system/authentication-service');
 
 /**
  * Send an HTTP GET request to the provided URL, including the appropriate Authorization header

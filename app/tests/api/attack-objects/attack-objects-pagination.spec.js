@@ -1,4 +1,4 @@
-const techniquesService = require('../../../services/techniques-service');
+const techniquesService = require('../../../services/stix/techniques-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API

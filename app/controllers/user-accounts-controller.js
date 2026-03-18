@@ -1,11 +1,10 @@
 'use strict';
 
-const userAccountsService = require('../services/user-accounts-service');
+const userAccountsService = require('../services/system/user-accounts-service');
 const logger = require('../lib/logger');
 const config = require('../config/config');
-const { BadlyFormattedParameterError, DuplicateEmailError } = require('../exceptions');
 
-exports.retrieveAll = async function (req, res) {
+exports.retrieveAll = async function (req, res, next) {
   const options = {
     offset: req.query.offset || 0,
     limit: req.query.limit || 0,
@@ -28,14 +27,11 @@ exports.retrieveAll = async function (req, res) {
     }
     return res.status(200).send(results);
   } catch (err) {
-    console.log('retrieveall');
-    console.log(err);
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get user accounts. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveById = async function (req, res) {
+exports.retrieveById = async function (req, res, next) {
   const options = {
     includeStixIdentity: req.query.includeStixIdentity,
   };
@@ -49,17 +45,11 @@ exports.retrieveById = async function (req, res) {
       return res.status(200).send(userAccount);
     }
   } catch (err) {
-    if (err instanceof BadlyFormattedParameterError) {
-      logger.warn('Badly formatted user account id: ' + req.params.id);
-      return res.status(400).send('User account id is badly formatted.');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to get user account. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   // Get the data from the request
   const userAccountData = req.body;
 
@@ -75,19 +65,11 @@ exports.create = async function (req, res) {
     logger.debug(`Success: Created user account with id ${userAccount.id}`);
     return res.status(201).send(userAccount);
   } catch (err) {
-    if (err instanceof DuplicateEmailError) {
-      logger.warn(`Unable to create user account, duplicate email: ${userAccountData.email}`);
-      return res.status(400).send('Duplicate email');
-    } else {
-      console.log('create');
-      console.log(err);
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create user account. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.updateFullAsync = async function (req, res) {
+exports.updateFullAsync = async function (req, res, next) {
   try {
     // Create the technique
     const userAccount = await userAccountsService.updateFull(req.params.id, req.body);
@@ -98,14 +80,11 @@ exports.updateFullAsync = async function (req, res) {
       return res.status(200).send(userAccount);
     }
   } catch (err) {
-    console.log('updatefullasync');
-    console.log(err);
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update user account. Server error.');
+    next(err);
   }
 };
 
-exports.updateFull = async function (req, res) {
+exports.updateFull = async function (req, res, next) {
   // Create the technique
   try {
     const userAccount = await userAccountsService.updateFull(req.params.id, req.body);
@@ -116,12 +95,11 @@ exports.updateFull = async function (req, res) {
       return res.status(200).send(userAccount);
     }
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update user account. Server error.');
+    next(err);
   }
 };
 
-exports.deleteAsync = async function (req, res) {
+exports.deleteAsync = async function (req, res, next) {
   try {
     const userAccount = await userAccountsService.delete(req.params.id);
     if (!userAccount) {
@@ -131,14 +109,11 @@ exports.deleteAsync = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    console.log('deleteasync');
-    console.log(err);
-    logger.error('Delete user account failed. ' + err);
-    return res.status(500).send('Unable to delete user account. Server error.');
+    next(err);
   }
 };
 
-exports.delete = async function (req, res) {
+exports.delete = async function (req, res, next) {
   try {
     const userAccount = await userAccountsService.delete(req.params.id);
     if (!userAccount) {
@@ -148,14 +123,11 @@ exports.delete = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    console.log('delete');
-    console.log(err);
-    logger.error('Delete user account failed. ' + err);
-    return res.status(500).send('Unable to delete user account. Server error.');
+    next(err);
   }
 };
 
-exports.register = async function (req, res) {
+exports.register = async function (req, res, next) {
   // The function supports self-registration of a logged in user
 
   if (config.userAuthn.mechanism === 'anonymous') {
@@ -188,19 +160,11 @@ exports.register = async function (req, res) {
     logger.debug(`Success: Registed user account with id ${userAccount.id}`);
     return res.status(201).send(userAccount);
   } catch (err) {
-    console.log('register');
-    console.log(err);
-    if (err.message === userAccountsService.errors.duplicateEmail) {
-      logger.warn(`Unable to register user account, duplicate email: ${userAccountData.email}`);
-      return res.status(400).send('Duplicate email');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to register user account. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.retrieveTeamsByUserId = async function (req, res) {
+exports.retrieveTeamsByUserId = async function (req, res, next) {
   const options = {
     offset: req.query.offset || 0,
     limit: req.query.limit || 0,
@@ -220,9 +184,6 @@ exports.retrieveTeamsByUserId = async function (req, res) {
     }
     return res.status(200).send(results);
   } catch (err) {
-    console.log('retrieveTeamsByUserId');
-    console.log(err);
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get teams. Server error.');
+    next(err);
   }
 };

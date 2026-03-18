@@ -58,6 +58,7 @@ const request = require('supertest');
 const { expect } = require('expect');
 // const fs = require('fs');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -463,6 +464,10 @@ describe('STIX Bundles New Specification API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

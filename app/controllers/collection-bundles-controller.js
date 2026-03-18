@@ -1,6 +1,6 @@
 'use strict';
 
-const collectionBundlesService = require('../services/collection-bundles-service');
+const collectionBundlesService = require('../services/stix/collection-bundles-service');
 const logger = require('../lib/logger');
 
 const availableForceImportParameters = [

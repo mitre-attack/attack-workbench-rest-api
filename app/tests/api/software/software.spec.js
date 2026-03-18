@@ -7,6 +7,7 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -59,6 +60,10 @@ describe('Software API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -240,10 +245,7 @@ describe('Software API', function () {
 
   let software2;
   it('POST /api/software should create a new version of a software with a duplicate stix.id but different stix.modified date', async function () {
-    software2 = _.cloneDeep(software1);
-    software2._id = undefined;
-    software2.__t = undefined;
-    software2.__v = undefined;
+    software2 = cloneForCreate(software1);
     const timestamp = new Date().toISOString();
     software2.stix.modified = timestamp;
     const body = software2;
@@ -327,10 +329,7 @@ describe('Software API', function () {
 
   let software3;
   it('POST /api/software should create a new version of a software with a duplicate stix.id but different stix.modified date', async function () {
-    software3 = _.cloneDeep(software1);
-    software3._id = undefined;
-    software3.__t = undefined;
-    software3.__v = undefined;
+    software3 = cloneForCreate(software1);
     const timestamp = new Date().toISOString();
     software3.stix.modified = timestamp;
     const body = software3;

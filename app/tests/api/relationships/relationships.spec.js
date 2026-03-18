@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -52,6 +52,10 @@ describe('Relationships API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -195,10 +199,7 @@ describe('Relationships API', function () {
 
   let relationship1b;
   it('POST /api/relationships should create a new version of a relationship with a duplicate stix.id but different stix.modified date', async function () {
-    relationship1b = _.cloneDeep(relationship1a);
-    relationship1b._id = undefined;
-    relationship1b.__t = undefined;
-    relationship1b.__v = undefined;
+    relationship1b = cloneForCreate(relationship1a);
     const timestamp = new Date().toISOString();
     relationship1b.stix.modified = timestamp;
     const body = relationship1b;
@@ -217,10 +218,7 @@ describe('Relationships API', function () {
 
   let relationship1c;
   it('POST /api/relationships should create a new version of a relationship with a duplicate stix.id but different stix.modified date', async function () {
-    relationship1c = _.cloneDeep(relationship1a);
-    relationship1c._id = undefined;
-    relationship1c.__t = undefined;
-    relationship1c.__v = undefined;
+    relationship1c = cloneForCreate(relationship1a);
     const timestamp = new Date().toISOString();
     relationship1c.stix.modified = timestamp;
     const body = relationship1c;
@@ -366,6 +364,68 @@ describe('Relationships API', function () {
     expect(relationship2).toBeDefined();
   });
 
+  let relationship3a;
+  it('POST /api/relationships creates a parallel relationship', async function () {
+    const timestamp = new Date().toISOString();
+    initialObjectData.stix.created = timestamp;
+    initialObjectData.stix.modified = timestamp;
+    initialObjectData.stix.source_ref = sourceRef2;
+    initialObjectData.stix.target_ref = targetRef2;
+    const body = initialObjectData;
+    const res = await request(app)
+      .post('/api/relationships')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    // We expect to get the created relationship
+    relationship3a = res.body;
+    expect(relationship3a).toBeDefined();
+  });
+
+  let relationship3b;
+  it('POST /api/relationships creates a parallel relationship with a different description', async function () {
+    const timestamp = new Date().toISOString();
+    initialObjectData.stix.created = timestamp;
+    initialObjectData.stix.modified = timestamp;
+    initialObjectData.stix.source_ref = sourceRef2;
+    initialObjectData.stix.target_ref = targetRef2;
+    initialObjectData.stix.description =
+      'This is a different description with a URL that it should not have (https://attack.mitre.org/foo/bar).';
+    const body = initialObjectData;
+    const res = await request(app)
+      .post('/api/relationships')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    // We expect to get the created relationship
+    relationship3b = res.body;
+    expect(relationship3b).toBeDefined();
+  });
+
+  it('GET /api/reports/parallel-relationships returns the parallel relationships', async function () {
+    const res = await request(app)
+      .get('/api/reports/parallel-relationships')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    // console.log(res.body);
+    // We expect to get a mapping of relationship key -> list of three parallel relationships
+    const parallelRelationships = res.body;
+    expect(parallelRelationships).toBeDefined();
+    const pRelationships = Object.values(parallelRelationships)[0];
+    expect(Array.isArray(pRelationships)).toBe(true);
+    expect(pRelationships.length).toBe(3);
+    expect(pRelationships[0].stix.source_ref).toBe(sourceRef2);
+  });
+
   it('GET /api/relationships returns the (latest) relationship matching a source_ref', async function () {
     const res = await request(app)
       .get('/api/relationships?sourceRef=' + sourceRef1)
@@ -486,6 +546,30 @@ describe('Relationships API', function () {
     await request(app)
       .delete(
         '/api/relationships/' + relationship2.stix.id + '/modified/' + relationship2.stix.modified,
+      )
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('DELETE /api/relationships should delete the fourth relationship', async function () {
+    await request(app)
+      .delete(
+        '/api/relationships/' +
+          relationship3a.stix.id +
+          '/modified/' +
+          relationship3a.stix.modified,
+      )
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('DELETE /api/relationships should delete the fifth relationship', async function () {
+    await request(app)
+      .delete(
+        '/api/relationships/' +
+          relationship3b.stix.id +
+          '/modified/' +
+          relationship3b.stix.modified,
       )
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);

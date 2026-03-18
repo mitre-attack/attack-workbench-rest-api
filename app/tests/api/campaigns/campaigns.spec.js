@@ -1,12 +1,13 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
+
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const Campaign = require('../../../models/campaign-model');
-const markingDefinitionService = require('../../../services/marking-definitions-service');
-const systemConfigurationService = require('../../../services/system-configuration-service');
+const markingDefinitionService = require('../../../services/stix/marking-definitions-service');
+const systemConfigurationService = require('../../../services/system/system-configuration-service');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
@@ -85,6 +86,10 @@ describe('Campaigns API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Disable ADM validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -124,7 +129,7 @@ describe('Campaigns API', function () {
     const timestamp = new Date().toISOString();
     initialObjectData.stix.created = timestamp;
     initialObjectData.stix.modified = timestamp;
-    const body = initialObjectData;
+    const body = cloneForCreate(initialObjectData);
     const res = await request(app)
       .post('/api/campaigns')
       .send(body)
@@ -233,7 +238,7 @@ describe('Campaigns API', function () {
   });
 
   it('POST /api/campaigns does not create a campaign with the same id and modified date', async function () {
-    const body = campaign1;
+    const body = cloneForCreate(campaign1);
     await request(app)
       .post('/api/campaigns')
       .send(body)
@@ -249,10 +254,7 @@ describe('Campaigns API', function () {
       'This is the second default marking definition';
     defaultMarkingDefinition2 = await addDefaultMarkingDefinition(markingDefinitionData);
 
-    campaign2 = _.cloneDeep(campaign1);
-    campaign2._id = undefined;
-    campaign2.__t = undefined;
-    campaign2.__v = undefined;
+    campaign2 = cloneForCreate(campaign1);
     const timestamp = new Date().toISOString();
     campaign2.stix.modified = timestamp;
     campaign2.stix.description = 'This is a new version of a campaign. Green.';
@@ -349,10 +351,7 @@ describe('Campaigns API', function () {
 
   let campaign3;
   it('POST /api/campaigns should create a new campaign with a different stix.id', async function () {
-    const campaign = _.cloneDeep(initialObjectData);
-    campaign._id = undefined;
-    campaign.__t = undefined;
-    campaign.__v = undefined;
+    const campaign = cloneForCreate(initialObjectData);
     campaign.stix.id = undefined;
     const timestamp = new Date().toISOString();
     campaign.stix.created = timestamp;

@@ -4,6 +4,9 @@ class CustomError extends Error {
   constructor(message, options = {}) {
     super(message);
 
+    // Set the error name to the class name
+    this.name = this.constructor.name;
+
     // Apply options (if defined) to the error object
     for (const key in options) {
       if (Object.prototype.hasOwnProperty.call(options, key)) {
@@ -169,6 +172,77 @@ class InvalidTypeError extends CustomError {
   }
 }
 
+class ImmutablePropertyError extends CustomError {
+  constructor(propertyName, options) {
+    super(`Cannot modify immutable property: ${propertyName}`, options);
+  }
+}
+
+class InvalidPostOperationError extends CustomError {
+  constructor(options) {
+    super('Cannot set the following keys:', options);
+  }
+}
+
+class ValidationError extends CustomError {
+  constructor(message = 'Validation failed', options) {
+    super(message, options);
+  }
+}
+
+class SchemaValidationError extends CustomError {
+  constructor(schemaName, zodError, options = {}) {
+    const errorDetails = zodError.errors
+      .map((err) => `${err.path.join('.')}: ${err.message}`)
+      .join('; ');
+
+    super(`Schema validation failed for ${schemaName}: ${errorDetails}`, {
+      ...options,
+      zodError,
+      schemaName,
+    });
+  }
+}
+
+class AlreadyReleasedError extends CustomError {
+  constructor(version, options) {
+    super(`This snapshot has already been tagged as version ${version}`, options);
+  }
+}
+
+class InvalidVersionError extends CustomError {
+  constructor(message, options) {
+    super(message || 'Invalid version', options);
+  }
+}
+
+class ReleaseConflictError extends CustomError {
+  constructor(message, options) {
+    super(message || 'Release conflict: promotion aborted due to conflicting objects', options);
+  }
+}
+
+class NoTaggedSnapshotsError extends CustomError {
+  constructor(trackId, options) {
+    super(`Component track ${trackId} has no tagged snapshots`, options);
+  }
+}
+
+class InvalidComponentTypeError extends CustomError {
+  constructor(trackId, options) {
+    super(
+      `Component track ${trackId} must be a standard track (virtual nesting is not allowed)`,
+      options,
+    );
+  }
+}
+
+class TrackNotFoundError extends CustomError {
+  constructor(trackId, options) {
+    super(`Release track ${trackId} not found`, options);
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -179,6 +253,22 @@ module.exports = {
   BadlyFormattedParameterError,
   InvalidQueryStringParameterError,
   CannotUpdateStaticObjectError,
+  ImmutablePropertyError,
+  InvalidPostOperationError,
+
+  //** Validation errors */
+  ValidationError,
+  SchemaValidationError,
+
+  //** Version control errors */
+  AlreadyReleasedError,
+  InvalidVersionError,
+
+  //** Release track errors */
+  ReleaseConflictError,
+  NoTaggedSnapshotsError,
+  InvalidComponentTypeError,
+  TrackNotFoundError,
 
   //** Database-related errors */
   DuplicateIdError,

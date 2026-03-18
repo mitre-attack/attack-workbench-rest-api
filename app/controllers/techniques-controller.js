@@ -1,6 +1,6 @@
 'use strict';
 
-const techniquesService = require('../services/techniques-service');
+const techniquesService = require('../services/stix/techniques-service');
 const logger = require('../lib/logger');
 const {
   BadlyFormattedParameterError,
@@ -89,20 +89,23 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
-  const techniqueData = req.body;
+exports.create = async function (req, res, next) {
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    parentTechniqueId: req.query.parentTechniqueId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the technique
   try {
-    const technique = await techniquesService.create(techniqueData, options);
+    const result = await techniquesService.create(req.body, options);
 
-    logger.debug('Success: Created technique with id ' + technique.stix.id);
-    return res.status(201).send(technique);
+    if (options.dryRun) {
+      return res.status(200).send(result);
+    }
+
+    logger.debug('Success: Created technique with id ' + result.stix.id);
+    return res.status(201).send(result);
   } catch (err) {
     if (err instanceof DuplicateIdError) {
       logger.warn('Duplicate stix.id and stix.modified');
@@ -110,32 +113,33 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create technique. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create technique. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
-  const techniqueData = req.body;
+exports.updateFull = async function (req, res, next) {
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
-    // Create the technique
-    const technique = await techniquesService.updateFull(
+    const result = await techniquesService.updateFull(
       req.params.stixId,
       req.params.modified,
-      techniqueData,
+      req.body,
+      options,
     );
-    if (!technique) {
+    if (!result) {
       return res.status(404).send('Technique not found.');
-    } else {
-      logger.debug('Success: Updated technique with id ' + technique.stix.id);
-      return res.status(200).send(technique);
     }
+
+    if (options.dryRun) {
+      return res.status(200).send(result);
+    }
+
+    logger.debug('Success: Updated technique with id ' + result.stix.id);
+    return res.status(200).send(result);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update technique. Server error.');
+    return next(err);
   }
 };
 

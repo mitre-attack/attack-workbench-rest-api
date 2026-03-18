@@ -1,6 +1,6 @@
 'use strict';
 
-const attackObjectsService = require('../services/attack-objects-service');
+const attackObjectsService = require('../services/stix/attack-objects-service');
 const logger = require('../lib/logger');
 
 exports.retrieveAll = async function (req, res) {
@@ -32,5 +32,34 @@ exports.retrieveAll = async function (req, res) {
   } catch (err) {
     logger.error('Failed with error: ' + err);
     return res.status(500).send('Unable to get ATT&CK objects. Server error.');
+  }
+};
+
+exports.getNextAttackId = async function (req, res) {
+  // Validate required query parameter
+  if (!req.query.type) {
+    return res.status(400).send('Missing required query parameter: type');
+  }
+
+  const stixType = req.query.type;
+  const parentRef = req.query.parentRef;
+
+  // Validate parentRef for subtechniques
+  if (parentRef && stixType !== 'attack-pattern') {
+    return res.status(400).send('parentRef parameter is only valid for attack-pattern type');
+  }
+
+  try {
+    const nextAttackId = await attackObjectsService.getNextAttackId(stixType, parentRef);
+
+    if (!nextAttackId) {
+      return res.status(400).send(`STIX type '${stixType}' does not support ATT&CK IDs`);
+    }
+
+    logger.debug(`Success: Generated next ATT&CK ID ${nextAttackId} for type ${stixType}`);
+    return res.status(200).send({ attack_id: nextAttackId });
+  } catch (err) {
+    logger.error('Failed to generate next ATT&CK ID with error: ' + err);
+    return res.status(500).send('Unable to generate next ATT&CK ID. Server error.');
   }
 };

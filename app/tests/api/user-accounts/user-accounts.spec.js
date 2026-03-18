@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { expect } = require('expect');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -8,7 +9,7 @@ const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const UserAccount = require('../../../models/user-account-model');
 const Team = require('../../../models/team-model');
-const teamsService = require('../../../services/teams-service');
+const teamsService = require('../../../services/system/teams-service');
 
 const login = require('../../shared/login');
 
@@ -36,6 +37,10 @@ describe('User Accounts API', function () {
     // Wait until the indexes are created
     await UserAccount.init();
     await Team.init();
+
+    // Disable validation for tests
+    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -211,7 +216,7 @@ describe('User Accounts API', function () {
       .send(body)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
-      .expect(400);
+      .expect(409);
   });
 
   it('DELETE /api/user-accounts deletes a user account', async function () {
