@@ -53,7 +53,7 @@ exports.requestValidation = function (err, req, res, next) {
     logger.warn('Request failed validation');
     try {
       logger.info(JSON.stringify(err));
-    } catch (e) {
+    } catch {
       logger.info(err.message);
     }
     return res.status(err.status).send(err.message);
