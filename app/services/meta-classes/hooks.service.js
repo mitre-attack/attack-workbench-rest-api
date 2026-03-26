@@ -137,6 +137,52 @@ class ServiceWithHooks {
   async afterDeleteVersionById(_deletedDocument) {
     /// Default: no-op
   }
+
+  /** ******************************** REVOKE ******************************** */
+
+  /**
+   * Lifecycle hook: Called before revoke() processes the revocation
+   * Subclasses can override to validate or prepare data
+   * @param {object} _objectA - The object being revoked
+   * @param {object} _objectB - The revoking object
+   * @param {object} _options - Revocation options
+   */
+  async beforeRevoke(_objectA, _objectB, _options) {
+    // Default: no-op
+  }
+
+  /**
+   * Lifecycle hook: Called after revoke() completes
+   * Subclasses can override to handle post-revocation logic
+   * @param {object} _revokedDocument - The revoked document
+   * @param {object} _objectB - The revoking object
+   * @param {object} _options - Revocation options
+   */
+  async afterRevoke(_revokedDocument, _objectB, _options) {
+    // Default: no-op
+  }
+
+  /**
+   * Emit event after document revocation
+   * @param {object} revokedDocument - The revoked document
+   * @param {object} revokingDocument - The revoking document
+   * @param {object} options - Revocation options
+   */
+  async emitRevokedEvent(revokedDocument, revokingDocument, options) {
+    const eventName = `${this.type}::revoked`;
+
+    logger.info(`Emitting event '${eventName}' for ${revokedDocument.stix.id}`);
+
+    await EventBus.emit(eventName, {
+      stixId: revokedDocument.stix.id,
+      revokedDocument: revokedDocument.toObject ? revokedDocument.toObject() : revokedDocument,
+      revokingDocument: revokingDocument.toObject ? revokingDocument.toObject() : revokingDocument,
+      type: this.type,
+      options,
+    });
+
+    logger.info(`Event '${eventName}' emission complete`);
+  }
 }
 
 module.exports = ServiceWithHooks;
