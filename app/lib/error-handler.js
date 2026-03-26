@@ -31,6 +31,8 @@ const {
   InvalidPostOperationError,
   ValidationError,
   DefaultMarkingDefinitionsNotFoundError,
+  AlreadyRevokedError,
+  SelfRevocationError,
   AlreadyReleasedError,
   InvalidVersionError,
   ReleaseConflictError,
@@ -93,6 +95,7 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof InvalidTypeError ||
     err instanceof PropertyNotAllowedError ||
     err instanceof CannotUpdateStaticObjectError ||
+    err instanceof SelfRevocationError ||
     err instanceof BadRequestError ||
     err instanceof ValidationError ||
     err instanceof InvalidVersionError ||
@@ -121,6 +124,7 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof DuplicateIdError ||
     err instanceof DuplicateEmailError ||
     err instanceof DuplicateNameError ||
+    err instanceof AlreadyRevokedError ||
     err instanceof AlreadyReleasedError ||
     err instanceof ReleaseConflictError
   ) {
