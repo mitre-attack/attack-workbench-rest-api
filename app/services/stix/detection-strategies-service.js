@@ -44,7 +44,10 @@ class DetectionStrategiesService extends BaseService {
    * Detects if this is a new version and tracks removed relationships
    */
   async beforeCreate(data) {
-    this._assertAnalyticRefsAreUnique(data);
+    const refs = data?.stix?.x_mitre_analytic_refs;
+    if (Array.isArray(refs)) {
+      this._assertAnalyticRefsAreUnique(data);
+    }
 
     // Initialize workspace if not present
     if (!data.workspace) {
@@ -167,7 +170,10 @@ class DetectionStrategiesService extends BaseService {
    */
   // eslint-disable-next-line no-unused-vars
   async beforeUpdate(stixId, stixModified, data, existingDocument, options) {
-    this._assertAnalyticRefsAreUnique(data);
+    const refs = data?.stix?.x_mitre_analytic_refs;
+    if (Array.isArray(refs)) {
+      this._assertAnalyticRefsAreUnique(data);
+    }
 
     const oldAnalyticRefs = existingDocument.stix?.x_mitre_analytic_refs || [];
     const newAnalyticRefs = data.stix?.x_mitre_analytic_refs || [];
