@@ -85,6 +85,19 @@ module.exports = Object.freeze({
   ASSET_UPDATED: 'x-mitre-asset::updated',
   ASSET_DELETED: 'x-mitre-asset::deleted',
 
+  // Revocation Events
+  ATTACK_PATTERN_REVOKED: 'attack-pattern::revoked',
+  TACTIC_REVOKED: 'x-mitre-tactic::revoked',
+  COURSE_OF_ACTION_REVOKED: 'course-of-action::revoked',
+  INTRUSION_SET_REVOKED: 'intrusion-set::revoked',
+  MALWARE_REVOKED: 'malware::revoked',
+  TOOL_REVOKED: 'tool::revoked',
+  CAMPAIGN_REVOKED: 'campaign::revoked',
+  DATA_SOURCE_REVOKED: 'x-mitre-data-source::revoked',
+  DATA_COMPONENT_REVOKED: 'x-mitre-data-component::revoked',
+  MATRIX_REVOKED: 'x-mitre-matrix::revoked',
+  ASSET_REVOKED: 'x-mitre-asset::revoked',
+
   // ============================================================================
   // Cross-Document Events
   // Emitted by Manager classes when changes affect multiple documents
