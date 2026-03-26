@@ -176,6 +176,19 @@ exports.deleteById = async function (req, res) {
   }
 };
 
+exports.revoke = async function (req, res, next) {
+  try {
+    const options = {
+      preserveRelationships: req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await techniquesService.revoke(req.params.stixId, req.body, options);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 exports.retrieveTacticsForTechnique = async function (req, res) {
   try {
     const options = {

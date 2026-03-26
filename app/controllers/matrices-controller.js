@@ -168,6 +168,19 @@ exports.deleteById = async function (req, res) {
   }
 };
 
+exports.revoke = async function (req, res, next) {
+  try {
+    const options = {
+      preserveRelationships: req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await matricesService.revoke(req.params.stixId, req.body, options);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 exports.retrieveTechniquesForMatrix = async function (req, res) {
   try {
     const techniquesByTactic = await matricesService.retrieveTechniquesForMatrix(
