@@ -51,8 +51,12 @@ exports.bodyParser = function (err, req, res, next) {
 exports.requestValidation = function (err, req, res, next) {
   if (err.status && err.message) {
     logger.warn('Request failed validation');
-    logger.info(JSON.stringify(err));
-    res.status(err.status).send(err.message);
+    try {
+      logger.info(JSON.stringify(err));
+    } catch (e) {
+      logger.info(err.message);
+    }
+    return res.status(err.status).send(err.message);
   } else {
     next(err);
   }

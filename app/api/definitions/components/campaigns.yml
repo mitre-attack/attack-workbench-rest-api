@@ -17,10 +17,6 @@ components:
         - type: object
           required:
             - name
-            - first_seen
-            - last_seen
-            - x_mitre_first_seen_citation
-            - x_mitre_last_seen_citation
           properties:
             # campaign specific properties
             name:
