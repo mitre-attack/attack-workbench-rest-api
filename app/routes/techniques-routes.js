@@ -41,6 +41,10 @@ router
   );
 
 router
+  .route('/techniques/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), techniquesController.revoke);
+
+router
   .route('/techniques/:stixId/modified/:modified/tactics')
   .get(
     authn.authenticate,

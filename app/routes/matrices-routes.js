@@ -37,6 +37,10 @@ router
   .delete(authn.authenticate, authz.requireRole(authz.admin), matricesController.deleteVersionById);
 
 router
+  .route('/matrices/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), matricesController.revoke);
+
+router
   .route('/matrices/:stixId/modified/:modified/techniques')
   .get(
     authn.authenticate,

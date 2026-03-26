@@ -44,4 +44,8 @@ router
     mitigationsController.deleteVersionById,
   );
 
+router
+  .route('/mitigations/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), mitigationsController.revoke);
+
 module.exports = router;
