@@ -171,7 +171,8 @@ exports.deleteById = async function (req, res) {
 exports.revoke = async function (req, res, next) {
   try {
     const options = {
-      preserveRelationships: req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
+      preserveRelationships:
+        req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
       userAccountId: req.user?.userAccountId,
     };
     const result = await groupsService.revoke(req.params.stixId, req.body, options);
