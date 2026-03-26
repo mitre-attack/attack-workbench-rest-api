@@ -530,9 +530,7 @@ describe('Techniques Revoke API', function () {
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
 
-    const mitigatesRels = relsRes.body.filter(
-      (r) => r.stix.relationship_type === 'mitigates',
-    );
+    const mitigatesRels = relsRes.body.filter((r) => r.stix.relationship_type === 'mitigates');
     expect(mitigatesRels.length).toBe(1);
     expect(mitigatesRels[0].stix.id).toBe(preExistingRel.stix.id);
 
@@ -543,9 +541,7 @@ describe('Techniques Revoke API', function () {
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
 
-    const oldMitigatesRels = origRes.body.filter(
-      (r) => r.stix.relationship_type === 'mitigates',
-    );
+    const oldMitigatesRels = origRes.body.filter((r) => r.stix.relationship_type === 'mitigates');
     expect(oldMitigatesRels.length).toBe(0);
   });
 
