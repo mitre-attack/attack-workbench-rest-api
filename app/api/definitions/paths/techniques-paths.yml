@@ -366,3 +366,56 @@ paths:
                   $ref: '../components/tactics.yml#/components/schemas/tactic'
         '404':
           description: 'A technique with the requested STIX id and modified date was not found.'
+
+  /api/techniques/{stixId}/revoke:
+    post:
+      summary: 'Revoke a technique'
+      operationId: 'technique-revoke'
+      description: |
+        Revokes the technique identified by the stixId path parameter in favor of the revoking object specified in the request body.
+        Optionally transfers relationships from the revoked object to the revoking object.
+      tags:
+        - 'Techniques'
+      parameters:
+        - name: stixId
+          in: path
+          description: 'STIX id of the technique to revoke'
+          required: true
+          schema:
+            type: string
+        - name: preserveRelationships
+          in: query
+          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deletion.'
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revoking
+              properties:
+                revoking:
+                  type: object
+                  required:
+                    - stixId
+                    - modified
+                  properties:
+                    stixId:
+                      type: string
+                      description: 'STIX id of the revoking (replacement) object'
+                    modified:
+                      type: string
+                      description: 'Modified timestamp of the specific version of the revoking object'
+      responses:
+        '200':
+          description: 'The technique was successfully revoked.'
+        '400':
+          description: 'Missing or invalid parameters.'
+        '404':
+          description: 'The technique or revoking object was not found.'
+        '409':
+          description: 'The technique is already revoked.'
