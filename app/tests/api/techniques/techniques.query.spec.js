@@ -25,60 +25,76 @@ async function readJson(path) {
   return JSON.parse(data);
 }
 
-async function configureTechniques(baseTechnique) {
-  const techniques = [];
-  // x_mitre_deprecated,revoked undefined
-  // state undefined
-  const data1 = _.cloneDeep(baseTechnique);
-  techniques.push(data1);
+async function configureAndLoadTechniques(baseTechnique) {
+  // Helper: create a technique from config
+  async function createTechnique(overrides) {
+    const data = _.cloneDeep(baseTechnique);
+    Object.assign(data.stix, overrides.stix || {});
+    if (overrides.workspace) {
+      data.workspace = { ...data.workspace, ...overrides.workspace };
+    }
 
-  // x_mitre_deprecated = false, revoked = false
-  // state = work-in-progress
-  const data2 = _.cloneDeep(baseTechnique);
-  data2.stix.x_mitre_deprecated = false;
-  data2.stix.revoked = false;
-  data2.stix.x_mitre_domains = ['mobile-attack'];
-  data2.stix.x_mitre_platforms.push('platform-3');
-  data2.workspace.workflow = { state: 'work-in-progress' };
-  techniques.push(data2);
+    if (!data.stix.name) {
+      data.stix.name = `attack-pattern-${data.stix.x_mitre_deprecated}-undefined`;
+    }
+    if (!data.stix.created) {
+      const timestamp = new Date().toISOString();
+      data.stix.created = timestamp;
+      data.stix.modified = timestamp;
+    }
 
-  // x_mitre_deprecated = true, revoked = false
-  // state = awaiting-review
-  const data3 = _.cloneDeep(baseTechnique);
-  data3.stix.x_mitre_deprecated = true;
-  data3.stix.revoked = false;
-  data3.workspace.workflow = { state: 'awaiting-review' };
-  techniques.push(data3);
+    return techniquesService.create(data);
+  }
 
-  // x_mitre_deprecated = false, revoked = true
-  // state = awaiting-review
-  const data4 = _.cloneDeep(baseTechnique);
-  data4.stix.x_mitre_deprecated = false;
-  data4.stix.revoked = true;
-  data4.workspace.workflow = { state: 'awaiting-review' };
-  techniques.push(data4);
+  // technique 1: x_mitre_deprecated,revoked undefined, state undefined
+  const technique1 = await createTechnique({});
 
-  // multiple versions, last version has x_mitre_deprecated = true, revoked = true
-  // state = awaiting-review
-  const data5a = _.cloneDeep(baseTechnique);
+  // technique 2: x_mitre_deprecated = false, state = work-in-progress, mobile-attack domain
+  await createTechnique({
+    stix: {
+      x_mitre_deprecated: false,
+      x_mitre_domains: ['mobile-attack'],
+      x_mitre_platforms: [...baseTechnique.stix.x_mitre_platforms, 'platform-3'],
+    },
+    workspace: { workflow: { state: 'work-in-progress' } },
+  });
+
+  // technique 3: x_mitre_deprecated = true, state = awaiting-review
+  await createTechnique({
+    stix: { x_mitre_deprecated: true },
+    workspace: { workflow: { state: 'awaiting-review' } },
+  });
+
+  // technique 4: revoked via the revoke workflow (x_mitre_deprecated = false)
+  // Use technique1 as the revoking object
+  const technique4 = await createTechnique({
+    stix: { x_mitre_deprecated: false },
+    workspace: { workflow: { state: 'awaiting-review' } },
+  });
+  await techniquesService.revoke(technique4.stix.id, {
+    revoking: { stixId: technique1.stix.id, modified: technique1.stix.modified },
+  });
+
+  // technique 5: multiple versions, last version deprecated + revoked
   const id = `attack-pattern--${uuid.v4()}`;
+  const createdTimestamp = new Date().toISOString();
+
+  const data5a = _.cloneDeep(baseTechnique);
   data5a.stix.id = id;
   data5a.stix.name = 'multiple-versions';
   data5a.workspace.workflow = { state: 'awaiting-review' };
-  const createdTimestamp = new Date().toISOString();
   data5a.stix.created = createdTimestamp;
   data5a.stix.modified = createdTimestamp;
-  techniques.push(data5a);
+  await techniquesService.create(data5a);
 
-  await asyncWait(10); // wait so the modified timestamp can change
+  await asyncWait(10);
   const data5b = _.cloneDeep(baseTechnique);
   data5b.stix.id = id;
   data5b.stix.name = 'multiple-versions';
   data5b.workspace.workflow = { state: 'awaiting-review' };
   data5b.stix.created = createdTimestamp;
-  let timestamp = new Date().toISOString();
-  data5b.stix.modified = timestamp;
-  techniques.push(data5b);
+  data5b.stix.modified = new Date().toISOString();
+  await techniquesService.create(data5b);
 
   await asyncWait(10);
   const data5c = _.cloneDeep(baseTechnique);
@@ -86,45 +102,26 @@ async function configureTechniques(baseTechnique) {
   data5c.stix.name = 'multiple-versions';
   data5c.workspace.workflow = { state: 'awaiting-review' };
   data5c.stix.x_mitre_deprecated = true;
-  data5c.stix.revoked = true;
   data5c.stix.created = createdTimestamp;
-  timestamp = new Date().toISOString();
-  data5c.stix.modified = timestamp;
-  techniques.push(data5c);
+  data5c.stix.modified = new Date().toISOString();
+  await techniquesService.create(data5c);
 
-  // x_mitre_deprecated,revoked undefined
-  // state = work-in-progress
-  const data6 = _.cloneDeep(baseTechnique);
-  data6.stix.x_mitre_deprecated = false;
-  data6.stix.revoked = false;
-  data6.workspace.workflow = { state: 'work-in-progress' };
-  techniques.push(data6);
+  // Revoke technique 5 using technique1 as the revoking object
+  await techniquesService.revoke(id, {
+    revoking: { stixId: technique1.stix.id, modified: technique1.stix.modified },
+  });
 
-  // x_mitre_deprecated,revoked undefined
-  // state = reviewed
-  const data7 = _.cloneDeep(baseTechnique);
-  data7.stix.x_mitre_deprecated = false;
-  data7.stix.revoked = false;
-  data7.workspace.workflow = { state: 'reviewed' };
-  techniques.push(data7);
+  // technique 6: x_mitre_deprecated = false, state = work-in-progress
+  await createTechnique({
+    stix: { x_mitre_deprecated: false },
+    workspace: { workflow: { state: 'work-in-progress' } },
+  });
 
-  return techniques;
-}
-
-async function loadTechniques(techniques) {
-  for (const technique of techniques) {
-    if (!technique.stix.name) {
-      technique.stix.name = `attack-pattern-${technique.stix.x_mitre_deprecated}-${technique.stix.revoked}`;
-    }
-
-    if (!technique.stix.created) {
-      const timestamp = new Date().toISOString();
-      technique.stix.created = timestamp;
-      technique.stix.modified = timestamp;
-    }
-
-    await techniquesService.create(technique);
-  }
+  // technique 7: x_mitre_deprecated = false, state = reviewed
+  await createTechnique({
+    stix: { x_mitre_deprecated: false },
+    workspace: { workflow: { state: 'reviewed' } },
+  });
 }
 
 describe('Techniques Query API', function () {
@@ -147,8 +144,7 @@ describe('Techniques Query API', function () {
     app = await require('../../../index').initializeApp();
 
     const baseTechnique = await readJson('./techniques.query.json');
-    const techniques = await configureTechniques(baseTechnique);
-    await loadTechniques(techniques);
+    await configureAndLoadTechniques(baseTechnique);
 
     // Log into the app
     passportCookie = await login.loginAnonymous(app);
