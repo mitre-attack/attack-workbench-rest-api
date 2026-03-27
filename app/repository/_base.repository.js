@@ -87,14 +87,13 @@ class BaseRepository extends AbstractRepository {
       // Get the total count of documents, pre-limit
       const totalCount = await this.model.aggregate(aggregation).count('totalCount').exec();
 
-      if (options.offset) {
-        aggregation.push({ $skip: options.offset });
-      } else {
-        aggregation.push({ $skip: 0 });
-      }
+      // Ensure offset and limit are integers
+      const offsetVal = Number(options.offset);
+      aggregation.push({ $skip: Number.isFinite(offsetVal) && offsetVal > 0 ? offsetVal : 0 });
 
-      if (options.limit) {
-        aggregation.push({ $limit: options.limit });
+      const limitVal = Number(options.limit);
+      if (Number.isFinite(limitVal) && limitVal > 0) {
+        aggregation.push({ $limit: limitVal });
       }
 
       // Aggregation bypasses Mongoose toJSON/toObject transforms, so we
