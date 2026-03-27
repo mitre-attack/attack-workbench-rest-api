@@ -9,7 +9,7 @@ The Release Tracks API uses a Git-inspired versioning strategy that separates tw
 
 This approach allows continuous development while providing stable, versioned releases for publication.
 
-**Note on Terminology:** We use **release track** instead of "collection" to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [02_TERMINOLOGY.md](02_TERMINOLOGY.md) for the complete terminology guide.
+**Note on Terminology:** We use **release track** instead of "collection" to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [terminology.md](terminology.md) for the complete terminology guide.
 
 ## Core Concepts
 

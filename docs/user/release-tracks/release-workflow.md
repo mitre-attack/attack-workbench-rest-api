@@ -6,10 +6,10 @@ This document describes how object workflow states integrate with the release tr
 
 **Key Design Decision:** This system uses **release track-centric status with version pinning** to solve the "STIX freeze" problem. Each release track tracks its own workflow status for objects and pins to specific object versions, allowing the same object to be in different states across different release tracks and enabling work on future releases while current releases are frozen.
 
-**Note on Terminology:** We use **release track** instead of "collection" to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [02_TERMINOLOGY.md](./02_TERMINOLOGY.md) for the complete terminology guide.
+**Note on Terminology:** We use **release track** instead of "collection" to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [terminology.md](./terminology.md) for the complete terminology guide.
 
 **Related Documentation:**
-- [08_MEMBER_SYNC_STRATEGIES.md](./08_MEMBER_SYNC_STRATEGIES.md) - Automatic tracking of new member object revisions
+- [member-sync-strategies.md](../../developer/release-tracks/member-sync-strategies.md) - Automatic tracking of new member object revisions
 
 ## Core Concepts
 
@@ -345,7 +345,7 @@ Keep whichever version has the newer `modified` timestamp.
 
 ##### 4. `abort` (Tagging/Release Operations Only)
 
-[](./05_RELEASE_WORKFLOW.md#4-abort-taggingrelease-operations-only)
+[](./release-workflow.md#4-abort-taggingrelease-operations-only)
 **Only available for `staged_to_members` during tagging/release operations.**
 
 If a conflict occurs during a tagging/release operation (`POST /api/release-tracks/:id/bump`), reject and abort the entire release. The snapshot will NOT be tagged, and no immutable snapshot will be created.
@@ -992,7 +992,7 @@ Set up event handlers for:
 
 Virtual release tracks follow a different workflow since they don't manage objects directly. Instead, they aggregate content from component tracks.
 
-See [04_VIRTUAL_TRACKS.md](04_VIRTUAL_TRACKS.md) for complete virtual track documentation.
+See [virtual-tracks.md](virtual-tracks.md) for complete virtual track documentation.
 
 ### Basic Virtual Track Workflow
 
