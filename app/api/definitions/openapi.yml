@@ -95,6 +95,12 @@ paths:
   /api/techniques/{stixId}/modified/{modified}:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1modified~1{modified}'
 
+  /api/techniques/{stixId}/convert-to-subtechnique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-subtechnique'
+
+  /api/techniques/{stixId}/convert-to-technique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-technique'
+
   /api/techniques/{stixId}/revoke:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1revoke'
 
