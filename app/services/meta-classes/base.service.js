@@ -548,8 +548,21 @@ class BaseService extends ServiceWithHooks {
       if (!data.stix.id) {
         data.stix.id = `${data.stix.type}--${uuid.v4()}`;
       }
+      if (!data.stix.created) {
+        data.stix.created = new Date().toISOString();
+      }
       data.stix.created_by_ref = organizationIdentityRef;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+    }
+
+    // Set modified timestamp if not set by client — set for both new and existing objects
+    if (!data.stix.modified) {
+      data.stix.modified = new Date().toISOString();
+    }
+
+    // Set default spec_version if not provided by client
+    if (!data.stix.spec_version) {
+      data.stix.spec_version = '2.1';
     }
 
     // 3b. Metadata fields

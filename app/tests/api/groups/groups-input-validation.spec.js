@@ -160,7 +160,7 @@ describe('Groups API Input Validation', function () {
   });
 
   executeTests(() => app, 'stix.type', { required: true });
-  executeTests(() => app, 'stix.spec_version', { required: true });
+  executeTests(() => app, 'stix.spec_version', { required: false });
   executeTests(() => app, 'stix.name', { required: true });
   executeTests(() => app, 'stix.description');
   executeTests(() => app, 'stix.x_mitre_modified_by_ref');
