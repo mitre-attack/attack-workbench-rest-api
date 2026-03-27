@@ -9,9 +9,11 @@ Formerly, this workflow was orchestrated by the frontend, which made multiple AP
 To revoke an object, send a POST request to the following endpoint:
 
 ```
-POST /api/objects/:stixId/revoke
+POST /api/:type/:stixId/revoke
 ```
-Where `:stixId` is the STIX ID of the object you want to revoke.
+Where `:stixId` is the STIX ID of the object you want to revoke and `:type` is the type of the object.
+
+e.g., `POST /api/attack-patterns/attack-pattern--00290ac5-551e-44aa-bbd8-c4b913488a6c/revoke`
 
 **Request Body**:
 
