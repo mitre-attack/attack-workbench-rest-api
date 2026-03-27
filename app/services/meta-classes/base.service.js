@@ -691,6 +691,12 @@ class BaseService extends ServiceWithHooks {
     // Compose server-controlled fields from existing document
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
 
+    // Preserve x_mitre_is_subtechnique — changing subtechnique status requires
+    // the dedicated conversion endpoints, not the generic update path.
+    if (document.stix.x_mitre_is_subtechnique !== undefined) {
+      data.stix.x_mitre_is_subtechnique = document.stix.x_mitre_is_subtechnique;
+    }
+
     if (document.workspace?.attack_id) {
       data.workspace = data.workspace || {};
       data.workspace.attack_id = document.workspace.attack_id;
