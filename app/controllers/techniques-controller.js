@@ -190,6 +190,36 @@ exports.revoke = async function (req, res, next) {
   }
 };
 
+exports.convertToSubtechnique = async function (req, res, next) {
+  try {
+    const options = {
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await techniquesService.convertToSubtechnique(
+      req.params.stixId,
+      req.body,
+      options,
+    );
+    logger.debug('Success: Converted technique to subtechnique ' + result.stix.id);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.convertToTechnique = async function (req, res, next) {
+  try {
+    const options = {
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await techniquesService.convertToTechnique(req.params.stixId, options);
+    logger.debug('Success: Converted subtechnique to technique ' + result.stix.id);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
 exports.retrieveTacticsForTechnique = async function (req, res) {
   try {
     const options = {
