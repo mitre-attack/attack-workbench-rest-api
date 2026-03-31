@@ -776,9 +776,9 @@ class BaseService extends ServiceWithHooks {
    *   3. Lifecycle hook: beforeRevoke
    *   4. Mark Object A as revoked (creates a new version via this.create)
    *   5. Create a revoked-by relationship (A → B)
-   *   6. Handle relationships (transfer to B if preserveRelationships, then delete originals)
+   *   6. Handle relationships (transfer to B if preserveRelationships)
    *   7. Lifecycle hook: afterRevoke
-   *   8. Emit revoked event
+   *   8. Emit revoked event (RelationshipsService deprecates original relationships via event listener)
    *   9. Return result
    *
    * @param {string} stixId - The STIX ID of the object to revoke (Object A)
@@ -965,14 +965,6 @@ class BaseService extends ServiceWithHooks {
       }
     }
 
-    // Delete all original relationships referencing Object A (except the revoked-by)
-    const excludeIds = [revokedByRelationship.stix.id];
-    const deleteResult = await relationshipsRepository.deleteManyBySourceOrTarget(
-      objectA.stix.id,
-      excludeIds,
-    );
-    relationshipsSummary.deleted = deleteResult.deletedCount || 0;
-
     // ──────────────────────────────────────────────
     // 7. LIFECYCLE HOOK: afterRevoke
     // ──────────────────────────────────────────────
@@ -981,7 +973,19 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 8. EMIT EVENT
     // ──────────────────────────────────────────────
-    await this.emitRevokedEvent(revokedDocument, objectB, options);
+    // RelationshipsService listens for revoked events and deprecates all relationships
+    // referencing the revoked object (except those in excludeRelationshipIds).
+    // EventBus.emit() awaits all listeners, so deprecation completes before we return.
+    const excludeRelationshipIds = [revokedByRelationship.stix.id];
+    await this.emitRevokedEvent(revokedDocument, objectB, options, { excludeRelationshipIds });
+
+    // Count deprecated relationships via cross-service READ (allowed by architecture)
+    const postRevokeRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
+      objectA.stix.id,
+    );
+    relationshipsSummary.deprecated = postRevokeRelationships.filter(
+      (r) => r.stix.x_mitre_deprecated === true && r.stix.id !== revokedByRelationship.stix.id,
+    ).length;
 
     // ──────────────────────────────────────────────
     // 9. RETURN RESULT

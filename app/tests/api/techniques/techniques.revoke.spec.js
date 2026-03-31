@@ -382,14 +382,18 @@ describe('Techniques Revoke API', function () {
 
     const result = revokeRes.body;
     expect(result.relationshipsSummary.transferred).toBe(1);
-    expect(result.relationshipsSummary.deleted).toBeGreaterThanOrEqual(1);
+    expect(result.relationshipsSummary.deprecated).toBeGreaterThanOrEqual(1);
 
-    // Verify the original relationship was deleted (all versions removed → 404)
-    await request(app)
-      .get(`/api/relationships/${originalRel.stix.id}`)
+    // Verify the original relationship was deprecated (not deleted — history preserved)
+    const relRes2 = await request(app)
+      .get(`/api/relationships/${originalRel.stix.id}?versions=latest&includeDeprecated=true`)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
-      .expect(404);
+      .expect(200);
+
+    const deprecatedRels = relRes2.body;
+    expect(deprecatedRels.length).toBe(1);
+    expect(deprecatedRels[0].stix.x_mitre_deprecated).toBe(true);
 
     // Verify a new relationship was created pointing to technique D
     const allRelsRes = await request(app)
@@ -534,15 +538,28 @@ describe('Techniques Revoke API', function () {
     expect(mitigatesRels.length).toBe(1);
     expect(mitigatesRels[0].stix.id).toBe(preExistingRel.stix.id);
 
-    // Verify the original M1 → E relationship was deleted
+    // Verify the original M1 → E relationship was deprecated (not deleted — history preserved)
     const origRes = await request(app)
-      .get(`/api/relationships?sourceRef=${mitigationM.stix.id}&targetRef=${techniqueE.stix.id}`)
+      .get(
+        `/api/relationships?sourceRef=${mitigationM.stix.id}&targetRef=${techniqueE.stix.id}&includeDeprecated=true`,
+      )
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
 
     const oldMitigatesRels = origRes.body.filter((r) => r.stix.relationship_type === 'mitigates');
-    expect(oldMitigatesRels.length).toBe(0);
+    expect(oldMitigatesRels.length).toBe(1);
+    expect(oldMitigatesRels[0].stix.x_mitre_deprecated).toBe(true);
+
+    // Verify it's excluded from default queries (without includeDeprecated)
+    const defaultRes = await request(app)
+      .get(`/api/relationships?sourceRef=${mitigationM.stix.id}&targetRef=${techniqueE.stix.id}`)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200);
+
+    const defaultRels = defaultRes.body.filter((r) => r.stix.relationship_type === 'mitigates');
+    expect(defaultRels.length).toBe(0);
   });
 
   after(async function () {
