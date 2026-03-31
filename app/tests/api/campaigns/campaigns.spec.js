@@ -153,7 +153,8 @@ describe('Campaigns API', function () {
 
     expect(campaign1.stix.aliases).toBeDefined();
     expect(Array.isArray(campaign1.stix.aliases)).toBe(true);
-    expect(campaign1.stix.aliases.length).toBe(1);
+    expect(campaign1.stix.aliases.length).toBe(2);
+    expect(campaign1.stix.aliases[0]).toBe(campaign1.stix.name);
 
     // object_marking_refs should contain the default marking definition
     expect(campaign1.stix.object_marking_refs).toBeDefined();

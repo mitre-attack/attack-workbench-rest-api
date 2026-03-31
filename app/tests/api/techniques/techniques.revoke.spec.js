@@ -39,7 +39,7 @@ describe('Techniques Revoke API', function () {
     await databaseConfiguration.checkSystemConfiguration();
 
     config.validateRequests.withAttackDataModel = false;
-    config.validateRequests.withOpenApi = false;
+    config.validateRequests.withOpenApi = true;
 
     app = await require('../../../index').initializeApp();
     passportCookie = await login.loginAnonymous(app);
@@ -113,7 +113,7 @@ describe('Techniques Revoke API', function () {
     // techniques collection, resulting in a 404.
     const timestamp = new Date().toISOString();
     const tacticBody = {
-      workspace: { workflow: {} },
+      workspace: { workflow: { state: 'work-in-progress' } },
       stix: {
         name: 'tactic-cross-type',
         spec_version: '2.1',
@@ -350,7 +350,7 @@ describe('Techniques Revoke API', function () {
     // Create a relationship involving technique C
     timestamp = new Date().toISOString();
     const relBody = {
-      workspace: { workflow: {} },
+      workspace: { workflow: { state: 'work-in-progress' } },
       stix: {
         type: 'relationship',
         spec_version: '2.1',
@@ -386,7 +386,7 @@ describe('Techniques Revoke API', function () {
 
     // Verify the original relationship was deprecated (not deleted — history preserved)
     const relRes2 = await request(app)
-      .get(`/api/relationships/${originalRel.stix.id}?versions=latest&includeDeprecated=true`)
+      .get(`/api/relationships/${originalRel.stix.id}?versions=latest`)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
@@ -470,7 +470,7 @@ describe('Techniques Revoke API', function () {
     // Create "mitigates" relationship M1 → E
     timestamp = new Date().toISOString();
     const relME = {
-      workspace: { workflow: {} },
+      workspace: { workflow: { state: 'work-in-progress' } },
       stix: {
         type: 'relationship',
         spec_version: '2.1',
@@ -491,7 +491,7 @@ describe('Techniques Revoke API', function () {
     // Create "mitigates" relationship M1 → F (pre-existing duplicate)
     timestamp = new Date().toISOString();
     const relMF = {
-      workspace: { workflow: {} },
+      workspace: { workflow: { state: 'work-in-progress' } },
       stix: {
         type: 'relationship',
         spec_version: '2.1',
