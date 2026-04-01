@@ -47,11 +47,70 @@ class RelationshipsService extends BaseService {
     }
 
     EventBus.on(
+      EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE,
+      this.handleTechniqueConvertedToSubtechnique.bind(this),
+    );
+
+    EventBus.on(
       EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE,
-      RelationshipsService.handleSubtechniqueConvertedToTechnique.bind(RelationshipsService),
+      this.handleSubtechniqueConvertedToTechnique.bind(this),
     );
 
     logger.info('RelationshipsService: Event listeners initialized');
+  }
+
+  /**
+   * Create a subtechnique-of SRO when a technique is converted to a subtechnique.
+   *
+   * Uses the service instance's create() method (via module.exports singleton)
+   * so that the relationship gets a proper stix.id, server-controlled fields,
+   * and ADM validation — the same path as any user-created relationship.
+   *
+   * @param {Object} payload - Event payload
+   * @param {string} payload.stixId - STIX ID of the converted subtechnique
+   * @param {string} payload.parentStixId - STIX ID of the parent technique
+   * @param {string} [payload.userAccountId] - Authenticated user's account ID
+   */
+  static async handleTechniqueConvertedToSubtechnique(payload) {
+    const { stixId, parentStixId, userAccountId } = payload;
+
+    logger.info(
+      `RelationshipsService: Creating subtechnique-of relationship for ${stixId} -> ${parentStixId}`,
+    );
+
+    try {
+      // Use the singleton instance exported by this module
+      const relationshipsService = module.exports;
+      const now = new Date().toISOString();
+      const createdRelationship = await relationshipsService.create(
+        {
+          workspace: {
+            workflow: { state: 'reviewed' }, // TODO introduce a new workflow state for entities that are never reviewed by users; for now, set to 'reviewed' to ensure they undergo full ADM validation
+          },
+          stix: {
+            type: 'relationship',
+            spec_version: '2.1',
+            relationship_type: 'subtechnique-of',
+            source_ref: stixId,
+            target_ref: parentStixId,
+            created: now,
+            modified: now,
+          },
+        },
+        { userAccountId },
+      );
+
+      logger.info(
+        `RelationshipsService: Created subtechnique-of relationship for ${stixId} -> ${parentStixId}`,
+      );
+
+      return { created: [createdRelationship] };
+    } catch (error) {
+      logger.error(
+        `RelationshipsService: Error creating subtechnique-of relationship for ${stixId}: ${error.message}`,
+      );
+      return { warnings: [`Failed to create subtechnique-of relationship for ${stixId}`] };
+    }
   }
 
   /**
@@ -68,6 +127,9 @@ class RelationshipsService extends BaseService {
 
     logger.info(`RelationshipsService: Deprecating subtechnique-of relationships for ${stixId}`);
 
+    const deprecatedDocs = [];
+    const warnings = [];
+
     try {
       const subtechniqueOfRels = await relationshipsRepository.retrieveAll({
         sourceRef: stixId,
@@ -77,7 +139,6 @@ class RelationshipsService extends BaseService {
         includeDeprecated: false,
       });
 
-      let deprecatedCount = 0;
       for (const rel of subtechniqueOfRels) {
         try {
           const deprecatedVersion = rel.toObject ? rel.toObject() : { ...rel };
@@ -88,24 +149,28 @@ class RelationshipsService extends BaseService {
           deprecatedVersion.stix.x_mitre_deprecated = true;
           deprecatedVersion.stix.modified = new Date().toISOString();
 
-          await relationshipsRepository.save(deprecatedVersion);
-          deprecatedCount++;
+          const saved = await relationshipsRepository.save(deprecatedVersion);
+          deprecatedDocs.push(saved);
         } catch (error) {
           logger.error(
             `RelationshipsService: Error deprecating relationship ${rel.stix?.id}: ${error.message}`,
           );
+          warnings.push(`Failed to deprecate relationship ${rel.stix?.id}`);
         }
       }
 
       logger.info(
-        `RelationshipsService: Deprecated ${deprecatedCount}/${subtechniqueOfRels.length} subtechnique-of relationship(s) for ${stixId}`,
+        `RelationshipsService: Deprecated ${deprecatedDocs.length}/${subtechniqueOfRels.length} subtechnique-of relationship(s) for ${stixId}`,
       );
     } catch (error) {
       logger.error(
         `RelationshipsService: Error handling subtechnique-to-technique conversion for ${stixId}:`,
         error,
       );
+      warnings.push(`Failed to deprecate subtechnique-of relationships for ${stixId}`);
     }
+
+    return { deprecated: deprecatedDocs, warnings };
   }
 
   /**
@@ -121,37 +186,47 @@ class RelationshipsService extends BaseService {
 
     logger.info(`RelationshipsService heard event: object revoked for ${stixId}`);
 
-    const relationships = await relationshipsRepository.retrieveAllBySourceOrTarget(stixId);
+    const deprecatedDocs = [];
+    const warnings = [];
 
-    const toDeprecate = relationships.filter(
-      (rel) => !excludeRelationshipIds.includes(rel.stix.id),
-    );
+    try {
+      const relationships = await relationshipsRepository.retrieveAllBySourceOrTarget(stixId);
 
-    let deprecatedCount = 0;
-    for (const rel of toDeprecate) {
-      try {
-        const relData = rel.toObject ? rel.toObject() : { ...rel };
-        delete relData._id;
-        delete relData.__v;
-        delete relData.__t;
+      const toDeprecate = relationships.filter(
+        (rel) => !excludeRelationshipIds.includes(rel.stix.id),
+      );
 
-        relData.stix.x_mitre_deprecated = true;
-        relData.stix.modified = new Date().toISOString();
+      for (const rel of toDeprecate) {
+        try {
+          const relData = rel.toObject ? rel.toObject() : { ...rel };
+          delete relData._id;
+          delete relData.__v;
+          delete relData.__t;
 
-        await relationshipsRepository.save(relData);
-        deprecatedCount++;
+          relData.stix.x_mitre_deprecated = true;
+          relData.stix.modified = new Date().toISOString();
 
-        logger.info(
-          `Deprecated relationship ${rel.stix.id} (was referencing revoked object ${stixId})`,
-        );
-      } catch (error) {
-        logger.error(`Failed to deprecate relationship ${rel.stix.id}: ${error.message}`);
+          const saved = await relationshipsRepository.save(relData);
+          deprecatedDocs.push(saved);
+
+          logger.info(
+            `Deprecated relationship ${rel.stix.id} (was referencing revoked object ${stixId})`,
+          );
+        } catch (error) {
+          logger.error(`Failed to deprecate relationship ${rel.stix.id}: ${error.message}`);
+          warnings.push(`Failed to deprecate relationship ${rel.stix.id}`);
+        }
       }
+
+      logger.info(
+        `RelationshipsService: deprecated ${deprecatedDocs.length}/${toDeprecate.length} relationships for revoked object ${stixId}`,
+      );
+    } catch (error) {
+      logger.error(`RelationshipsService: Error handling object revoked for ${stixId}:`, error);
+      warnings.push(`Failed to deprecate relationships for revoked object ${stixId}`);
     }
 
-    logger.info(
-      `RelationshipsService: deprecated ${deprecatedCount}/${toDeprecate.length} relationships for revoked object ${stixId}`,
-    );
+    return { deprecated: deprecatedDocs, warnings };
   }
 
   async retrieveAll(options) {
