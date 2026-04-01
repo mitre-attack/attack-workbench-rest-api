@@ -367,6 +367,89 @@ paths:
         '404':
           description: 'A technique with the requested STIX id and modified date was not found.'
 
+  /api/techniques/{stixId}/convert-to-subtechnique:
+    post:
+      summary: 'Convert a technique to a subtechnique'
+      operationId: 'technique-convert-to-subtechnique'
+      description: |
+        Converts the technique identified by the stixId path parameter into a subtechnique
+        of the specified parent technique. This operation:
+        - Generates a new subtechnique-format ATT&CK ID (e.g., T1234.001)
+        - Sets `x_mitre_is_subtechnique` to `true`
+        - Rebuilds the ATT&CK external reference with the new ID and URL
+        - Persists the result as a new version of the object
+
+        The technique must not already be a subtechnique or revoked.
+      tags:
+        - 'Techniques'
+      parameters:
+        - name: stixId
+          in: path
+          description: 'STIX id of the technique to convert'
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - parentTechniqueAttackId
+              properties:
+                parentTechniqueAttackId:
+                  type: string
+                  pattern: '^T\d{4}$'
+                  description: 'ATT&CK ID of the parent technique (e.g., T1234)'
+                  example: 'T1234'
+      responses:
+        '200':
+          description: 'The technique was successfully converted to a subtechnique.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+        '400':
+          description: 'Invalid request. The technique is already a subtechnique, is revoked, or the parent technique does not exist.'
+        '404':
+          description: 'The technique was not found.'
+
+  /api/techniques/{stixId}/convert-to-technique:
+    post:
+      summary: 'Convert a subtechnique to a technique'
+      operationId: 'technique-convert-to-technique'
+      description: |
+        Converts the subtechnique identified by the stixId path parameter into a top-level technique.
+        This operation:
+        - Generates a new technique-format ATT&CK ID (e.g., T1235)
+        - Sets `x_mitre_is_subtechnique` to `false`
+        - Rebuilds the ATT&CK external reference with the new ID and URL
+        - Deprecates any existing subtechnique-of relationships
+        - Persists the result as a new version of the object
+
+        The technique must currently be a subtechnique and must not be revoked.
+      tags:
+        - 'Techniques'
+      parameters:
+        - name: stixId
+          in: path
+          description: 'STIX id of the subtechnique to convert'
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'The subtechnique was successfully converted to a technique.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+        '400':
+          description: 'Invalid request. The object is not a subtechnique or is revoked.'
+        '404':
+          description: 'The technique was not found.'
+
   /api/techniques/{stixId}/revoke:
     post:
       summary: 'Revoke a technique'
@@ -374,6 +457,7 @@ paths:
       description: |
         Revokes the technique identified by the stixId path parameter in favor of the revoking object specified in the request body.
         Optionally transfers relationships from the revoked object to the revoking object.
+        Deprecates all relationships referencing the revoked object.
       tags:
         - 'Techniques'
       parameters:
@@ -385,7 +469,7 @@ paths:
             type: string
         - name: preserveRelationships
           in: query
-          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deletion.'
+          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deprecation.'
           schema:
             type: boolean
             default: false
@@ -413,6 +497,10 @@ paths:
       responses:
         '200':
           description: 'The technique was successfully revoked.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
         '400':
           description: 'Missing or invalid parameters.'
         '404':

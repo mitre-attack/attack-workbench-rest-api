@@ -32,98 +32,69 @@ Specify the `id` and `modified` timestamp for the revoked object in the request 
 
 Optionally, you can set the following query parameter to preserve relationships:
 
-- `preserveRelationships` (boolean): If set to `true`, the workflow will attempt to preserve existing relationships by substituting the revoked object with the new revoked version in those relationships. If not set or set to `false`, all relationships involving the revoked object will be deleted. Notably, if the revoking object (Object B) already participates in a relationship with the same source, target, and relationship type as an existing relationship of the revoked object (Object A), that relationship will be preserved as-is without creating a new relationship for Object B. 
+- `preserveRelationships` (boolean): If set to `true`, the workflow clones each relationship that references the revoked object so that it points to the revoking object instead, then deprecates the original. If not set or set to `false`, relationships referencing the revoked object are deprecated without being transferred. If the revoking object (Object B) already participates in a relationship with the same source, target, and relationship type as an existing relationship of the revoked object (Object A), the transfer is skipped and a warning is included in the response.
 
 ## Response
 
 ### Success Response
 
-On success, the API will return a 200 OK response with the following body, which includes the revoked object, the new "revoked-by" relationship, and a summary of how relationships were handled:
+On success, the API returns a **200 OK** with a [workflow response envelope](../../docs/developer/workflow-response-pattern.md). The response includes the revoked object, the `revoked-by` relationship, any transferred relationships, and any deprecated relationships:
 
 ```json
 {
-  "revokedObject": {
+  "workflow": "revoke",
+  "primary": {
     "workspace": {
-      "workflow": {
-        "state": "work-in-progress",
-        "created_by_user_account": "identity--3562fbf3-795f-4955-8e64-6c964f598e1c"
-      },
-      "attack_id": "T0006",
-      "collections": [],
-      "embedded_relationships": []
+      "workflow": { "state": "work-in-progress" },
+      "attack_id": "T0006"
     },
     "stix": {
       "type": "attack-pattern",
       "spec_version": "2.1",
       "id": "attack-pattern--83efdc56-d35f-4508-9f10-152bbfffde79",
-      "created": "2026-03-27T14:31:52.711Z",
-      "created_by_ref": "identity--c21f0782-50a8-4e5f-87a1-b56703e78e48",
       "revoked": true,
-      "external_references": [
-        {
-          "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/T0006",
-          "external_id": "T0006"
-        }
-      ],
-      "object_marking_refs": [
-        "marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168"
-      ],
       "modified": "2026-03-27T14:31:52.744Z",
-      "name": "technique-E",
-      "description": "This technique will be revoked.",
-      "kill_chain_phases": [
-        {
-          "kill_chain_name": "kill-chain-name-1",
-          "phase_name": "phase-1"
-        }
-      ],
-      "x_mitre_attack_spec_version": "3.3.0",
-      "x_mitre_contributors": [],
-      "x_mitre_deprecated": false,
-      "x_mitre_is_subtechnique": false,
-      "x_mitre_modified_by_ref": "identity--c21f0782-50a8-4e5f-87a1-b56703e78e48",
-      "x_mitre_platforms": [
-        "platform-1"
-      ]
+      "name": "technique-E"
     }
   },
-  "revokedByRelationship": {
-    "workspace": {
-      "workflow": {
-        "created_by_user_account": "identity--3562fbf3-795f-4955-8e64-6c964f598e1c"
-      },
-      "collections": [],
-      "embedded_relationships": []
-    },
-    "stix": {
-      "type": "relationship",
-      "spec_version": "2.1",
-      "id": "relationship--64d45634-f855-4fea-b084-33a87858406d",
-      "created": "2026-03-27T14:31:52.745Z",
-      "created_by_ref": "identity--c21f0782-50a8-4e5f-87a1-b56703e78e48",
-      "object_marking_refs": [],
-      "modified": "2026-03-27T14:31:52.745Z",
-      "relationship_type": "revoked-by",
-      "source_ref": "attack-pattern--83efdc56-d35f-4508-9f10-152bbfffde79",
-      "target_ref": "attack-pattern--ab992c5a-4a03-4374-ad15-440fac072760",
-      "x_mitre_modified_by_ref": "identity--c21f0782-50a8-4e5f-87a1-b56703e78e48",
-      "x_mitre_attack_spec_version": "3.3.0",
-      "external_references": []
-    },
-    "_id": "69c694d8eb64093bcd182721",
-    "__v": 0,
-    "warnings": []
+  "sideEffects": {
+    "created": [
+      {
+        "workspace": { "workflow": {} },
+        "stix": {
+          "type": "relationship",
+          "relationship_type": "revoked-by",
+          "source_ref": "attack-pattern--83efdc56-d35f-4508-9f10-152bbfffde79",
+          "target_ref": "attack-pattern--ab992c5a-4a03-4374-ad15-440fac072760"
+        }
+      }
+    ],
+    "modified": [],
+    "deprecated": [
+      {
+        "workspace": { "workflow": { "state": "reviewed" } },
+        "stix": {
+          "type": "relationship",
+          "relationship_type": "uses",
+          "x_mitre_deprecated": true
+        }
+      }
+    ],
+    "deleted": { "count": 0, "stixIds": [] }
   },
-  "relationshipsSummary": {
-    "deleted": 1,
-    "transferred": 0,
-    "warnings": [],
-    "duplicatesSkipped": 1
-  }
+  "warnings": []
 }
 ```
 
+| Field | Description |
+|-------|-------------|
+| `workflow` | Always `"revoke"` |
+| `primary` | The technique in its post-revocation state (`revoked: true`) |
+| `sideEffects.created` | The `revoked-by` relationship, plus any transferred relationships (when `preserveRelationships=true`) |
+| `sideEffects.deprecated` | Relationships that referenced the revoked object, deprecated with `x_mitre_deprecated: true` |
+| `warnings` | Non-fatal issues (e.g., duplicate relationships skipped during transfer) |
+
+> **Note:** When `preserveRelationships=true`, relationships are cloned to point to the revoking object (appearing in `sideEffects.created`) and the originals are deprecated (appearing in `sideEffects.deprecated`). If a duplicate relationship already exists on the revoking object, the transfer is skipped and a warning is emitted instead.
 
 ### Error Responses
 

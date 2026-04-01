@@ -471,7 +471,7 @@ describe('ADM Validation Middleware', function () {
         },
         stix: {
           ...createdObject.stix,
-          x_mitre_is_subtechnique: 'not-a-boolean', // Invalid type
+          description: true, // <-- should trigger validation error (should be string)
         },
       };
 

@@ -175,7 +175,7 @@ class ServiceWithHooks {
 
     logger.info(`Emitting event '${eventName}' for ${revokedDocument.stix.id}`);
 
-    await EventBus.emit(eventName, {
+    const results = await EventBus.emit(eventName, {
       stixId: revokedDocument.stix.id,
       revokedDocument: revokedDocument.toObject ? revokedDocument.toObject() : revokedDocument,
       revokingDocument: revokingDocument.toObject ? revokingDocument.toObject() : revokingDocument,
@@ -185,6 +185,7 @@ class ServiceWithHooks {
     });
 
     logger.info(`Event '${eventName}' emission complete`);
+    return results;
   }
 }
 

@@ -5,9 +5,20 @@ const { BaseService } = require('../meta-classes');
 const techniquesRepository = require('../../repository/techniques-repository');
 
 const { Technique: TechniqueType } = require('../../lib/types');
-const { BadlyFormattedParameterError, MissingParameterError } = require('../../exceptions');
+const {
+  BadlyFormattedParameterError,
+  BadRequestError,
+  MissingParameterError,
+  NotFoundError,
+} = require('../../exceptions');
+const attackIdGenerator = require('../../lib/attack-id-generator');
+const {
+  buildAttackExternalReference,
+  removeAttackExternalReferences,
+} = require('../../lib/external-reference-builder');
 const EventBus = require('../../lib/event-bus');
 const EventConstants = require('../../lib/event-constants');
+const WorkflowResult = require('../../lib/workflow-result');
 const logger = require('../../lib/logger');
 
 /**
@@ -156,6 +167,214 @@ class TechniquesService extends BaseService {
       options.limit === 0 ? data.length : Math.min(options.offset + options.limit, data.length);
 
     return data.slice(startPos, endPos);
+  }
+
+  // ============================
+  // Subtechnique Conversion
+  // ============================
+
+  /**
+   * Convert a technique to a subtechnique.
+   *
+   * Generates a new subtechnique-format ATT&CK ID (e.g., T1234.001) under the
+   * specified parent, updates x_mitre_is_subtechnique, rebuilds the ATT&CK
+   * external reference, and persists the result as a new version.
+   *
+   * @param {string} stixId - STIX ID of the technique to convert
+   * @param {Object} data - Request body
+   * @param {string} data.parentTechniqueAttackId - Parent technique ATT&CK ID (e.g., T1234)
+   * @param {Object} [options] - Options
+   * @param {string} [options.userAccountId] - Authenticated user's account ID
+   * @returns {Object} The newly created subtechnique version
+   */
+  async convertToSubtechnique(stixId, data, options = {}) {
+    // Lazy-load to avoid circular dependency
+    const relationshipsRepository = require('../../repository/relationships-repository');
+
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+    if (!data?.parentTechniqueAttackId) {
+      throw new MissingParameterError('parentTechniqueAttackId');
+    }
+    if (!/^T\d{4}$/.test(data.parentTechniqueAttackId)) {
+      throw new BadRequestError({
+        details: `Invalid parent technique ATT&CK ID format: ${data.parentTechniqueAttackId}. Must be T####.`,
+      });
+    }
+
+    const technique = await this.repository.retrieveLatestByStixId(stixId);
+    if (!technique) {
+      throw new NotFoundError({ details: `Technique with stixId ${stixId} not found` });
+    }
+    if (technique.stix.x_mitre_is_subtechnique === true) {
+      throw new BadRequestError({
+        details: `Technique ${stixId} is already a subtechnique`,
+      });
+    }
+    if (technique.stix.revoked === true) {
+      throw new BadRequestError({
+        details: `Cannot convert a revoked technique`,
+      });
+    }
+
+    // Validate that the parent technique exists
+    const parentTechnique = await this.repository.retrieveLatestByAttackId(
+      data.parentTechniqueAttackId,
+    );
+    if (!parentTechnique) {
+      throw new BadRequestError({
+        details: `Parent technique with ATT&CK ID ${data.parentTechniqueAttackId} not found`,
+      });
+    }
+
+    // Check if this technique has child subtechniques (via subtechnique-of SROs).
+    // Cross-service READ is permitted per architecture guidelines.
+    // If children exist, block the conversion — the user must rehome them first.
+    const childRelationships = await relationshipsRepository.retrieveAll({
+      targetRef: stixId,
+      relationshipType: 'subtechnique-of',
+      versions: 'latest',
+      includeRevoked: false,
+      includeDeprecated: false,
+    });
+    if (childRelationships.length > 0) {
+      throw new BadRequestError({
+        details:
+          `Technique ${stixId} has ${childRelationships.length} subtechnique(s). ` +
+          `Rehome or remove the subtechnique-of relationships before converting this technique to a subtechnique.`,
+      });
+    }
+
+    // Generate new subtechnique ATT&CK ID
+    const newAttackId = await attackIdGenerator.generateAttackId(
+      'attack-pattern',
+      this.repository,
+      true,
+      data.parentTechniqueAttackId,
+    );
+
+    // Build new version
+    const newVersion = technique.toObject ? technique.toObject() : { ...technique };
+    delete newVersion._id;
+    delete newVersion.__v;
+    delete newVersion.__t;
+
+    newVersion.stix.x_mitre_is_subtechnique = true;
+    newVersion.stix.modified = new Date().toISOString();
+    newVersion.workspace = newVersion.workspace || {};
+    newVersion.workspace.attack_id = newAttackId;
+
+    // Rebuild external references: replace ATT&CK ref with the new one
+    const userRefs = removeAttackExternalReferences(newVersion.stix.external_references);
+    const newAttackRef = buildAttackExternalReference(newAttackId, 'attack-pattern', {
+      isSubtechnique: true,
+    });
+    newVersion.stix.external_references = newAttackRef ? [newAttackRef, ...userRefs] : userRefs;
+
+    if (options.userAccountId) {
+      newVersion.workspace.workflow = newVersion.workspace.workflow || {};
+      newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+
+    const savedDocument = await this.repository.save(newVersion);
+
+    logger.info(
+      `Converted technique ${stixId} to subtechnique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
+    );
+
+    const result = new WorkflowResult('convert-to-subtechnique');
+    result.setPrimary(savedDocument);
+
+    // Emit domain event — RelationshipsService listens to create the subtechnique-of SRO
+    const eventResults = await EventBus.emit(EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+      parentStixId: parentTechnique.stix.id /** STIX ID of the parent technique */,
+      userAccountId: options.userAccountId,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
+  }
+
+  /**
+   * Convert a subtechnique to a technique.
+   *
+   * Generates a new technique-format ATT&CK ID (e.g., T1235), updates
+   * x_mitre_is_subtechnique, rebuilds the ATT&CK external reference, and
+   * persists the result as a new version.
+   *
+   * @param {string} stixId - STIX ID of the subtechnique to convert
+   * @param {Object} [options] - Options
+   * @param {string} [options.userAccountId] - Authenticated user's account ID
+   * @returns {Object} The newly created technique version
+   */
+  async convertToTechnique(stixId, options = {}) {
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+
+    const technique = await this.repository.retrieveLatestByStixId(stixId);
+    if (!technique) {
+      throw new NotFoundError({ details: `Technique with stixId ${stixId} not found` });
+    }
+    if (technique.stix.x_mitre_is_subtechnique !== true) {
+      throw new BadRequestError({
+        details: `Technique ${stixId} is not a subtechnique`,
+      });
+    }
+    if (technique.stix.revoked === true) {
+      throw new BadRequestError({
+        details: `Cannot convert a revoked technique`,
+      });
+    }
+
+    // Generate new technique ATT&CK ID
+    const newAttackId = await attackIdGenerator.generateAttackId(
+      'attack-pattern',
+      this.repository,
+      false,
+    );
+
+    // Build new version
+    const newVersion = technique.toObject ? technique.toObject() : { ...technique };
+    delete newVersion._id;
+    delete newVersion.__v;
+    delete newVersion.__t;
+
+    newVersion.stix.x_mitre_is_subtechnique = false;
+    newVersion.stix.modified = new Date().toISOString();
+    newVersion.workspace = newVersion.workspace || {};
+    newVersion.workspace.attack_id = newAttackId;
+
+    // Rebuild external references: replace ATT&CK ref with the new one
+    const userRefs = removeAttackExternalReferences(newVersion.stix.external_references);
+    const newAttackRef = buildAttackExternalReference(newAttackId, 'attack-pattern', {
+      isSubtechnique: false,
+    });
+    newVersion.stix.external_references = newAttackRef ? [newAttackRef, ...userRefs] : userRefs;
+
+    if (options.userAccountId) {
+      newVersion.workspace.workflow = newVersion.workspace.workflow || {};
+      newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+
+    const savedDocument = await this.repository.save(newVersion);
+
+    logger.info(
+      `Converted subtechnique ${stixId} to technique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
+    );
+
+    const result = new WorkflowResult('convert-to-technique');
+    result.setPrimary(savedDocument);
+
+    // Emit domain event — RelationshipsService listens to deprecate subtechnique-of SROs
+    const eventResults = await EventBus.emit(EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
   }
 
   async retrieveTacticsForTechnique(stixId, modified, options) {

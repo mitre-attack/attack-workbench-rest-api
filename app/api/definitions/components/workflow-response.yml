@@ -1,0 +1,95 @@
+components:
+  schemas:
+    workflow-response:
+      type: object
+      description: |
+        Universal response envelope for all workflow endpoints (revoke, convert-to-subtechnique,
+        convert-to-technique). Provides full visibility into every object that was created,
+        modified, deprecated, or deleted as a consequence of the request.
+      required:
+        - workflow
+        - primary
+        - sideEffects
+        - warnings
+      properties:
+        workflow:
+          type: string
+          description: 'Discriminator identifying which workflow produced this response.'
+          enum:
+            - revoke
+            - convert-to-subtechnique
+            - convert-to-technique
+          example: 'revoke'
+        primary:
+          type: object
+          description: 'The primary object that the user acted on, in its post-workflow state.'
+          properties:
+            workspace:
+              $ref: 'workspace.yml#/components/schemas/workspace'
+            stix:
+              $ref: 'stix-common.yml#/components/schemas/stix-common'
+        sideEffects:
+          $ref: '#/components/schemas/side-effects'
+        warnings:
+          type: array
+          description: 'Non-fatal warning messages generated during the workflow.'
+          items:
+            type: string
+          example: []
+
+    side-effects:
+      type: object
+      description: 'Objects created, modified, deprecated, or deleted as a consequence of the workflow.'
+      required:
+        - created
+        - modified
+        - deprecated
+        - deleted
+      properties:
+        created:
+          type: array
+          description: 'Objects created during the workflow (e.g., revoked-by relationships, subtechnique-of relationships, transferred relationships).'
+          items:
+            type: object
+            properties:
+              workspace:
+                $ref: 'workspace.yml#/components/schemas/workspace'
+              stix:
+                $ref: 'stix-common.yml#/components/schemas/stix-common'
+        modified:
+          type: array
+          description: 'Objects modified (new version saved) during the workflow.'
+          items:
+            type: object
+            properties:
+              workspace:
+                $ref: 'workspace.yml#/components/schemas/workspace'
+              stix:
+                $ref: 'stix-common.yml#/components/schemas/stix-common'
+        deprecated:
+          type: array
+          description: 'Objects deprecated (new version saved with x_mitre_deprecated=true) during the workflow.'
+          items:
+            type: object
+            properties:
+              workspace:
+                $ref: 'workspace.yml#/components/schemas/workspace'
+              stix:
+                $ref: 'stix-common.yml#/components/schemas/stix-common'
+        deleted:
+          type: object
+          description: 'Summary of hard-deleted objects (if any).'
+          required:
+            - count
+            - stixIds
+          properties:
+            count:
+              type: integer
+              description: 'Number of hard-deleted objects.'
+              example: 0
+            stixIds:
+              type: array
+              description: 'STIX IDs of hard-deleted objects.'
+              items:
+                type: string
+              example: []

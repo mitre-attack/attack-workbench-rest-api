@@ -24,6 +24,7 @@ const {
 } = require('../../exceptions');
 const { getSchema, processValidationIssues } = require('../system/validate-service');
 const ServiceWithHooks = require('./hooks.service');
+const WorkflowResult = require('../../lib/workflow-result');
 
 // Import required repositories
 const systemConfigurationRepository = require('../../repository/system-configurations-repository');
@@ -691,6 +692,12 @@ class BaseService extends ServiceWithHooks {
     // Compose server-controlled fields from existing document
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
 
+    // Preserve x_mitre_is_subtechnique — changing subtechnique status requires
+    // the dedicated conversion endpoints, not the generic update path.
+    if (document.stix.x_mitre_is_subtechnique !== undefined) {
+      data.stix.x_mitre_is_subtechnique = document.stix.x_mitre_is_subtechnique;
+    }
+
     if (document.workspace?.attack_id) {
       data.workspace = data.workspace || {};
       data.workspace.attack_id = document.workspace.attack_id;
@@ -864,9 +871,15 @@ class BaseService extends ServiceWithHooks {
 
     const revokedDocument = await this.repository.save(objectAData);
 
+    const result = new WorkflowResult('revoke');
+    result.setPrimary(revokedDocument);
+
     // ──────────────────────────────────────────────
     // 5. CREATE REVOKED-BY RELATIONSHIP
     // ──────────────────────────────────────────────
+    // NOTE: This is a direct cross-service write (BaseService → RelationshipsService.create).
+    // The revoke workflow predates the event-driven architecture and is shared by all SDO types.
+    // TODO: Migrate to an event-driven pattern for consistency with the conversion workflows.
     const now = new Date().toISOString();
     const revokedByRelationship = await relationshipsService.create(
       {
@@ -885,6 +898,7 @@ class BaseService extends ServiceWithHooks {
       },
       { userAccountId: options.userAccountId },
     );
+    result.addCreated(revokedByRelationship);
 
     // TODO what if relationshipsService.create fails after we've already marked Object A as revoked?
     // We should have error handling to attempt to roll back the revoked status if the relationship
@@ -894,10 +908,8 @@ class BaseService extends ServiceWithHooks {
     // We would also need to handle potential errors in that rollback attempt and log them appropriately.
 
     // ──────────────────────────────────────────────
-    // 6. HANDLE RELATIONSHIPS
+    // 6. HANDLE RELATIONSHIPS (transfer if preserveRelationships is set)
     // ──────────────────────────────────────────────
-    const relationshipsSummary = { deleted: 0, transferred: 0, warnings: [] };
-
     const existingRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
       objectA.stix.id,
     );
@@ -938,9 +950,10 @@ class BaseService extends ServiceWithHooks {
           // Skip if Object B already has an equivalent relationship
           const candidateTriple = `${relData.stix.source_ref}--${relData.stix.relationship_type}--${relData.stix.target_ref}`;
           if (objectBRelTriples.has(candidateTriple)) {
-            relationshipsSummary.duplicatesSkipped =
-              (relationshipsSummary.duplicatesSkipped || 0) + 1;
             logger.info(
+              `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
+            );
+            result.addWarning(
               `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
             );
             continue;
@@ -949,18 +962,16 @@ class BaseService extends ServiceWithHooks {
           // Generate a new STIX ID for the cloned relationship
           relData.stix.id = `relationship--${uuid.v4()}`;
 
-          await relationshipsService.create(relData, {
+          const transferredRel = await relationshipsService.create(relData, {
             userAccountId: options.userAccountId,
           });
-          relationshipsSummary.transferred++;
+          result.addCreated(transferredRel);
 
           // Track the newly created triple so subsequent iterations don't create duplicates
           objectBRelTriples.add(candidateTriple);
         } catch (err) {
           logger.warn(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
-          relationshipsSummary.warnings.push(
-            `Failed to transfer relationship ${rel.stix.id}: ${err.message}`,
-          );
+          result.addWarning(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
         }
       }
     }
@@ -976,27 +987,17 @@ class BaseService extends ServiceWithHooks {
     // RelationshipsService listens for revoked events and deprecates all relationships
     // referencing the revoked object (except those in excludeRelationshipIds).
     // EventBus.emit() awaits all listeners, so deprecation completes before we return.
+    // Handler results (deprecated docs, warnings) are merged into the WorkflowResult.
     const excludeRelationshipIds = [revokedByRelationship.stix.id];
-    await this.emitRevokedEvent(revokedDocument, objectB, options, { excludeRelationshipIds });
-
-    // Count deprecated relationships via cross-service READ (allowed by architecture)
-    const postRevokeRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
-      objectA.stix.id,
-    );
-    relationshipsSummary.deprecated = postRevokeRelationships.filter(
-      (r) => r.stix.x_mitre_deprecated === true && r.stix.id !== revokedByRelationship.stix.id,
-    ).length;
+    const eventResults = await this.emitRevokedEvent(revokedDocument, objectB, options, {
+      excludeRelationshipIds,
+    });
+    result.mergeEventResults(eventResults);
 
     // ──────────────────────────────────────────────
     // 9. RETURN RESULT
     // ──────────────────────────────────────────────
-    return {
-      revokedObject: revokedDocument,
-      revokedByRelationship: revokedByRelationship.toObject
-        ? revokedByRelationship.toObject()
-        : revokedByRelationship,
-      relationshipsSummary,
-    };
+    return result.toJSON();
   }
 
   // TODO rename to deleteManyByStixId
