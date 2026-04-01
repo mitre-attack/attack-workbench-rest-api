@@ -201,19 +201,21 @@ describe('Techniques Revoke API', function () {
 
     revokeResult = res.body;
 
-    // Verify the response structure
-    expect(revokeResult.revokedObject).toBeDefined();
-    expect(revokeResult.revokedByRelationship).toBeDefined();
-    expect(revokeResult.relationshipsSummary).toBeDefined();
+    // Verify the WorkflowResult envelope
+    expect(revokeResult.workflow).toBe('revoke');
+    expect(revokeResult.primary).toBeDefined();
+    expect(revokeResult.sideEffects).toBeDefined();
 
-    // Verify the revoked object
-    expect(revokeResult.revokedObject.stix.id).toBe(techniqueA.stix.id);
-    expect(revokeResult.revokedObject.stix.revoked).toBe(true);
+    // Verify the revoked object (primary)
+    expect(revokeResult.primary.stix.id).toBe(techniqueA.stix.id);
+    expect(revokeResult.primary.stix.revoked).toBe(true);
 
-    // Verify the revoked-by relationship
-    expect(revokeResult.revokedByRelationship.stix.relationship_type).toBe('revoked-by');
-    expect(revokeResult.revokedByRelationship.stix.source_ref).toBe(techniqueA.stix.id);
-    expect(revokeResult.revokedByRelationship.stix.target_ref).toBe(techniqueB.stix.id);
+    // Verify the revoked-by relationship (first created side effect)
+    expect(revokeResult.sideEffects.created.length).toBeGreaterThan(0);
+    const revokedByRel = revokeResult.sideEffects.created[0];
+    expect(revokedByRel.stix.relationship_type).toBe('revoked-by');
+    expect(revokedByRel.stix.source_ref).toBe(techniqueA.stix.id);
+    expect(revokedByRel.stix.target_ref).toBe(techniqueB.stix.id);
   });
 
   it('GET /api/techniques/:stixId returns the revoked technique with revoked = true', async function () {
@@ -381,8 +383,9 @@ describe('Techniques Revoke API', function () {
       .expect('Content-Type', /json/);
 
     const result = revokeRes.body;
-    expect(result.relationshipsSummary.transferred).toBe(1);
-    expect(result.relationshipsSummary.deprecated).toBeGreaterThanOrEqual(1);
+    // revoked-by + 1 transferred relationship = 2 created
+    expect(result.sideEffects.created.length).toBe(2);
+    expect(result.sideEffects.deprecated.length).toBeGreaterThanOrEqual(1);
 
     // Verify the original relationship was deprecated (not deleted — history preserved)
     const relRes2 = await request(app)
@@ -524,8 +527,9 @@ describe('Techniques Revoke API', function () {
     const result = revokeRes.body;
 
     // The duplicate should have been skipped, not transferred
-    expect(result.relationshipsSummary.transferred).toBe(0);
-    expect(result.relationshipsSummary.duplicatesSkipped).toBe(1);
+    // Only the revoked-by relationship should be in created (no transferred relationships)
+    expect(result.sideEffects.created.length).toBe(1);
+    expect(result.sideEffects.created[0].stix.relationship_type).toBe('revoked-by');
 
     // Verify exactly one "mitigates" relationship exists from M1 → F (the pre-existing one)
     const relsRes = await request(app)
