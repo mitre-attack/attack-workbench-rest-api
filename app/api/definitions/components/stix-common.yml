@@ -4,9 +4,6 @@ components:
       type: object
       required:
         - type
-        - spec_version
-        - created
-        - modified
       properties:
         # STIX common properties
         type:
