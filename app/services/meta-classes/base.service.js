@@ -953,6 +953,9 @@ class BaseService extends ServiceWithHooks {
             logger.info(
               `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
             );
+            result.addWarning(
+              `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
+            );
             continue;
           }
 
