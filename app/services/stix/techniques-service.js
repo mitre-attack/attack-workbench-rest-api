@@ -18,6 +18,7 @@ const {
 } = require('../../lib/external-reference-builder');
 const EventBus = require('../../lib/event-bus');
 const EventConstants = require('../../lib/event-constants');
+const WorkflowResult = require('../../lib/workflow-result');
 const logger = require('../../lib/logger');
 
 /**
@@ -217,6 +218,16 @@ class TechniquesService extends BaseService {
       });
     }
 
+    // Validate that the parent technique exists
+    const parentTechnique = await this.repository.retrieveLatestByAttackId(
+      data.parentTechniqueAttackId,
+    );
+    if (!parentTechnique) {
+      throw new BadRequestError({
+        details: `Parent technique with ATT&CK ID ${data.parentTechniqueAttackId} not found`,
+      });
+    }
+
     // Check if this technique has child subtechniques (via subtechnique-of SROs).
     // Cross-service READ is permitted per architecture guidelines.
     // If children exist, block the conversion — the user must rehome them first.
@@ -272,16 +283,18 @@ class TechniquesService extends BaseService {
       `Converted technique ${stixId} to subtechnique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
     );
 
-    // Emit domain event for cross-service coordination
-    await EventBus.emit(EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE, {
-      stixId,
-      document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
-      previousAttackId: technique.workspace?.attack_id,
-      newAttackId,
-      parentTechniqueAttackId: data.parentTechniqueAttackId,
-    });
+    const result = new WorkflowResult('convert-to-subtechnique');
+    result.setPrimary(savedDocument);
 
-    return savedDocument.toObject ? savedDocument.toObject() : savedDocument;
+    // Emit domain event — RelationshipsService listens to create the subtechnique-of SRO
+    const eventResults = await EventBus.emit(EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+      parentStixId: parentTechnique.stix.id /** STIX ID of the parent technique */,
+      userAccountId: options.userAccountId,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
   }
 
   /**
@@ -352,15 +365,16 @@ class TechniquesService extends BaseService {
       `Converted subtechnique ${stixId} to technique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
     );
 
-    // Emit domain event — RelationshipsService listens to deprecate subtechnique-of SROs
-    await EventBus.emit(EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE, {
-      stixId,
-      document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
-      previousAttackId: technique.workspace?.attack_id,
-      newAttackId,
-    });
+    const result = new WorkflowResult('convert-to-technique');
+    result.setPrimary(savedDocument);
 
-    return savedDocument.toObject ? savedDocument.toObject() : savedDocument;
+    // Emit domain event — RelationshipsService listens to deprecate subtechnique-of SROs
+    const eventResults = await EventBus.emit(EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
   }
 
   async retrieveTacticsForTechnique(stixId, modified, options) {

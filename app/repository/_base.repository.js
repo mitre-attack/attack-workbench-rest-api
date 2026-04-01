@@ -202,6 +202,23 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  /**
+   * Retrieve the latest version of an object by its ATT&CK ID (e.g., "T1234", "G0001").
+   *
+   * @param {string} attackId - The workspace ATT&CK ID to look up
+   * @returns {Promise<Object|null>} The latest object version, or null if not found
+   */
+  async retrieveLatestByAttackId(attackId) {
+    try {
+      return await this.model
+        .findOne({ 'workspace.attack_id': attackId })
+        .sort('-stix.modified')
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async retrieveLatestByStixIdLean(stixId) {
     try {
       return await this.model

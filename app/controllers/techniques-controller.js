@@ -200,7 +200,7 @@ exports.convertToSubtechnique = async function (req, res, next) {
       req.body,
       options,
     );
-    logger.debug('Success: Converted technique to subtechnique ' + result.stix.id);
+    logger.debug('Success: Converted technique to subtechnique ' + result.primary?.stix?.id);
     return res.status(200).send(result);
   } catch (err) {
     return next(err);
@@ -213,7 +213,7 @@ exports.convertToTechnique = async function (req, res, next) {
       userAccountId: req.user?.userAccountId,
     };
     const result = await techniquesService.convertToTechnique(req.params.stixId, options);
-    logger.debug('Success: Converted subtechnique to technique ' + result.stix.id);
+    logger.debug('Success: Converted subtechnique to technique ' + result.primary?.stix?.id);
     return res.status(200).send(result);
   } catch (err) {
     return next(err);

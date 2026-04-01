@@ -409,9 +409,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../components/techniques.yml#/components/schemas/technique'
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
         '400':
-          description: 'Invalid request. The technique is already a subtechnique, is revoked, or the parent ID is invalid.'
+          description: 'Invalid request. The technique is already a subtechnique, is revoked, or the parent technique does not exist.'
         '404':
           description: 'The technique was not found.'
 
@@ -425,6 +425,7 @@ paths:
         - Generates a new technique-format ATT&CK ID (e.g., T1235)
         - Sets `x_mitre_is_subtechnique` to `false`
         - Rebuilds the ATT&CK external reference with the new ID and URL
+        - Deprecates any existing subtechnique-of relationships
         - Persists the result as a new version of the object
 
         The technique must currently be a subtechnique and must not be revoked.
@@ -443,7 +444,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../components/techniques.yml#/components/schemas/technique'
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
         '400':
           description: 'Invalid request. The object is not a subtechnique or is revoked.'
         '404':
@@ -456,6 +457,7 @@ paths:
       description: |
         Revokes the technique identified by the stixId path parameter in favor of the revoking object specified in the request body.
         Optionally transfers relationships from the revoked object to the revoking object.
+        Deprecates all relationships referencing the revoked object.
       tags:
         - 'Techniques'
       parameters:
@@ -467,7 +469,7 @@ paths:
             type: string
         - name: preserveRelationships
           in: query
-          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deletion.'
+          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deprecation.'
           schema:
             type: boolean
             default: false
@@ -495,6 +497,10 @@ paths:
       responses:
         '200':
           description: 'The technique was successfully revoked.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
         '400':
           description: 'Missing or invalid parameters.'
         '404':
