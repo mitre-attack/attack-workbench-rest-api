@@ -204,6 +204,18 @@ class SchemaValidationError extends CustomError {
   }
 }
 
+class AlreadyRevokedError extends CustomError {
+  constructor(options) {
+    super('Object has already been revoked', options);
+  }
+}
+
+class SelfRevocationError extends CustomError {
+  constructor(options) {
+    super('An object cannot revoke itself', options);
+  }
+}
+
 class AlreadyReleasedError extends CustomError {
   constructor(version, options) {
     super(`This snapshot has already been tagged as version ${version}`, options);
@@ -259,6 +271,10 @@ module.exports = {
   //** Validation errors */
   ValidationError,
   SchemaValidationError,
+
+  //** Revocation errors */
+  AlreadyRevokedError,
+  SelfRevocationError,
 
   //** Version control errors */
   AlreadyReleasedError,

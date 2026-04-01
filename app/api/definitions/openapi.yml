@@ -95,6 +95,15 @@ paths:
   /api/techniques/{stixId}/modified/{modified}:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1modified~1{modified}'
 
+  /api/techniques/{stixId}/convert-to-subtechnique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-subtechnique'
+
+  /api/techniques/{stixId}/convert-to-technique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-technique'
+
+  /api/techniques/{stixId}/revoke:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1revoke'
+
   /api/techniques/{stixId}/modified/{modified}/tactics:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1modified~1{modified}~1tactics'
 
@@ -111,6 +120,9 @@ paths:
   /api/tactics/{stixId}/modified/{modified}/techniques:
     $ref: 'paths/tactics-paths.yml#/paths/~1api~1tactics~1{stixId}~1modified~1{modified}~1techniques'
 
+  /api/tactics/{stixId}/revoke:
+    $ref: 'paths/tactics-paths.yml#/paths/~1api~1tactics~1{stixId}~1revoke'
+
   # Groups
   /api/groups:
     $ref: 'paths/groups-paths.yml#/paths/~1api~1groups'
@@ -121,6 +133,9 @@ paths:
   /api/groups/{stixId}/modified/{modified}:
     $ref: 'paths/groups-paths.yml#/paths/~1api~1groups~1{stixId}~1modified~1{modified}'
 
+  /api/groups/{stixId}/revoke:
+    $ref: 'paths/groups-paths.yml#/paths/~1api~1groups~1{stixId}~1revoke'
+
   # Campaigns
   /api/campaigns:
     $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns'
@@ -130,6 +145,9 @@ paths:
 
   /api/campaigns/{stixId}/modified/{modified}:
     $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns~1{stixId}~1modified~1{modified}'
+
+  /api/campaigns/{stixId}/revoke:
+    $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns~1{stixId}~1revoke'
 
   # Matrices
   /api/matrices:
@@ -143,6 +161,9 @@ paths:
 
   /api/matrices/{stixId}/modified/{modified}/techniques:
     $ref: 'paths/matrices-paths.yml#/paths/~1api~1matrices~1{stixId}~1modified~1{modified}~1techniques'
+
+  /api/matrices/{stixId}/revoke:
+    $ref: 'paths/matrices-paths.yml#/paths/~1api~1matrices~1{stixId}~1revoke'
 
   # Identities
   /api/identities:
@@ -171,6 +192,9 @@ paths:
   /api/software/{stixId}/modified/{modified}:
     $ref: 'paths/software-paths.yml#/paths/~1api~1software~1{stixId}~1modified~1{modified}'
 
+  /api/software/{stixId}/revoke:
+    $ref: 'paths/software-paths.yml#/paths/~1api~1software~1{stixId}~1revoke'
+
   # Mitigations
   /api/mitigations:
     $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations'
@@ -181,6 +205,9 @@ paths:
   /api/mitigations/{stixId}/modified/{modified}:
     $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations~1{stixId}~1modified~1{modified}'
 
+  /api/mitigations/{stixId}/revoke:
+    $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations~1{stixId}~1revoke'
+
   # Data Sources
   /api/data-sources:
     $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources'
@@ -190,6 +217,9 @@ paths:
 
   /api/data-sources/{stixId}/modified/{modified}:
     $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources~1{stixId}~1modified~1{modified}'
+
+  /api/data-sources/{stixId}/revoke:
+    $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources~1{stixId}~1revoke'
 
   # Analytics
   /api/analytics:
@@ -227,6 +257,9 @@ paths:
   /api/data-components/{stixId}/modified/{modified}:
     $ref: 'paths/data-components-paths.yml#/paths/~1api~1data-components~1{stixId}~1modified~1{modified}'
 
+  /api/data-components/{stixId}/revoke:
+    $ref: 'paths/data-components-paths.yml#/paths/~1api~1data-components~1{stixId}~1revoke'
+
   # Assets
   /api/assets:
     $ref: 'paths/assets-paths.yml#/paths/~1api~1assets'
@@ -236,6 +269,9 @@ paths:
 
   /api/assets/{stixId}/modified/{modified}:
     $ref: 'paths/assets-paths.yml#/paths/~1api~1assets~1{stixId}~1modified~1{modified}'
+
+  /api/assets/{stixId}/revoke:
+    $ref: 'paths/assets-paths.yml#/paths/~1api~1assets~1{stixId}~1revoke'
 
   # Relationships
   /api/relationships:

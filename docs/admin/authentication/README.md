@@ -92,7 +92,7 @@ After configuring OIDC, users who log in will be authenticated but will not have
 3. Assign appropriate role
 4. User logs in again and will have assigned permissions
 
-See [User Management](../legacy/user-management.md) for detailed instructions.
+See [User Management](../../legacy/user-management.md) for detailed instructions.
 
 ## Troubleshooting
 
@@ -120,5 +120,5 @@ See [User Management](../legacy/user-management.md) for detailed instructions.
 
 ## Additional Resources
 
-- [Authentication Technical Details](../legacy/authentication.md)
-- [User Management Guide](../legacy/user-management.md)
+- [Authentication Technical Details](../../legacy/authentication.md)
+- [User Management Guide](../../legacy/user-management.md)

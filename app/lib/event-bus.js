@@ -62,8 +62,9 @@ class EventBus extends EventEmitter {
         try {
           const listenerName = listener.name || 'anonymous';
           logger.debug(`EventBus: Executing listener '${listenerName}' for '${eventName}'`);
-          await listener(payload);
+          const result = await listener(payload);
           logger.debug(`EventBus: Listener '${listenerName}' completed successfully`);
+          return result;
         } catch (error) {
           const listenerName = listener.name || 'anonymous';
           logger.error(`EventBus: Listener '${listenerName}' failed for '${eventName}':`, error);
@@ -79,6 +80,9 @@ class EventBus extends EventEmitter {
         `EventBus: ${failures.length}/${listeners.length} listeners failed for '${eventName}'`,
       );
     }
+
+    // Return fulfilled handler results for callers that need them (e.g., WorkflowResult)
+    return results.filter((r) => r.status === 'fulfilled' && r.value != null).map((r) => r.value);
   }
 
   /**

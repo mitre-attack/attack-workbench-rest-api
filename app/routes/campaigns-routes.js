@@ -40,4 +40,8 @@ router
     campaignsController.deleteVersionById,
   );
 
+router
+  .route('/campaigns/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), campaignsController.revoke);
+
 module.exports = router;

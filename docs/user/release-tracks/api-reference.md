@@ -5,14 +5,14 @@
 This document provides the complete API reference for Release Tracks V2 (formerly "Collections V2").
 
 **Related Documentation:**
-- [01_SUMMARY.md](./01_SUMMARY.md) - High-level design summary and problem statement
-- [02_TERMINOLOGY.md](./02_TERMINOLOGY.md) - Complete terminology guide
-- [03_VERSIONING.md](./03_VERSIONING.md) - Versioning and release process
-- [04_VIRTUAL_TRACKS.md](./04_VIRTUAL_TRACKS.md) - Virtual release tracks (aggregations)
-- [05_RELEASE_WORKFLOW.md](./05_RELEASE_WORKFLOW.md) - Workflow integration and candidacy
-- [06_ENTITIES.md](./06_ENTITIES.md) - Database schemas and data models
-- [07_OUTPUT_FORMATS.md](./07_OUTPUT_FORMATS.md) - Output format specifications
-- [08_MEMBER_SYNC_STRATEGIES.md](./08_MEMBER_SYNC_STRATEGIES.md) - Automatic tracking of member object revisions
+- [summary.md](./summary.md) - High-level design summary and problem statement
+- [terminology.md](./terminology.md) - Complete terminology guide
+- [versioning.md](./versioning.md) - Versioning and release process
+- [virtual-tracks.md](./virtual-tracks.md) - Virtual release tracks (aggregations)
+- [release-workflow.md](./release-workflow.md) - Workflow integration and candidacy
+- [entities.md](../../developer/release-tracks/entities.md) - Database schemas and data models
+- [output-formats.md](./output-formats.md) - Output format specifications
+- [member-sync-strategies.md](../../developer/release-tracks/member-sync-strategies.md) - Automatic tracking of member object revisions
 
 **Quick Navigation:**
 - [Ephemeral Release Tracks](#ephemeral-release-tracks)
@@ -308,7 +308,7 @@ Creates new snapshot with updated metadata.
 POST /api/release-tracks/:id/contents
 ```
 
-Creates new snapshot with updated member objects. **This is intended for retroactive hotfixes only.** The main workflow for enrolling new member objects into `x_mitre_contents` is through the candidate-staging promotion cycle described in [03_VERSIONING.md](./03_VERSIONING.md). 
+Creates new snapshot with updated member objects. **This is intended for retroactive hotfixes only.** The main workflow for enrolling new member objects into `x_mitre_contents` is through the candidate-staging promotion cycle described in [versioning.md](./versioning.md). 
 
 **Request Body:**
 ```json
@@ -800,7 +800,7 @@ Virtual release tracks are computed aggregations of other release tracks. Unlike
 2. `specific_version` - Pin to a specific semantic version (e.g., "5.0")
 3. `specific_snapshot` - Pin to a specific snapshot by timestamp
 
-See [04_VIRTUAL_TRACKS.md](./04_VIRTUAL_TRACKS.md) for complete documentation.
+See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
 
 ### Create Virtual Track
 

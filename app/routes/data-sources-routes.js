@@ -44,4 +44,8 @@ router
     dataSourcesController.deleteVersionById,
   );
 
+router
+  .route('/data-sources/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), dataSourcesController.revoke);
+
 module.exports = router;

@@ -177,3 +177,17 @@ exports.deleteById = async function (req, res, next) {
     next(err);
   }
 };
+
+exports.revoke = async function (req, res, next) {
+  try {
+    const options = {
+      preserveRelationships:
+        req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await dataComponentsService.revoke(req.params.stixId, req.body, options);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
+  }
+};

@@ -5,10 +5,10 @@
 This document describes the **Member Sync Strategy** system, which governs how release tracks respond when new revisions of member objects are created. This feature addresses a critical gap in the release track workflow: ensuring that future revisions of already-released objects are automatically queued for subsequent releases.
 
 **Related Documentation:**
-- [00_API_REFERENCE.md](./00_API_REFERENCE.md) - Complete API reference
-- [02_TERMINOLOGY.md](./02_TERMINOLOGY.md) - Core terminology (candidates, staged, members)
-- [05_RELEASE_WORKFLOW.md](./05_RELEASE_WORKFLOW.md) - Workflow states and promotion
-- [06_ENTITIES.md](./06_ENTITIES.md) - Database schemas and data models
+- [api-reference.md](../../user/release-tracks/api-reference.md) - Complete API reference
+- [terminology.md](../../user/release-tracks/terminology.md) - Core terminology (candidates, staged, members)
+- [release-workflow.md](../../user/release-tracks/release-workflow.md) - Workflow states and promotion
+- [entities.md](./entities.md) - Database schemas and data models
 
 ---
 

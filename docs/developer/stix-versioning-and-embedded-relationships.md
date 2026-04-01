@@ -608,6 +608,6 @@ If you find yourself frequently needing complete historical relationship graphs,
 
 ## Related Documentation
 
-- [EVENT_BUS_ARCHITECTURE.md](EVENT_BUS_ARCHITECTURE.md) - Event-driven architecture patterns
-- [LIFECYCLE_HOOKS_GUIDE.md](LIFECYCLE_HOOKS_GUIDE.md) - Service lifecycle hooks
+- [event-bus-architecture.md](event-bus-architecture.md) - Event-driven architecture patterns
+- [lifecycle-hooks-guide.md](lifecycle-hooks-guide.md) - Service lifecycle hooks
 - [STIX 2.1 Specification](https://docs.oasis-open.org/cti/stix/v2.1/stix-v2.1.html) - Official STIX standard

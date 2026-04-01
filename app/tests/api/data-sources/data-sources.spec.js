@@ -64,7 +64,7 @@ async function loadDataComponents(baseDataComponent) {
   let timestamp = new Date().toISOString();
   data1.stix.created = timestamp;
   data1.stix.modified = timestamp;
-  await dataComponentsService.create(data1);
+  const created1 = await dataComponentsService.create(data1);
 
   const data2 = _.cloneDeep(baseDataComponent);
   timestamp = new Date().toISOString();
@@ -89,8 +89,12 @@ async function loadDataComponents(baseDataComponent) {
   timestamp = new Date().toISOString();
   data5.stix.created = timestamp;
   data5.stix.modified = timestamp;
-  data5.stix.revoked = true;
-  await dataComponentsService.create(data5);
+  const created5 = await dataComponentsService.create(data5);
+
+  // Revoke data component 5 using data component 1 as the revoking object
+  await dataComponentsService.revoke(created5.stix.id, {
+    revoking: { stixId: created1.stix.id, modified: created1.stix.modified },
+  });
 }
 
 describe('Data Sources API', function () {

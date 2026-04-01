@@ -200,7 +200,7 @@ const metadata = await EventBus.emitAndWait('analytic::metadata-requested', {
 
 ### For Documentation
 
-Update [EVENT_BUS_ARCHITECTURE.md](EVENT_BUS_ARCHITECTURE.md) to clarify:
+Update [event-bus-architecture.md](event-bus-architecture.md) to clarify:
 
 ```markdown
 ### Cross-Service Communication Rules

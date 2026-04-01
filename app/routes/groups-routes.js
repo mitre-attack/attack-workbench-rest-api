@@ -36,4 +36,8 @@ router
   .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), groupsController.updateFull)
   .delete(authn.authenticate, authz.requireRole(authz.admin), groupsController.deleteVersionById);
 
+router
+  .route('/groups/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), groupsController.revoke);
+
 module.exports = router;

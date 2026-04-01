@@ -33,7 +33,7 @@ For a full ATT&CK Workbench deployment, including the frontend application, see 
 
 - [Usage Guide](USAGE.md): Comprehensive instructions for installing, configuring, and administering the REST API
 - [Contributing Guide](CONTRIBUTING.md): Information for developers about contributing to the project
-- [Data Model](docs/data-model.md): Technical details about the data models used in the application
+- [Data Model](docs/developer/data-model.md): Technical details about the data models used in the application
 
 ## Technical Information
 
