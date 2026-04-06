@@ -57,34 +57,24 @@ ServiceB (modifies its own documents in response)
 | Operation | Allowed? | Pattern |
 |-----------|----------|---------|
 | Cross-service WRITES | ❌ NO | Use events instead |
-| Cross-service READS | ✅ YES | Direct repository access permitted for denormalization and validation |
+| Cross-service READS | ❌ NO | Use events instead (handlers can return data) |
 
-**WRITES - Use Events:**
-- ❌ Service A MUST NOT directly modify Service B's documents
-- ✅ Service A emits event → Service B modifies its own documents
-- Rationale: Maintains ownership boundaries, enables loose coupling
-
-**READS - Direct Repository Access:**
-- ✅ Service A MAY read from Service B's repository
-- Use cases: Building denormalized metadata (embedded_relationships), validation
-- Must handle missing documents gracefully (null values, try/catch)
-- Rationale: Reads are safe, idempotent, and necessary for materialized views
+All cross-service communication — reads and writes — MUST go through the EventBus.
+See [cross-service-reads-pattern.md](cross-service-reads-pattern.md) for details on how
+`EventBus.emit()` returns fulfilled handler values, enabling request/response over events.
 
 **Example:**
 ```javascript
-// DetectionStrategiesService
-async beforeCreate(data) {
-  // ✅ ALLOWED: Read from analytics repository to build denormalized metadata
-  const analytic = await analyticsRepository.retrieveLatestByStixId(analyticId);
-  data.workspace.embedded_relationships.push({
-    stix_id: analyticId,
-    name: analytic.stix.name,  // Denormalized data from read
-  });
-}
+// BaseService requests validation bypass filtering via event
+const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
+  errors: allErrors,
+  stixType,
+});
+const errors = results?.[0] ?? allErrors;
 
+// DetectionStrategiesService emits event so AnalyticsService updates its own documents
 async afterCreate(document) {
-  // ✅ REQUIRED: Emit event so AnalyticsService can update its own documents
-  await EventBus.emit('analytics-referenced', { ... });
+  await EventBus.emit('x-mitre-detection-strategy::analytics-referenced', { ... });
 }
 ```
 
@@ -402,10 +392,11 @@ Our EventBus extends Node.js's native `EventEmitter` with additional features:
 
 1. **Built on Node.js Standard Library** - Leverages `events.EventEmitter` for reliability
 2. **Async/Await Support** - Overrides `emit()` to handle async listeners with `Promise.allSettled`
-3. **Logging & Debugging** - Logs all event registrations and emissions
-4. **Event Audit Trail** - Maintains circular buffer of recent events for debugging
-5. **Singleton Pattern** - Single shared bus instance across the application
-6. **Increased Max Listeners** - Set to 50 to accommodate multiple services subscribing to common events
+3. **Handler Return Values** - `emit()` collects and returns fulfilled handler values, enabling request/response patterns over the bus
+4. **Logging & Debugging** - Logs all event registrations and emissions
+5. **Event Audit Trail** - Maintains circular buffer of recent events for debugging
+6. **Singleton Pattern** - Single shared bus instance across the application
+7. **Increased Max Listeners** - Set to 50 to accommodate multiple services subscribing to common events
 
 The implementation is minimal - we only add what's necessary beyond the standard EventEmitter.
 

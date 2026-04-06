@@ -22,7 +22,7 @@ const {
   AlreadyRevokedError,
   SelfRevocationError,
 } = require('../../exceptions');
-const { getSchema, processValidationIssues } = require('../system/validate-service');
+const { getSchema } = require('../../lib/validation-schemas');
 const ServiceWithHooks = require('./hooks.service');
 const WorkflowResult = require('../../lib/workflow-result');
 
@@ -398,15 +398,12 @@ class BaseService extends ServiceWithHooks {
    *
    * This runs AFTER all server-controlled fields have been populated (external_references,
    * x_mitre_attack_spec_version, created_by_ref, etc.) and BEFORE the repository save.
-   * Because the object is fully composed, the raw ADM schema validates cleanly —
-   * ERROR_TRANSFORMATION_RULES suppression rules naturally don't fire since the
-   * server-controlled fields are present. Only warning rules (e.g., x_mitre_shortname)
-   * may apply.
+   * Validation errors that match a stored bypass rule are filtered out.
    *
    * @param {Object} data - The composed request data ({ stix, workspace })
-   * @returns {{ errors: Array, warnings: Array }} Validation results
+   * @returns {Promise<{ errors: Array, warnings: Array }>} Validation results
    */
-  validateComposedObject(data) {
+  async validateComposedObject(data) {
     const empty = { errors: [], warnings: [] };
     if (!config.validateRequests.withAttackDataModel) return empty;
 
@@ -419,7 +416,26 @@ class BaseService extends ServiceWithHooks {
     const result = schema.safeParse(data.stix);
     if (result.success) return empty;
 
-    return processValidationIssues(result.error.issues, stixType);
+    // Convert Zod issues to error objects
+    const allErrors = result.error.issues.map((issue) => ({
+      message: `${issue.path.join('.')} is ${issue.message}`,
+      path: issue.path,
+      code: issue.code,
+      input: issue.input,
+    }));
+
+    // Filter out bypassed errors via the event bus
+    const EventBus = require('../../lib/event-bus');
+    const Events = require('../../lib/event-constants');
+    const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
+      errors: allErrors,
+      stixType,
+    });
+
+    // The handler returns the non-bypassed errors array
+    const errors = results?.[0] ?? allErrors;
+
+    return { errors, warnings: [] };
   }
 
   /**
@@ -584,7 +600,7 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
     // ──────────────────────────────────────────────
-    const { errors, warnings } = this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     if (errors.length > 0) {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });
@@ -625,7 +641,7 @@ class BaseService extends ServiceWithHooks {
       data.workspace.attack_id = attackIdInExternalReferences;
     }
 
-    const { errors, warnings } = this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     if (errors.length > 0) {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });
@@ -724,7 +740,7 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
     // ──────────────────────────────────────────────
-    const { errors, warnings } = this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     if (errors.length > 0) {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });

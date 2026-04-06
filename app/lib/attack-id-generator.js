@@ -8,6 +8,21 @@ const {
 const { InvalidTypeError, DuplicateIdError } = require('../exceptions');
 const logger = require('./logger');
 const config = require('../config/config');
+const systemConfigurationRepository = require('../repository/system-configurations-repository');
+
+/**
+ * Retrieve the organization namespace configuration (if set)
+ * @returns {Promise<{prefix: string, range_start: number}|null>} The namespace config or null
+ * @private
+ */
+async function getOrganizationNamespace() {
+  const systemConfig = await systemConfigurationRepository.retrieveOne({ lean: true });
+  const ns = systemConfig?.organization_namespace;
+  if (ns?.prefix) {
+    return { prefix: ns.prefix.toUpperCase(), rangeStart: ns.range_start || 1000 };
+  }
+  return null;
+}
 
 /**
  * Determines if a given ATT&CK object type requires an ATT&CK ID.
@@ -135,6 +150,14 @@ async function generateAttackId(
     throw new InvalidTypeError(`STIX type '${stixType}' does not support ATT&CK ID generation`);
   }
 
+  // Retrieve namespace configuration
+  const namespace = await getOrganizationNamespace();
+  if (namespace) {
+    logger.debug(
+      `Using organization namespace: prefix=${namespace.prefix}, rangeStart=${namespace.rangeStart}`,
+    );
+  }
+
   // Handle subtechnique generation
   if (isSubtechnique) {
     if (stixType !== 'attack-pattern') {
@@ -144,10 +167,10 @@ async function generateAttackId(
       throw new Error('Parent technique ATT&CK ID is required for subtechnique generation');
     }
 
-    // Validate parent ID format (must be T####)
-    if (!/^T\d{4}$/.test(parentTechniqueAttackId)) {
+    // Validate parent ID format (must be T#### or PREFIX-T####)
+    if (!/^([A-Z]+-)?T\d{4}$/.test(parentTechniqueAttackId)) {
       throw new Error(
-        `Invalid parent technique ATT&CK ID format: ${parentTechniqueAttackId}. Must be T####`,
+        `Invalid parent technique ATT&CK ID format: ${parentTechniqueAttackId}. Must be T#### or PREFIX-T####`,
       );
     }
 
@@ -187,7 +210,7 @@ async function generateAttackId(
     const nextNum =
       existingSubtechniqueNumbers.length > 0 ? Math.max(...existingSubtechniqueNumbers) + 1 : 1;
 
-    // Construct new subtechnique ID (e.g., "T1234.001")
+    // Construct new subtechnique ID (e.g., "T1234.001" or "FOOBAR-T1234.001")
     const generatedId = `${parentTechniqueAttackId}.${nextNum.toString().padStart(3, '0')}`;
 
     logger.debug(`Generated subtechnique ID: ${generatedId}`);
@@ -199,7 +222,10 @@ async function generateAttackId(
   const attackIdType = stixTypeToAttackIdMapping[stixType];
   const typePrefix = getTypePrefix(attackIdType);
 
-  logger.debug(`Generating ATT&CK ID for STIX type: ${stixType}, prefix: ${typePrefix}`);
+  // Build the full prefix including namespace (e.g., "FOOBAR-T" or just "T")
+  const fullPrefix = namespace ? `${namespace.prefix}-${typePrefix}` : typePrefix;
+
+  logger.debug(`Generating ATT&CK ID for STIX type: ${stixType}, prefix: ${fullPrefix}`);
 
   // Get all existing objects of this type
   // Repository returns: [{ totalCount: [...], documents: [...] }]
@@ -208,29 +234,31 @@ async function generateAttackId(
 
   logger.debug(`Retrieved ${allObjects.length} objects from repository`);
 
-  // Extract numeric IDs from workspace.attack_id that match our type prefix
+  // Extract numeric IDs from workspace.attack_id that match our full prefix
   const existingIds = allObjects
     .map((obj) => {
       const attackId = obj.workspace?.attack_id;
-      if (!attackId || !attackId.startsWith(typePrefix)) {
+      if (!attackId || !attackId.startsWith(fullPrefix)) {
         return null;
       }
 
-      // Remove prefix and any decimal parts (for subtechniques)
-      const idWithoutPrefix = attackId.replace(typePrefix, '').replace(/\.(\d{3})$/, '');
+      // Remove full prefix and any decimal parts (for subtechniques)
+      const idWithoutPrefix = attackId.slice(fullPrefix.length).replace(/\.(\d{3})$/, '');
 
       const numericPart = parseInt(idWithoutPrefix, 10);
       return isNaN(numericPart) ? null : numericPart;
     })
     .filter((id) => id !== null);
 
-  logger.debug(`Found ${existingIds.length} existing IDs with prefix ${typePrefix}`);
+  logger.debug(`Found ${existingIds.length} existing IDs with prefix ${fullPrefix}`);
 
-  // Calculate next available ID (start at 1 if none exist)
-  const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+  // Calculate next available ID
+  // When namespace is configured, start from range_start; otherwise start at 1
+  const minId = namespace ? namespace.rangeStart : 1;
+  const nextId = existingIds.length > 0 ? Math.max(minId, Math.max(...existingIds) + 1) : minId;
 
-  // Construct new ID with proper padding (e.g., "G0042", "TA0001", "T1234")
-  const generatedId = `${typePrefix}${nextId.toString().padStart(4, '0')}`;
+  // Construct new ID with proper padding (e.g., "G0042", "FOOBAR-T1000")
+  const generatedId = `${fullPrefix}${nextId.toString().padStart(4, '0')}`;
 
   logger.debug(`Generated ATT&CK ID: ${generatedId}`);
 

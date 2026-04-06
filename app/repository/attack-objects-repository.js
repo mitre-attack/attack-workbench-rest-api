@@ -133,6 +133,33 @@ class AttackObjectsRepository extends BaseRepository {
     }
   }
 
+  /**
+   * Retrieve all latest versions of objects whose created_by_ref or x_mitre_modified_by_ref
+   * matches any of the provided identity refs. Used for organization identity propagation.
+   * @param {string[]} identityRefs - Array of identity STIX IDs (the provenance chain)
+   * @returns {Promise<Object[]>} Array of plain objects (latest version per stix.id)
+   */
+  async retrieveAllLatestByOrgIdentityRefs(identityRefs) {
+    try {
+      const aggregation = [
+        { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+        { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$document' } },
+        {
+          $match: {
+            $or: [
+              { 'stix.created_by_ref': { $in: identityRefs } },
+              { 'stix.x_mitre_modified_by_ref': { $in: identityRefs } },
+            ],
+          },
+        },
+      ];
+      return await this.model.aggregate(aggregation).exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async findByIdAndDelete(documentId) {
     try {
       return await this.model.findByIdAndDelete(documentId).exec();

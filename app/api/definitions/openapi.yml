@@ -495,7 +495,3 @@ paths:
 
   /api/health/status:
     $ref: 'paths/health-paths.yml#/paths/~1api~1health~1status'
-
-  # Validate
-  /api/validate:
-    $ref: 'paths/validate-paths.yml#/paths/~1api~1validate'

@@ -18,6 +18,11 @@ const {
   AnonymousUserAccountNotSetError,
 } = require('../exceptions');
 
+// Ensure event listeners are registered before checkSystemConfiguration() emits events.
+// ValidationBypassesService registers its listeners at module load time, so requiring it
+// here guarantees they are in place before the SYSTEM_CONFIGURATION_IDENTITY_CHANGED event fires.
+require('../services/system/validation-bypasses-service');
+
 async function createPlaceholderOrganizationIdentity() {
   // Create placeholder identity object
   const timestamp = new Date().toISOString();

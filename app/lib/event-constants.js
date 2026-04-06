@@ -151,4 +151,11 @@ module.exports = Object.freeze({
 
   // Collection - Objects relationship
   COLLECTION_OBJECTS_CHANGED: 'x-mitre-collection::objects-changed',
+
+  // System Configuration
+  SYSTEM_CONFIGURATION_NAMESPACE_CHANGED: 'system-configuration::namespace-changed',
+  SYSTEM_CONFIGURATION_IDENTITY_CHANGED: 'system-configuration::identity-changed',
+
+  // Validation
+  VALIDATION_BYPASS_CHECK_REQUESTED: 'validation-bypass::check-requested',
 });

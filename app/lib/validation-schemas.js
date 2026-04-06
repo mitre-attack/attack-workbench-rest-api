@@ -103,71 +103,34 @@ const STIX_SCHEMAS = {
 };
 
 /**
- * Configuration for transforming validation errors (to warnings or suppression).
- * These rules handle errors produced by ADM schemas for server-controlled fields that
- * clients cannot or should not set. They are used by both the validate endpoint and the
- * service layer's post-composition validation.
+ * Get the schema to use for validating a STIX object.
  *
- * On a fully-composed object (service layer), suppression rules naturally don't fire
- * because server-controlled fields are already populated — no missing-field errors occur.
- * On a pre-composed object (validate endpoint), suppression rules fire for fields
- * the server will generate, preventing false negatives.
+ * Some STIX types define both a "base" schema and "checks" (refinements),
+ * while others only define a single schema (no refinements). This helper
+ * composes the correct schema based on the STIX type and workflow status.
  *
- * Rule schema:
- *   fieldPath     - Zod error path to match (e.g., ['stix', 'x_mitre_attack_spec_version'])
- *   errorCode     - Zod error code to match (e.g., 'invalid_type', 'invalid_value')
- *   stixType      - Which STIX types: a string, an array, or 'all'
- *   suppressError - If true, the error is silently dropped
- *   warningMessage - If set (and suppressError is falsy), convert to warning with this message
- *   status        - (Optional, future use) Which workflow states the rule applies to
+ * Composition order (for schemas with checks):
+ *   base → .partial() (if WIP) → .check(checks)
+ *
+ * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
+ * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
+ * @returns {Object|null} Zod schema, or null if the STIX type is unknown
  */
-const ERROR_TRANSFORMATION_RULES = [
-  // Server always sets x_mitre_attack_spec_version
-  {
-    fieldPath: ['x_mitre_attack_spec_version'],
-    errorCode: 'invalid_type',
-    stixType: 'all',
-    suppressError: true,
-  },
-  // Server sets x_mitre_modified_by_ref based on authenticated user - user does not need to supply it
-  {
-    fieldPath: ['x_mitre_modified_by_ref'],
-    errorCode: 'invalid_value',
-    stixType: 'all',
-    suppressError: true,
-  },
-  // Warn about non-standard tactic shortnames
-  {
-    fieldPath: ['x_mitre_shortname'],
-    errorCode: 'invalid_value',
-    stixType: 'x-mitre-tactic',
-    warningMessage:
-      'Tactic shortname does not match predefined ATT&CK tactics. This may prevent compatibility with official ATT&CK data but can be used for custom taxonomies.',
-  },
-  // Server sets x_mitre_domains for certain types (assigned during bundle export)
-  {
-    fieldPath: ['x_mitre_domains'],
-    errorCode: 'invalid_type',
-    stixType: ['intrusion-set', 'campaign', 'x-mitre-matrix', 'x-mitre-detection-strategy'],
-    suppressError: true,
-  },
-  // Server sets object_marking_refs for certain types
-  {
-    fieldPath: ['object_marking_refs'],
-    errorCode: 'invalid_type',
-    stixType: ['campaign', 'identity'],
-    suppressError: true,
-  },
-  // Server sets created_by_ref for certain types
-  {
-    fieldPath: ['created_by_ref'],
-    errorCode: 'invalid_type',
-    stixType: ['campaign', 'x-mitre-matrix', 'x-mitre-asset', 'course-of-action'],
-    suppressError: true,
-  },
-];
+function getSchema(stixType, status) {
+  const admSchemaRef = STIX_SCHEMAS[stixType];
+  if (!admSchemaRef) return null;
+
+  const isWip = status === 'work-in-progress';
+
+  if (admSchemaRef.base && admSchemaRef.checks) {
+    const base = isWip ? admSchemaRef.base.partial() : admSchemaRef.base;
+    return base.check(admSchemaRef.checks);
+  }
+
+  return isWip ? admSchemaRef.partial() : admSchemaRef;
+}
 
 module.exports = {
   STIX_SCHEMAS,
-  ERROR_TRANSFORMATION_RULES,
+  getSchema,
 };
