@@ -154,4 +154,7 @@ module.exports = Object.freeze({
 
   // System Configuration
   SYSTEM_CONFIGURATION_NAMESPACE_CHANGED: 'system-configuration::namespace-changed',
+
+  // Validation
+  VALIDATION_BYPASS_CHECK_REQUESTED: 'validation-bypass::check-requested',
 });
