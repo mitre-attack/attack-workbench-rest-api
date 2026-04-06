@@ -73,6 +73,14 @@ class ValidationBypassesRepository {
     }
   }
 
+  async deleteByReason(reason) {
+    try {
+      return await this.model.deleteMany({ autoCreated: true, autoCreatedReason: reason }).exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async findAll() {
     try {
       return await this.model.find({}).lean().exec();

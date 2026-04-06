@@ -154,6 +154,7 @@ module.exports = Object.freeze({
 
   // System Configuration
   SYSTEM_CONFIGURATION_NAMESPACE_CHANGED: 'system-configuration::namespace-changed',
+  SYSTEM_CONFIGURATION_IDENTITY_CHANGED: 'system-configuration::identity-changed',
 
   // Validation
   VALIDATION_BYPASS_CHECK_REQUESTED: 'validation-bypass::check-requested',

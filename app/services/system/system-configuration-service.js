@@ -7,6 +7,8 @@ const userAccountsService = require('./user-accounts-service');
 const identitiesService = require('../stix/identities-service');
 const markingDefinitionsService = require('../stix/marking-definitions-service');
 const { BaseService } = require('../meta-classes');
+const EventBus = require('../../lib/event-bus');
+const Events = require('../../lib/event-constants');
 const {
   SystemConfigurationNotFound,
   OrganizationIdentityNotSetError,
@@ -105,18 +107,52 @@ class SystemConfigurationService extends BaseService {
   /**
    * @public
    * CRUD Operation: Update
-   * Sets the organization identity
+   * Sets the organization identity.
+   * Validates that the identity exists, creates a new config document (preserving history),
+   * and emits an event to trigger downstream propagation.
    */
   async setOrganizationIdentity(stixId) {
-    const systemConfig = await this.repository.retrieveOne();
+    // Validate that the identity exists
+    const identities = await identitiesService.retrieveById(stixId, { versions: 'latest' });
+    if (identities.length === 0) {
+      throw new OrganizationIdentityNotFoundError(stixId);
+    }
 
-    if (systemConfig) {
-      systemConfig.organization_identity_ref = stixId;
-      await this.repository.constructor.saveDocument(systemConfig);
+    const currentConfig = await this.repository.retrieveOne({ lean: true });
+
+    if (currentConfig) {
+      // No-op if already set to this identity
+      if (currentConfig.organization_identity_ref === stixId) return;
+
+      const previousIdentityRef = currentConfig.organization_identity_ref;
+
+      // Create a new config document with updated identity ref
+      await this._createNewConfigVersion(currentConfig, {
+        organization_identity_ref: stixId,
+      });
+
+      // Determine the full provenance chain
+      const organizationIdentityHistory = await this.repository.retrieveAllDistinctIdentityRefs();
+
+      // Emit event for downstream propagation
+      await EventBus.emit(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
+        previousIdentityRef,
+        newIdentityRef: stixId,
+        organizationIdentityHistory,
+      });
     } else {
-      const systemConfigData = { organization_identity_ref: stixId };
-      const newConfig = this.repository.createNewDocument(systemConfigData);
+      // First-time setup: create initial config document
+      const newConfig = this.repository.createNewDocument({
+        organization_identity_ref: stixId,
+      });
       await this.repository.constructor.saveDocument(newConfig);
+
+      // Emit event so validation bypass rules are created at startup
+      await EventBus.emit(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
+        previousIdentityRef: null,
+        newIdentityRef: stixId,
+        organizationIdentityHistory: [stixId],
+      });
     }
   }
 
@@ -157,14 +193,16 @@ class SystemConfigurationService extends BaseService {
    * Sets the default marking definitions
    */
   async setDefaultMarkingDefinitions(stixIds) {
-    const systemConfig = await this.repository.retrieveOne();
+    const currentConfig = await this.repository.retrieveOne({ lean: true });
 
-    if (systemConfig) {
-      systemConfig.default_marking_definitions = stixIds;
-      await this.repository.constructor.saveDocument(systemConfig);
+    if (currentConfig) {
+      await this._createNewConfigVersion(currentConfig, {
+        default_marking_definitions: stixIds,
+      });
     } else {
-      const systemConfigData = { default_marking_definitions: stixIds };
-      const newConfig = this.repository.createNewDocument(systemConfigData);
+      const newConfig = this.repository.createNewDocument({
+        default_marking_definitions: stixIds,
+      });
       await this.repository.constructor.saveDocument(newConfig);
     }
   }
@@ -196,14 +234,15 @@ class SystemConfigurationService extends BaseService {
    * Internal method for user account management
    */
   async setAnonymousUserAccountId(userAccountId) {
-    const systemConfig = await this.repository.retrieveOne();
+    const currentConfig = await this.repository.retrieveOne({ lean: true });
 
-    if (!systemConfig) {
+    if (!currentConfig) {
       throw new SystemConfigurationNotFound();
     }
 
-    systemConfig.anonymous_user_account_id = userAccountId;
-    await this.repository.constructor.saveDocument(systemConfig);
+    await this._createNewConfigVersion(currentConfig, {
+      anonymous_user_account_id: userAccountId,
+    });
   }
 
   /**
@@ -238,21 +277,52 @@ class SystemConfigurationService extends BaseService {
    * Sets the organization namespace
    */
   async setOrganizationNamespace(namespace) {
-    const systemConfig = await this.repository.retrieveOne();
+    const currentConfig = await this.repository.retrieveOne({ lean: true });
 
-    if (!systemConfig) {
+    if (!currentConfig) {
       throw new SystemConfigurationNotFound();
     }
 
-    systemConfig.organization_namespace = namespace;
-    await this.repository.constructor.saveDocument(systemConfig);
+    await this._createNewConfigVersion(currentConfig, {
+      organization_namespace: namespace,
+    });
 
     // Emit event so ValidationBypassesService can manage its own bypass rules
-    const EventBus = require('../../lib/event-bus');
-    const Events = require('../../lib/event-constants');
     await EventBus.emit(Events.SYSTEM_CONFIGURATION_NAMESPACE_CHANGED, {
       namespace,
     });
+  }
+
+  /**
+   * @public
+   * CRUD Operation: Read
+   * Returns all distinct organization identity refs from all config documents.
+   * This represents the full provenance chain of organization identities.
+   * @returns {Promise<string[]>}
+   */
+  async retrieveOrganizationIdentityHistory() {
+    return await this.repository.retrieveAllDistinctIdentityRefs();
+  }
+
+  /**
+   * @private
+   * Creates a new system configuration document by copying the latest config
+   * and applying the given field overrides. This preserves history by leaving
+   * the previous document intact.
+   * @param {Object} currentConfig - The current config document (lean)
+   * @param {Object} overrides - Fields to update in the new document
+   * @returns {Promise<Object>} The saved new config document
+   */
+  async _createNewConfigVersion(currentConfig, overrides) {
+    const configData = {
+      organization_identity_ref: currentConfig.organization_identity_ref,
+      anonymous_user_account_id: currentConfig.anonymous_user_account_id,
+      default_marking_definitions: currentConfig.default_marking_definitions,
+      organization_namespace: currentConfig.organization_namespace,
+      ...overrides,
+    };
+    const newConfig = this.repository.createNewDocument(configData);
+    return await this.repository.constructor.saveDocument(newConfig);
   }
 
   /**

@@ -11,6 +11,7 @@ const systemConfigurationDefinition = {
     range_start: { type: Number, default: null },
     prefix: { type: String, default: null },
   },
+  created_at: { type: Date, default: Date.now },
 };
 
 // Create the schema

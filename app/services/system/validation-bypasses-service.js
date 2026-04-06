@@ -2,6 +2,9 @@
 
 const { BaseService } = require('../meta-classes');
 const validationBypassesRepository = require('../../repository/validation-bypasses-repository');
+const BypassRuleReasons = require('../../lib/bypass-rule-constants');
+const EventBus = require('../../lib/event-bus');
+const Events = require('../../lib/event-constants');
 const logger = require('../../lib/logger');
 
 class ValidationBypassesService {
@@ -10,12 +13,14 @@ class ValidationBypassesService {
   }
 
   static initializeEventListeners() {
-    const EventBus = require('../../lib/event-bus');
-    const Events = require('../../lib/event-constants');
-
     EventBus.on(
       Events.SYSTEM_CONFIGURATION_NAMESPACE_CHANGED,
       ValidationBypassesService.handleNamespaceChanged.bind(ValidationBypassesService),
+    );
+
+    EventBus.on(
+      Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED,
+      ValidationBypassesService.handleIdentityChanged.bind(ValidationBypassesService),
     );
 
     EventBus.on(
@@ -117,16 +122,37 @@ class ValidationBypassesService {
   }
 
   /**
+   * Handle organization identity configuration changes.
+   * Creates bypass rules for x_mitre_modified_by_ref validation.
+   * @param {Object} payload - Event payload
+   */
+  // eslint-disable-next-line no-unused-vars
+  static async handleIdentityChanged(payload) {
+    const service = module.exports;
+
+    // Remove any previously auto-created identity bypass rules
+    await service.removeByReason(BypassRuleReasons.IDENTITY);
+
+    // Create bypass rules for x_mitre_modified_by_ref across all STIX types
+    const { stixTypeToAttackIdMapping } = require('@mitre-attack/attack-data-model');
+    const stixTypes = Object.keys(stixTypeToAttackIdMapping);
+    await service.createIdentityRules(stixTypes, Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED);
+  }
+
+  /**
    * Create bypass rules for namespace-prefixed ATT&CK IDs across all relevant STIX types.
    * @param {string[]} stixTypes - STIX types that support ATT&CK IDs
    */
   async createNamespaceRules(stixTypes) {
+    const Events = require('../../lib/event-constants');
     const rules = stixTypes.map((stixType) => ({
       fieldPath: ['external_references', '0', 'external_id'],
       errorCode: 'custom',
       stixType,
       suppressError: true,
       autoCreated: true,
+      autoCreatedReason: BypassRuleReasons.NAMESPACE,
+      triggerEvent: Events.SYSTEM_CONFIGURATION_NAMESPACE_CHANGED,
     }));
 
     for (const rule of rules) {
@@ -143,11 +169,51 @@ class ValidationBypassesService {
   }
 
   /**
-   * Remove all auto-created bypass rules (e.g., when namespace is cleared).
+   * Create bypass rules for x_mitre_modified_by_ref across all relevant STIX types.
+   * These bypass the ADM rule that requires x_mitre_modified_by_ref to be the MITRE identity.
+   * @param {string[]} stixTypes - STIX types that support ATT&CK IDs
+   * @param {string} triggerEvent - The event that triggered rule creation
+   */
+  async createIdentityRules(stixTypes, triggerEvent) {
+    const rules = stixTypes.map((stixType) => ({
+      fieldPath: ['x_mitre_modified_by_ref'],
+      errorCode: 'invalid_value',
+      stixType,
+      suppressError: true,
+      autoCreated: true,
+      autoCreatedReason: BypassRuleReasons.IDENTITY,
+      triggerEvent,
+    }));
+
+    for (const rule of rules) {
+      try {
+        await this.repository.save(rule);
+      } catch (err) {
+        // Skip duplicates — rule may already exist
+        if (err.name === 'DuplicateIdError') continue;
+        throw err;
+      }
+    }
+
+    logger.info(`Created ${rules.length} identity validation bypass rules`);
+  }
+
+  /**
+   * Remove auto-created bypass rules by reason.
+   * @param {string} reason - The autoCreatedReason value to match
+   */
+  async removeByReason(reason) {
+    const result = await this.repository.deleteByReason(reason);
+    logger.info(
+      `Removed ${result.deletedCount} auto-created validation bypass rules (reason: ${reason})`,
+    );
+  }
+
+  /**
+   * Remove all auto-created namespace bypass rules.
    */
   async removeNamespaceRules() {
-    const result = await this.repository.deleteAutoCreated();
-    logger.info(`Removed ${result.deletedCount} auto-created validation bypass rules`);
+    await this.removeByReason(BypassRuleReasons.NAMESPACE);
   }
 }
 
