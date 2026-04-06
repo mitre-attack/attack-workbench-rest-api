@@ -246,6 +246,13 @@ class SystemConfigurationService extends BaseService {
 
     systemConfig.organization_namespace = namespace;
     await this.repository.constructor.saveDocument(systemConfig);
+
+    // Emit event so ValidationBypassesService can manage its own bypass rules
+    const EventBus = require('../../lib/event-bus');
+    const Events = require('../../lib/event-constants');
+    await EventBus.emit(Events.SYSTEM_CONFIGURATION_NAMESPACE_CHANGED, {
+      namespace,
+    });
   }
 
   /**

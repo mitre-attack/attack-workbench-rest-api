@@ -151,4 +151,7 @@ module.exports = Object.freeze({
 
   // Collection - Objects relationship
   COLLECTION_OBJECTS_CHANGED: 'x-mitre-collection::objects-changed',
+
+  // System Configuration
+  SYSTEM_CONFIGURATION_NAMESPACE_CHANGED: 'system-configuration::namespace-changed',
 });
