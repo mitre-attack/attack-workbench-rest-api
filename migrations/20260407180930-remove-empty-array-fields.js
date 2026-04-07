@@ -18,6 +18,7 @@ const coreFields = ['stix.external_references', 'stix.object_marking_refs'];
 // Type-specific fields grouped by the STIX types they apply to.
 // Every field lives in the `attackObjects` collection (discriminator pattern).
 const fieldsByType = {
+  'attack-pattern': ['stix.x_mitre_contributors'],
   campaign: ['stix.aliases', 'stix.x_mitre_contributors'],
   'data-source': [
     'stix.x_mitre_platforms',
