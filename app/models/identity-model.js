@@ -10,9 +10,9 @@ const identityProperties = {
   modified: { type: Date, required: true },
   name: { type: String, required: true },
   description: String,
-  roles: [String],
+  roles: { type: [String], default: undefined },
   identity_class: String,
-  sectors: [String],
+  sectors: { type: [String], default: undefined },
   contact_information: String,
 
   // ATT&CK custom stix properties

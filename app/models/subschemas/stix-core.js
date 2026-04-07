@@ -48,6 +48,6 @@ module.exports.commonRequiredSDO = {
 module.exports.commonOptionalSDO = {
   created_by_ref: { type: String },
   revoked: { type: Boolean },
-  external_references: [externalReferenceSchema],
-  object_marking_refs: [String],
+  external_references: { type: [externalReferenceSchema], default: undefined },
+  object_marking_refs: { type: [String], default: undefined },
 };
