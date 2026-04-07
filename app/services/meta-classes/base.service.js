@@ -432,10 +432,10 @@ class BaseService extends ServiceWithHooks {
       stixType,
     });
 
-    // The handler returns the non-bypassed errors array
-    const errors = results?.[0] ?? allErrors;
+    // The handler returns { errors, warnings }
+    const bypassResult = results?.[0] ?? { errors: allErrors, warnings: [] };
 
-    return { errors, warnings: [] };
+    return { errors: bypassResult.errors, warnings: bypassResult.warnings };
   }
 
   /**

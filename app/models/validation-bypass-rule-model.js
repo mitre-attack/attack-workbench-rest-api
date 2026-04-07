@@ -16,6 +16,7 @@ const validationBypassRuleDefinition = {
     default: null,
   },
   triggerEvent: { type: String, default: null },
+  warningMessage: { type: String, default: null },
 };
 
 const validationBypassRuleSchema = new mongoose.Schema(validationBypassRuleDefinition, {

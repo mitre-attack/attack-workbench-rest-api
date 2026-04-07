@@ -8,4 +8,5 @@
 module.exports = Object.freeze({
   NAMESPACE: 'namespace',
   IDENTITY: 'identity',
+  STATIC: 'static',
 });

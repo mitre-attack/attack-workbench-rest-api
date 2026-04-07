@@ -262,10 +262,16 @@ async function checkForStaticMarkingDefinitions() {
   }
 }
 
+async function checkForStaticBypassRules() {
+  const validationBypassesService = require('../services/system/validation-bypasses-service');
+  await validationBypassesService.loadStaticRules(config.configurationFiles.staticBypassRulesPath);
+}
+
 exports.checkSystemConfiguration = async function () {
   logger.info(`Performing system configuration check...`);
   await checkForOrganizationIdentity();
   await checkForAnonymousUserAccount();
   await checkForInvalidEnterpriseCollectionId();
   await checkForStaticMarkingDefinitions();
+  await checkForStaticBypassRules();
 };

@@ -1,0 +1,38 @@
+[
+  {
+    "fieldPath": ["x_mitre_shortname"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-tactic",
+    "suppressError": false,
+    "warningMessage": "Tactic shortname does not match predefined ATT&CK tactics. This may prevent compatibility with official ATT&CK data but can be used for custom taxonomies.",
+    "_comment": "Warn about non-standard tactic shortnames instead of blocking"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "intrusion-set",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for intrusion-set (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "campaign",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for campaign (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "x-mitre-matrix",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for x-mitre-matrix (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "x-mitre-detection-strategy",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for x-mitre-detection-strategy (assigned during bundle export)"
+  }
+]

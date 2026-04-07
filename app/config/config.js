@@ -238,6 +238,11 @@ function loadConfig() {
         default: './app/lib/default-static-marking-definitions/',
         env: 'WB_REST_STATIC_MARKING_DEFS_PATH',
       },
+      staticBypassRulesPath: {
+        doc: 'Location of a JSON file containing default validation bypass rules to load at startup',
+        default: './app/lib/default-bypass-rules.json',
+        env: 'WB_REST_STATIC_BYPASS_RULES_PATH',
+      },
     },
     scheduler: {
       syncCollectionIndexesCron: {
