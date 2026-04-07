@@ -558,16 +558,18 @@ class BaseService extends ServiceWithHooks {
     }
 
     if (existingObject) {
-      // New version of an existing object — only set modified_by
+      // New version of an existing object — carry forward revoked status, set modified_by
+      data.stix.revoked = existingObject.stix.revoked ?? false;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
     } else {
-      // Brand-new object — set ID, created_by, modified_by
+      // Brand-new object — set ID, created_by, modified_by, revoked
       if (!data.stix.id) {
         data.stix.id = `${data.stix.type}--${uuid.v4()}`;
       }
       if (!data.stix.created) {
         data.stix.created = new Date().toISOString();
       }
+      data.stix.revoked = false;
       data.stix.created_by_ref = organizationIdentityRef;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
     }
@@ -707,6 +709,7 @@ class BaseService extends ServiceWithHooks {
 
     // Compose server-controlled fields from existing document
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
+    data.stix.revoked = document.stix.revoked ?? false;
 
     // Preserve x_mitre_is_subtechnique — changing subtechnique status requires
     // the dedicated conversion endpoints, not the generic update path.
