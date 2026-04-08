@@ -13,7 +13,12 @@
  */
 
 // Fields from stix-core.js (commonOptionalSDO) — shared across all STIX types.
-const coreFields = ['stix.external_references', 'stix.object_marking_refs'];
+const coreFields = [
+  'stix.external_references',
+  'stix.object_marking_refs',
+  'workspace.embedded_relationships',
+  'workspace.collections',
+];
 
 // Type-specific fields grouped by the STIX types they apply to.
 // Every field lives in the `attackObjects` collection (discriminator pattern).
