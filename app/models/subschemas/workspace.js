@@ -23,6 +23,13 @@ const embedddedRelationship = {
 };
 const embeddedRelationshipSchema = new mongoose.Schema(embedddedRelationship, { _id: false });
 
+const validationIssue = {
+  message: { type: String, required: true },
+  path: [String],
+  code: { type: String, required: true },
+};
+const validationIssueSchema = new mongoose.Schema(validationIssue, { _id: false });
+
 /**
  * Workspace property definition for most object types
  */
@@ -36,7 +43,13 @@ module.exports.common = {
   },
   attack_id: String,
   collections: [collectionVersionSchema],
-  embedded_relationships: { type: [embeddedRelationshipSchema] },
+  embedded_relationships: { type: [embeddedRelationshipSchema], default: undefined },
+  validation: {
+    errors: { type: [validationIssueSchema], default: undefined },
+    attack_spec_version: String,
+    adm_version: String,
+    validated_at: Date,
+  },
 };
 
 // x-mitre-collection workspace structure

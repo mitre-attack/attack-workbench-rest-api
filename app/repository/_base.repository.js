@@ -409,6 +409,14 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  async unsetField(documentId, fieldPath) {
+    try {
+      return await this.model.updateOne({ _id: documentId }, { $unset: { [fieldPath]: '' } });
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async findOneAndDelete(stixId, modified) {
     try {
       return await this.model

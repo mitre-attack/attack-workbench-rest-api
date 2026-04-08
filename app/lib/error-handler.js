@@ -39,6 +39,7 @@ const {
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
   TrackNotFoundError,
+  ObjectHasValidationIssuesError,
 } = require('../exceptions');
 
 exports.bodyParser = function (err, req, res, next) {
@@ -126,7 +127,8 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof DuplicateNameError ||
     err instanceof AlreadyRevokedError ||
     err instanceof AlreadyReleasedError ||
-    err instanceof ReleaseConflictError
+    err instanceof ReleaseConflictError ||
+    err instanceof ObjectHasValidationIssuesError
   ) {
     logger.warn(`Conflict: ${err.message}`);
     return res.status(409).send(buildErrorResponse(err));

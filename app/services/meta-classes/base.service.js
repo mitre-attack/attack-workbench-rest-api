@@ -558,6 +558,20 @@ class BaseService extends ServiceWithHooks {
     }
 
     if (existingObject) {
+      // Block POST if the existing object has unresolved validation issues.
+      // Users must fix via PUT/updateFull first.
+      if (existingObject.workspace?.validation?.errors?.length > 0) {
+        const warning =
+          `Object ${data.stix.id} has unresolved validation issues. ` +
+          `Use PUT to update the existing version and resolve the issues before creating new versions.`;
+        console.warn(warning);
+        // TODO figure out the optimal way to treat imported objects with known validation errors
+        // throw new ObjectHasValidationIssuesError({
+        //   details: warning,
+        //   validationErrors: existingObject.workspace.validation.errors,
+        // });
+      }
+
       // New version of an existing object — carry forward revoked status, set modified_by
       data.stix.revoked = existingObject.stix.revoked ?? false;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
@@ -643,10 +657,37 @@ class BaseService extends ServiceWithHooks {
       data.workspace.attack_id = attackIdInExternalReferences;
     }
 
-    const { errors, warnings } = await this.validateComposedObject(data);
+    // Skip validation entirely for revoked or deprecated objects
+    const isRevoked = data.stix?.revoked === true;
+    const isDeprecated = data.stix?.x_mitre_deprecated === true;
+
+    let errors = [];
+    let warnings = [];
+
+    if (!isRevoked && !isDeprecated) {
+      ({ errors, warnings } = await this.validateComposedObject(data));
+    }
 
     if (errors.length > 0) {
-      throw new ValidationError('ADM validation failed', { details: errors, warnings });
+      if (options.validateContents) {
+        throw new ValidationError('ADM validation failed', { details: errors, warnings });
+      }
+
+      // Fail-open: store validation errors on the document
+      const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
+      const admPkg = require('@mitre-attack/attack-data-model/package.json');
+
+      data.workspace = data.workspace || {};
+      data.workspace.validation = {
+        errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
+        attack_spec_version: ATTACK_SPEC_VERSION,
+        adm_version: admPkg.version,
+        validated_at: new Date(),
+      };
+
+      logger.warn(
+        `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
+      );
     }
 
     if (options.dryRun) {
@@ -749,6 +790,12 @@ class BaseService extends ServiceWithHooks {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });
     }
 
+    // Validation passed — clear any stored validation issues from a previous import
+    if (document.workspace?.validation) {
+      data.workspace = data.workspace || {};
+      data.workspace.validation = undefined;
+    }
+
     // ──────────────────────────────────────────────
     // 6. PERSIST (skip if dry-run)
     // ──────────────────────────────────────────────
@@ -757,6 +804,11 @@ class BaseService extends ServiceWithHooks {
     const newDocument = await this.repository.updateAndSave(document, data);
 
     if (newDocument === document) {
+      // If the document previously had validation issues, explicitly unset them
+      if (document.workspace?.validation !== undefined) {
+        await this.repository.unsetField(document._id, 'workspace.validation');
+      }
+
       await this.afterUpdate(newDocument, document);
       await this.emitUpdatedEvent(newDocument, document);
       const result = newDocument.toObject ? newDocument.toObject() : newDocument;

@@ -255,6 +255,12 @@ class TrackNotFoundError extends CustomError {
   }
 }
 
+class ObjectHasValidationIssuesError extends CustomError {
+  constructor(message = 'Object has unresolved validation issues', options) {
+    super(message, options);
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -271,6 +277,7 @@ module.exports = {
   //** Validation errors */
   ValidationError,
   SchemaValidationError,
+  ObjectHasValidationIssuesError,
 
   //** Revocation errors */
   AlreadyRevokedError,
