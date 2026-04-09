@@ -255,6 +255,11 @@ function loadConfig() {
         default: '0 * * * *', // every hour
         env: 'CHECK_WIP_ATTACK_IDS_CRON',
       },
+      validateObjectsCron: {
+        doc: 'Cron pattern for re-validating all STIX objects against the ADM (e.g., "0 3 * * *" for daily at 3 AM).',
+        default: '0 3 * * *', // daily at 3 AM
+        env: 'VALIDATE_OBJECTS_CRON',
+      },
       enableScheduler: {
         format: Boolean,
         default: true,
