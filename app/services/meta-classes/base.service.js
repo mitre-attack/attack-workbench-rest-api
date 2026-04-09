@@ -345,7 +345,7 @@ class BaseService extends ServiceWithHooks {
    * @param {boolean} [options.preserveAttackId] - If true, preserve workspace.attack_id
    *   and ATT&CK external references (plumbing for future admin override scenarios)
    */
-  stripServerControlledFields(data, options = {}) {
+  static stripServerControlledFields(data, options = {}) {
     const stix = data.stix;
     if (!stix) return;
 
@@ -371,6 +371,25 @@ class BaseService extends ServiceWithHooks {
   }
 
   /**
+   * Recursively removes properties whose value is an empty string from an object.
+   * This prevents clients from persisting meaningless empty-string values.
+   *
+   * @param {Object} obj - Any plain object (stix, workspace, nested sub-objects)
+   */
+  static stripEmptyStrings(obj) {
+    if (!obj || typeof obj !== 'object') return;
+
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val === '') {
+        delete obj[key];
+      } else if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+        BaseService.stripEmptyStrings(val);
+      }
+    }
+  }
+
+  /**
    * Coerces any STIX date fields that are JavaScript Date objects into ISO-8601 strings.
    *
    * Mongoose schemas define timestamp fields (created, modified, start_time, stop_time)
@@ -381,7 +400,7 @@ class BaseService extends ServiceWithHooks {
    *
    * @param {Object} data - The request data ({ stix, workspace })
    */
-  normalizeDateFields(data) {
+  static normalizeDateFields(data) {
     const stix = data.stix;
     if (!stix) return;
 
@@ -488,8 +507,10 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
-    this.stripServerControlledFields(data, options);
-    this.normalizeDateFields(data);
+    BaseService.stripServerControlledFields(data, options);
+    BaseService.stripEmptyStrings(data.stix);
+    BaseService.stripEmptyStrings(data.workspace);
+    BaseService.normalizeDateFields(data);
     data.stix.external_references = data.stix.external_references || [];
 
     // Generate or reuse the ATT&CK ID
@@ -745,7 +766,9 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
-    this.stripServerControlledFields(data, options);
+    BaseService.stripServerControlledFields(data, options);
+    BaseService.stripEmptyStrings(data.stix);
+    BaseService.stripEmptyStrings(data.workspace);
     this.normalizeDateFields(data);
 
     // Compose server-controlled fields from existing document
