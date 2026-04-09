@@ -43,6 +43,17 @@ async function runServer() {
     throw new Error(errors.databaseMigrationFailed);
   }
 
+  // Ensure MongoDB views are created / up to date (idempotent)
+  const { createMongoViews } = require('../app/lib/create-mongo-views');
+  try {
+    await createMongoViews();
+  } catch (err) {
+    logger.error('Failed to create/update MongoDB views');
+    logger.error(err.message);
+    // Non-fatal: views enhance query performance but the app can still function
+    logger.warn('Continuing startup despite view creation failure');
+  }
+
   // Check for valid database configuration
   const databaseConfiguration = require('../app/lib/database-configuration');
   await databaseConfiguration.checkSystemConfiguration();
