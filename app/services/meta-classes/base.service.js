@@ -769,7 +769,7 @@ class BaseService extends ServiceWithHooks {
     BaseService.stripServerControlledFields(data, options);
     BaseService.stripEmptyStrings(data.stix);
     BaseService.stripEmptyStrings(data.workspace);
-    this.normalizeDateFields(data);
+    BaseService.normalizeDateFields(data);
 
     // Compose server-controlled fields from existing document
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
