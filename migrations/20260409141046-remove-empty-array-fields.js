@@ -30,21 +30,27 @@ const fields = [
   'workspace.collections',
 ];
 
+const collectionNames = ['attackObjects', 'relationships'];
+
 module.exports = {
   async up(db) {
-    const collection = db.collection('attackObjects');
     let totalModified = 0;
 
     // Unset each field individually so we only remove fields that are actually
     // empty arrays — not populated fields on the same document.
-    for (const field of fields) {
-      const result = await collection.updateMany(
-        { [field]: { $eq: [] } },
-        { $unset: { [field]: '' } },
-      );
-      if (result.modifiedCount > 0) {
-        console.log(`Removed empty ${field} from ${result.modifiedCount} document(s)`);
-        totalModified += result.modifiedCount;
+    for (const collectionName of collectionNames) {
+      const collection = db.collection(collectionName);
+      for (const field of fields) {
+        const result = await collection.updateMany(
+          { [field]: { $eq: [] } },
+          { $unset: { [field]: '' } },
+        );
+        if (result.modifiedCount > 0) {
+          console.log(
+            `Removed empty ${field} from ${result.modifiedCount} ${collectionName} document(s)`,
+          );
+          totalModified += result.modifiedCount;
+        }
       }
     }
 
@@ -55,10 +61,11 @@ module.exports = {
     // Restore empty arrays on documents that are missing these fields.
     // This is a best-effort reverse — it cannot distinguish between fields that
     // were never set vs fields that were unset by the up() migration.
-    const collection = db.collection('attackObjects');
-
-    for (const field of fields) {
-      await collection.updateMany({ [field]: { $exists: false } }, { $set: { [field]: [] } });
+    for (const collectionName of collectionNames) {
+      const collection = db.collection(collectionName);
+      for (const field of fields) {
+        await collection.updateMany({ [field]: { $exists: false } }, { $set: { [field]: [] } });
+      }
     }
   },
 };
