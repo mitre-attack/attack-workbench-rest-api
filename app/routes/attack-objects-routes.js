@@ -16,12 +16,4 @@ router
     attackObjectsController.retrieveAll,
   );
 
-router
-  .route('/attack-objects/attack-id/next')
-  .get(
-    authn.authenticate,
-    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
-    attackObjectsController.getNextAttackId,
-  );
-
 module.exports = router;

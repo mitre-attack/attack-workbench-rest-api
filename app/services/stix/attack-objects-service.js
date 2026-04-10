@@ -274,67 +274,6 @@ class AttackObjectsService extends BaseService {
       throw new DatabaseError(err);
     }
   }
-
-  /**
-   * Get the next available ATT&CK ID for a given STIX type
-   * @param {string} stixType - The STIX type (e.g., 'x-mitre-tactic', 'attack-pattern')
-   * @param {string} parentRef - Optional parent technique STIX ID (for subtechniques)
-   * @returns {Promise<string|null>} The next available ATT&CK ID, or null if type doesn't support IDs
-   */
-  async getNextAttackId(stixType, parentRef = null) {
-    const attackIdGenerator = require('../../lib/attack-id-generator');
-
-    // Map STIX types to their repositories
-    const repositoryMap = {
-      'x-mitre-tactic': require('../../repository/tactics-repository'),
-      'attack-pattern': require('../../repository/techniques-repository'),
-      'intrusion-set': require('../../repository/groups-repository'),
-      malware: require('../../repository/software-repository'),
-      tool: require('../../repository/software-repository'),
-      'course-of-action': require('../../repository/mitigations-repository'),
-      'x-mitre-data-source': require('../../repository/data-sources-repository'),
-      'x-mitre-data-component': require('../../repository/data-components-repository'),
-      'x-mitre-asset': require('../../repository/assets-repository'),
-      campaign: require('../../repository/campaigns-repository'),
-      'x-mitre-detection-strategy': require('../../repository/detection-strategies-repository'),
-      'x-mitre-analytic': require('../../repository/analytics-repository'),
-    };
-
-    const repository = repositoryMap[stixType];
-    if (!repository) {
-      throw new Error(`No repository found for STIX type: ${stixType}`);
-    }
-
-    // Handle subtechnique ID generation
-    if (parentRef) {
-      if (stixType !== 'attack-pattern') {
-        throw new Error('Parent reference is only valid for attack-pattern type');
-      }
-
-      // Get parent technique to extract its ATT&CK ID
-      const techniquesService = require('./techniques-service');
-      const parentTechniques = await techniquesService.retrieveById(parentRef, {
-        versions: 'latest',
-      });
-
-      if (!parentTechniques || parentTechniques.length === 0) {
-        throw new Error(`Parent technique not found: ${parentRef}`);
-      }
-
-      const parentTechnique = parentTechniques[0];
-      const parentAttackId = parentTechnique.workspace?.attack_id;
-
-      if (!parentAttackId) {
-        throw new Error('Parent technique does not have an ATT&CK ID');
-      }
-
-      // Generate subtechnique ID
-      return await attackIdGenerator.generateAttackId(stixType, repository, true, parentAttackId);
-    }
-
-    // Regular ID generation
-    return await attackIdGenerator.generateAttackId(stixType, repository, false);
-  }
 }
 
 module.exports.AttackObjectsService = AttackObjectsService;
