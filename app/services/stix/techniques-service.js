@@ -170,6 +170,78 @@ class TechniquesService extends BaseService {
   }
 
   // ============================
+  // Revoke Lifecycle Hooks
+  // ============================
+
+  /**
+   * Validate subtechnique/parent constraints before allowing a revoke operation.
+   *
+   * Rules:
+   * - Sub revoking sub (different parents) → blocked (would give revoking sub two parents)
+   * - Sub revoking parent (parent has children) → blocked (would orphan children)
+   * - All other combinations are allowed; subtechnique-of relationships are excluded
+   *   from preservation in the base revoke loop.
+   */
+  async beforeRevoke(objectA, objectB) {
+    const relationshipsRepository = require('../../repository/relationships-repository');
+
+    const aIsSub = objectA.stix.x_mitre_is_subtechnique === true;
+    const bIsSub = objectB.stix.x_mitre_is_subtechnique === true;
+
+    if (bIsSub && aIsSub) {
+      // Sub revoking sub — verify they share the same parent
+      const [aParentRels, bParentRels] = await Promise.all([
+        relationshipsRepository.retrieveAll({
+          sourceRef: objectA.stix.id,
+          relationshipType: 'subtechnique-of',
+          versions: 'latest',
+          includeRevoked: false,
+          includeDeprecated: false,
+        }),
+        relationshipsRepository.retrieveAll({
+          sourceRef: objectB.stix.id,
+          relationshipType: 'subtechnique-of',
+          versions: 'latest',
+          includeRevoked: false,
+          includeDeprecated: false,
+        }),
+      ]);
+
+      const aParent = aParentRels[0]?.stix.target_ref;
+      const bParent = bParentRels[0]?.stix.target_ref;
+
+      if (aParent && bParent && aParent !== bParent) {
+        throw new BadRequestError({
+          details:
+            `Cannot revoke subtechnique ${objectA.stix.id} with subtechnique ${objectB.stix.id}: ` +
+            `they belong to different parents (${aParent} vs ${bParent}). ` +
+            `A subtechnique can only revoke another subtechnique if they share the same parent.`,
+        });
+      }
+    }
+
+    if (bIsSub && !aIsSub) {
+      // Sub revoking parent — verify the parent has no child subtechniques
+      const childRels = await relationshipsRepository.retrieveAll({
+        targetRef: objectA.stix.id,
+        relationshipType: 'subtechnique-of',
+        versions: 'latest',
+        includeRevoked: false,
+        includeDeprecated: false,
+      });
+
+      if (childRels.length > 0) {
+        throw new BadRequestError({
+          details:
+            `Cannot revoke parent technique ${objectA.stix.id} with subtechnique ${objectB.stix.id}: ` +
+            `the parent has ${childRels.length} subtechnique(s). ` +
+            `Convert the revoking subtechnique to a parent technique first, or rehome the subtechniques.`,
+        });
+      }
+    }
+  }
+
+  // ============================
   // Subtechnique Conversion
   // ============================
 

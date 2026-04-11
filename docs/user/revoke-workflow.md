@@ -32,7 +32,22 @@ Specify the `id` and `modified` timestamp for the revoked object in the request 
 
 Optionally, you can set the following query parameter to preserve relationships:
 
-- `preserveRelationships` (boolean): If set to `true`, the workflow clones each relationship that references the revoked object so that it points to the revoking object instead, then deprecates the original. If not set or set to `false`, relationships referencing the revoked object are deprecated without being transferred. If the revoking object (Object B) already participates in a relationship with the same source, target, and relationship type as an existing relationship of the revoked object (Object A), the transfer is skipped and a warning is included in the response.
+- `preserveRelationships` (boolean): If set to `true`, the workflow clones each relationship that references the revoked object so that it points to the revoking object instead, then deprecates the original. If not set or set to `false`, relationships referencing the revoked object are deprecated without being transferred. During transfer, each relationship on the revoked object (Object A) is rewritten so that Object A's STIX ID is replaced with Object B's STIX ID. If the revoking object (Object B) already participates in an equivalent relationship (i.e., one with the same source, target, and relationship type after substitution), the transfer is skipped and a warning is included in the response. Additionally, `subtechnique-of` relationships are never transferred — they are deprecated along with the other relationships but are excluded from the preservation process because transferring hierarchy relationships could create invalid parent/child states. A warning is emitted for each skipped `subtechnique-of` relationship.
+
+### Techniques and Subtechniques
+
+Both techniques (parents) and subtechniques are of STIX type `attack-pattern`, so the type check alone does not prevent cross-hierarchy revocations. The following rules apply:
+
+| Scenario | Allowed? | Notes |
+|---|---|---|
+| Parent revokes parent | Yes | Standard flow, no hierarchy concerns |
+| Sub revokes sub (same parent) | Yes | `subtechnique-of` relationships are skipped during preservation (shared parent) |
+| Sub revokes sub (different parent) | **No** | Would give the revoking subtechnique two parents, which is not permitted |
+| Parent revokes sub | Yes | `subtechnique-of` relationships are skipped during preservation |
+| Sub revokes parent (parent has no children) | Yes | `subtechnique-of` relationships are skipped during preservation |
+| Sub revokes parent (parent has children) | **No** | Would orphan the parent's subtechniques; convert the subtechnique to a parent first via the conversion endpoint |
+
+When a revocation is blocked due to these rules, the API returns a **400 Bad Request** with a message explaining the constraint violation.
 
 ## Response
 

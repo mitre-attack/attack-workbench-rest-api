@@ -1004,16 +1004,15 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 6. HANDLE RELATIONSHIPS (transfer if preserveRelationships is set)
     // ──────────────────────────────────────────────
-    const existingRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
-      objectA.stix.id,
-    );
-
-    // Exclude the revoked-by relationship we just created
-    const relationshipsToProcess = existingRelationships.filter(
-      (rel) => rel.stix.id !== revokedByRelationship.stix.id,
-    );
-
     if (options.preserveRelationships) {
+      const existingRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
+        objectA.stix.id,
+      );
+
+      // Exclude the revoked-by relationship we just created
+      const relationshipsToProcess = existingRelationships.filter(
+        (rel) => rel.stix.id !== revokedByRelationship.stix.id,
+      );
       // Build a set of relationship triples (source_ref--relationship_type--target_ref)
       // that Object B already participates in, so we can skip duplicates.
       const objectBRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
@@ -1027,6 +1026,18 @@ class BaseService extends ServiceWithHooks {
 
       for (const rel of relationshipsToProcess) {
         try {
+          // Skip subtechnique-of relationships — hierarchy relationships must be managed
+          // separately via the conversion endpoints, not transferred during revocation.
+          if (rel.stix.relationship_type === 'subtechnique-of') {
+            logger.info(
+              `Skipping subtechnique-of relationship ${rel.stix.id} during preservation (hierarchy relationships are not transferred)`,
+            );
+            result.addWarning(
+              `Skipped subtechnique-of relationship ${rel.stix.id} — hierarchy relationships are not transferred during revocation`,
+            );
+            continue;
+          }
+
           // TODO here is another use case for a more robust composition layer or a DTO pattern — we are manually cloning and modifying relationship objects, which is error-prone and may not scale well if relationships have more complex fields in the future. A composition layer could handle cloning an existing relationship and substituting references while ensuring all required fields are correctly set.
           const relData = { ...rel };
           delete relData._id;
