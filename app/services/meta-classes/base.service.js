@@ -1075,9 +1075,11 @@ class BaseService extends ServiceWithHooks {
                 description: rel.stix.description,
               },
               existing: {
+                id: relData.stix.id,
                 source_ref: relData.stix.source_ref,
                 target_ref: relData.stix.target_ref,
                 relationship_type: relData.stix.relationship_type,
+                description: relData.stix.description,
               },
             });
             continue;
@@ -1099,6 +1101,7 @@ class BaseService extends ServiceWithHooks {
             message: 'Relationship transfer failed',
             relationship: {
               id: rel.stix.id,
+              description: rel.stix.description,
               source_ref: rel.stix.source_ref,
               target_ref: rel.stix.target_ref,
               relationship_type: rel.stix.relationship_type,
