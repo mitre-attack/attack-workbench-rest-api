@@ -109,7 +109,15 @@ class RelationshipsService extends BaseService {
       logger.error(
         `RelationshipsService: Error creating subtechnique-of relationship for ${stixId}: ${error.message}`,
       );
-      return { warnings: [`Failed to create subtechnique-of relationship for ${stixId}`] };
+      return {
+        warnings: [
+          {
+            message: 'Failed to create subtechnique-of relationship',
+            stixId,
+            error: error.message,
+          },
+        ],
+      };
     }
   }
 
@@ -155,7 +163,11 @@ class RelationshipsService extends BaseService {
           logger.error(
             `RelationshipsService: Error deprecating relationship ${rel.stix?.id}: ${error.message}`,
           );
-          warnings.push(`Failed to deprecate relationship ${rel.stix?.id}`);
+          warnings.push({
+            message: 'Failed to deprecate relationship',
+            relationshipId: rel.stix?.id,
+            error: error.message,
+          });
         }
       }
 
@@ -167,7 +179,11 @@ class RelationshipsService extends BaseService {
         `RelationshipsService: Error handling subtechnique-to-technique conversion for ${stixId}:`,
         error,
       );
-      warnings.push(`Failed to deprecate subtechnique-of relationships for ${stixId}`);
+      warnings.push({
+        message: 'Failed to deprecate subtechnique-of relationships',
+        stixId,
+        error: error.message,
+      });
     }
 
     return { deprecated: deprecatedDocs, warnings };
@@ -214,7 +230,11 @@ class RelationshipsService extends BaseService {
           );
         } catch (error) {
           logger.error(`Failed to deprecate relationship ${rel.stix.id}: ${error.message}`);
-          warnings.push(`Failed to deprecate relationship ${rel.stix.id}`);
+          warnings.push({
+            message: 'Failed to deprecate relationship',
+            relationshipId: rel.stix.id,
+            error: error.message,
+          });
         }
       }
 
@@ -223,7 +243,11 @@ class RelationshipsService extends BaseService {
       );
     } catch (error) {
       logger.error(`RelationshipsService: Error handling object revoked for ${stixId}:`, error);
-      warnings.push(`Failed to deprecate relationships for revoked object ${stixId}`);
+      warnings.push({
+        message: 'Failed to deprecate relationships for revoked object',
+        stixId,
+        error: error.message,
+      });
     }
 
     return { deprecated: deprecatedDocs, warnings };

@@ -32,9 +32,16 @@ components:
           $ref: '#/components/schemas/side-effects'
         warnings:
           type: array
-          description: 'Non-fatal warning messages generated during the workflow.'
+          description: 'Non-fatal warnings generated during the workflow. Each warning is a structured object with a message field and additional context fields.'
           items:
-            type: string
+            type: object
+            required:
+              - message
+            properties:
+              message:
+                type: string
+                description: 'Human-readable summary of the warning.'
+            additionalProperties: true
           example: []
 
     side-effects:

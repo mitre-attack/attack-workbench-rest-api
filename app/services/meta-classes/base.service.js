@@ -1032,9 +1032,16 @@ class BaseService extends ServiceWithHooks {
             logger.info(
               `Skipping subtechnique-of relationship ${rel.stix.id} during preservation (hierarchy relationships are not transferred)`,
             );
-            result.addWarning(
-              `Skipped subtechnique-of relationship ${rel.stix.id} — hierarchy relationships are not transferred during revocation`,
-            );
+            result.addWarning({
+              message: 'Hierarchy relationship not transferred',
+              reason: 'subtechnique-of',
+              relationship: {
+                id: rel.stix.id,
+                source_ref: rel.stix.source_ref,
+                target_ref: rel.stix.target_ref,
+                relationship_type: rel.stix.relationship_type,
+              },
+            });
             continue;
           }
 
@@ -1058,9 +1065,21 @@ class BaseService extends ServiceWithHooks {
             logger.info(
               `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
             );
-            result.addWarning(
-              `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
-            );
+            result.addWarning({
+              message: 'Duplicate relationship transfer skipped',
+              skipped: {
+                id: rel.stix.id,
+                source_ref: rel.stix.source_ref,
+                target_ref: rel.stix.target_ref,
+                relationship_type: rel.stix.relationship_type,
+                description: rel.stix.description,
+              },
+              existing: {
+                source_ref: relData.stix.source_ref,
+                target_ref: relData.stix.target_ref,
+                relationship_type: relData.stix.relationship_type,
+              },
+            });
             continue;
           }
 
@@ -1076,7 +1095,16 @@ class BaseService extends ServiceWithHooks {
           objectBRelTriples.add(candidateTriple);
         } catch (err) {
           logger.warn(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
-          result.addWarning(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
+          result.addWarning({
+            message: 'Relationship transfer failed',
+            relationship: {
+              id: rel.stix.id,
+              source_ref: rel.stix.source_ref,
+              target_ref: rel.stix.target_ref,
+              relationship_type: rel.stix.relationship_type,
+            },
+            error: err.message,
+          });
         }
       }
     }

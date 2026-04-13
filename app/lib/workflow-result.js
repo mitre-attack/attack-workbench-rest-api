@@ -69,16 +69,16 @@ class WorkflowResult {
   }
 
   /**
-   * Add a single warning message.
-   * @param {string} message
+   * Add a single warning.
+   * @param {string|Object} message - Warning string or structured warning object
    */
   addWarning(message) {
     this.warnings.push(message);
   }
 
   /**
-   * Add multiple warning messages.
-   * @param {Array<string>} messages
+   * Add multiple warnings.
+   * @param {Array<string|Object>} messages - Warning strings or structured warning objects
    */
   addWarnings(messages) {
     if (!Array.isArray(messages)) return;

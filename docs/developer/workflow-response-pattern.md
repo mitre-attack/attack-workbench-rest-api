@@ -23,7 +23,13 @@ Every workflow endpoint returns the same top-level shape:
     "deprecated": [],
     "deleted":    { "count": 0, "stixIds": [] }
   },
-  "warnings": []
+  "warnings": [
+    {
+      "message": "Duplicate relationship transfer skipped",
+      "skipped": { "id": "relationship--...", "source_ref": "...", "target_ref": "...", "relationship_type": "uses", "description": "..." },
+      "existing": { "source_ref": "...", "target_ref": "...", "relationship_type": "uses" }
+    }
+  ]
 }
 ```
 
@@ -39,9 +45,22 @@ Every workflow endpoint returns the same top-level shape:
 | `sideEffects.deleted` | `object` | Hard-deleted documents. Only count + STIX IDs are returned (the documents no longer exist). |
 | `sideEffects.deleted.count` | `integer` | Number of deleted documents. |
 | `sideEffects.deleted.stixIds` | `array<string>` | STIX IDs of deleted documents. |
-| `warnings` | `array<string>` | Non-fatal issues encountered during the workflow (e.g., a relationship that could not be deprecated). |
+| `warnings` | `array<object>` | Non-fatal issues encountered during the workflow. Each warning is a structured object with a `message` field and additional context fields specific to the warning type (see [Warning Object Schema](#warning-object-schema) below). |
 
 **Design rationale:** Counts are derivable from array lengths, so no separate summary object is needed. The `deleted` category is the sole exception because deleted documents cannot be returned in full — only their IDs survive.
+
+### Warning Object Schema
+
+Every warning is an object with at least a `message` field. Additional fields vary by warning type:
+
+| Warning type                              | `message`                                                                                                         | Additional fields                                                                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Hierarchy relationship not transferred    | `"Hierarchy relationship not transferred"`                                                                        | `reason`, `relationship: { id, source_ref, target_ref, relationship_type }`                                                          |
+| Duplicate relationship skipped            | `"Duplicate relationship transfer skipped"`                                                                       | `skipped: { id, source_ref, target_ref, relationship_type, description }`, `existing: { source_ref, target_ref, relationship_type }` |
+| Relationship transfer failed              | `"Relationship transfer failed"`                                                                                  | `relationship: { id, source_ref, target_ref, relationship_type }`, `error`                                                           |
+| Failed to create relationship             | `"Failed to create subtechnique-of relationship"`                                                                 | `stixId`, `error`                                                                                                                    |
+| Failed to deprecate relationship          | `"Failed to deprecate relationship"`                                                                              | `relationshipId`, `error`                                                                                                            |
+| Failed to deprecate relationships (batch) | `"Failed to deprecate relationships for revoked object"` or `"Failed to deprecate subtechnique-of relationships"` | `stixId`, `error`                                                                                                                    |
 
 ## Which Endpoints Use This Pattern
 
@@ -130,7 +149,7 @@ Event handlers return a plain object with any subset of these keys:
   created:    [ /* full documents */ ],
   modified:   [ /* full documents */ ],
   deprecated: [ /* full documents */ ],
-  warnings:   [ /* string messages */ ]
+  warnings:   [ /* structured warning objects — each must have a `message` field */ ]
 }
 ```
 
@@ -139,7 +158,7 @@ Handlers that encounter errors in their catch blocks should return `{ warnings: 
 ```javascript
 } catch (error) {
   logger.error(`Failed to deprecate relationship ${relId}: ${error.message}`);
-  return { warnings: [`Failed to deprecate relationship ${relId}`] };
+  return { warnings: [{ message: 'Failed to deprecate relationship', relationshipId: relId, error: error.message }] };
 }
 ```
 
@@ -196,7 +215,7 @@ static async handleTechniqueConvertedToSubtechnique(payload) {
     return { created: [rel] };
   } catch (error) {
     logger.error(`Failed to create subtechnique-of: ${error.message}`);
-    return { warnings: [`Failed to create subtechnique-of relationship for ${stixId}`] };
+    return { warnings: [{ message: 'Failed to create subtechnique-of relationship', stixId, error: error.message }] };
   }
 }
 ```
