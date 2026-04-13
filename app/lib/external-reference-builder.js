@@ -124,8 +124,9 @@ function createAttackExternalReference(data) {
   const attackId = data.workspace?.attack_id;
   const stixType = data.stix?.type;
 
-  if (!attackId && !stixType) {
-    logger.warn('createAttackExternalReference called with no attackId or stixType');
+  if (!attackId) {
+    // No ATT&CK ID means no external reference to generate.
+    // This is expected for types like relationships that never have ATT&CK IDs.
     return null;
   }
 

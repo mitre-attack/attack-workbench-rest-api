@@ -88,7 +88,7 @@ docker run -p 3000:3000 -d \
   ghcr.io/center-for-threat-informed-defense/attack-workbench-rest-api:latest
 ```
 
-More infomation about configuration options is in the [configuration file documentation](./docs/configuration.md).
+More infomation about configuration options is in the [configuration file documentation](./docs/admin/configuration.md).
 
 ### Manual Installation
 
@@ -173,7 +173,7 @@ Example configuration file:
 ## Authentication
 
 The REST API has several authentication options.
-Read all about them in the [authentication docs](./docs/authentication/README.md).
+Read all about them in the [authentication docs](./docs/admin/authentication/README.md).
 
 ## User Management
 

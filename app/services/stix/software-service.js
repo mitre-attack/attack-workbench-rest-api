@@ -9,9 +9,35 @@ const { Malware: MalwareType, Tool: ToolType } = require('../../lib/types');
 
 class SoftwareService extends BaseService {
   /**
+   * Ensure x_mitre_aliases[0] is always the object's own name.
+   *
+   * - If no aliases exist, sets aliases to [name].
+   * - If aliases exist, removes any prior occurrence of the current (and optionally
+   *   previous) name, then prepends the current name at index 0.
+   *
+   * @param {Object} data - The software object data (mutated in place)
+   * @param {string|null} [previousName=null] - The old name to strip on rename
+   */
+  _normalizeAliases(data, previousName = null) {
+    const name = data.stix?.name;
+    if (!name) return;
+
+    let aliases = Array.isArray(data.stix.x_mitre_aliases) ? data.stix.x_mitre_aliases : [];
+
+    // Remove current name (avoid duplicate) and previous name (if renamed)
+    aliases = aliases.filter(
+      (alias) => alias !== name && (previousName === null || alias !== previousName),
+    );
+
+    aliases.unshift(name);
+    data.stix.x_mitre_aliases = aliases;
+  }
+
+  /**
    * Set domain-specific defaults before creating a software object.
    * - For malware: `is_family` defaults to true
    * - For tools: `is_family` is not allowed
+   * - Ensures x_mitre_aliases[0] matches the object name
    *
    * @param {Object} data - The software object data
    * @param {Object} _options - Creation options (unused)
@@ -26,6 +52,18 @@ class SoftwareService extends BaseService {
     else if (data.stix && data.stix.type === ToolType && data.stix.is_family !== undefined) {
       throw new PropertyNotAllowedError('is_family is not allowed for tool objects');
     }
+
+    this._normalizeAliases(data);
+  }
+
+  /**
+   * Ensure x_mitre_aliases stays in sync on update.
+   * If the name changed, the old name alias is replaced by the new one.
+   */
+  // eslint-disable-next-line no-unused-vars
+  async beforeUpdate(_stixId, _stixModified, data, existingDocument, _options) {
+    const previousName = existingDocument?.stix?.name ?? null;
+    this._normalizeAliases(data, previousName);
   }
 
   /**

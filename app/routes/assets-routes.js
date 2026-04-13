@@ -36,4 +36,8 @@ router
   .put(authn.authenticate, authz.requireRole(authz.editorOrHigher), assetsController.updateFull)
   .delete(authn.authenticate, authz.requireRole(authz.admin), assetsController.deleteVersionById);
 
+router
+  .route('/assets/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), assetsController.revoke);
+
 module.exports = router;

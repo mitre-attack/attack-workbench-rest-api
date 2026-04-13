@@ -238,6 +238,11 @@ function loadConfig() {
         default: './app/lib/default-static-marking-definitions/',
         env: 'WB_REST_STATIC_MARKING_DEFS_PATH',
       },
+      staticBypassRulesPath: {
+        doc: 'Location of a JSON file containing default validation bypass rules to load at startup',
+        default: './app/lib/default-bypass-rules.json',
+        env: 'WB_REST_STATIC_BYPASS_RULES_PATH',
+      },
     },
     scheduler: {
       syncCollectionIndexesCron: {
@@ -249,6 +254,11 @@ function loadConfig() {
         doc: 'Cron pattern for checking WIP objects with ATT&CK IDs (e.g., "0 * * * *" for hourly).',
         default: '0 * * * *', // every hour
         env: 'CHECK_WIP_ATTACK_IDS_CRON',
+      },
+      validateObjectsCron: {
+        doc: 'Cron pattern for re-validating all STIX objects against the ADM (e.g., "0 3 * * *" for daily at 3 AM).',
+        default: '0 3 * * *', // daily at 3 AM
+        env: 'VALIDATE_OBJECTS_CRON',
       },
       enableScheduler: {
         format: Boolean,

@@ -202,6 +202,23 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  /**
+   * Retrieve the latest version of an object by its ATT&CK ID (e.g., "T1234", "G0001").
+   *
+   * @param {string} attackId - The workspace ATT&CK ID to look up
+   * @returns {Promise<Object|null>} The latest object version, or null if not found
+   */
+  async retrieveLatestByAttackId(attackId) {
+    try {
+      return await this.model
+        .findOne({ 'workspace.attack_id': attackId })
+        .sort('-stix.modified')
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async retrieveLatestByStixIdLean(stixId) {
     try {
       return await this.model
@@ -387,6 +404,14 @@ class BaseRepository extends AbstractRepository {
       // TODO validate that document is valid mongoose object first
       _.merge(document, data);
       return await document.save();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async unsetField(documentId, fieldPath) {
+    try {
+      return await this.model.updateOne({ _id: documentId }, { $unset: { [fieldPath]: '' } });
     } catch (err) {
       throw new DatabaseError(err);
     }

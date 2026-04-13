@@ -216,7 +216,13 @@ async function processStixObject(
       };
 
       try {
-        await service.create(newObject, { import: true });
+        // TODO should we bypass validation for imports?
+        // or possibly fail open on validation errors where we record the validation error on the object but still allow the import to proceed?
+        // for validation errors, the object may need to be placed into a quarantined state where it is visible but read-only except through a PUT operation that allows updates to be made to fix the validation errors
+        await service.create(newObject, {
+          import: true,
+          validateContents: options.validateContents,
+        });
       } catch (err) {
         if (err.message === service.errors?.duplicateId || err instanceof DuplicateIdError) {
           throw err;

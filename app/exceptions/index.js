@@ -204,6 +204,18 @@ class SchemaValidationError extends CustomError {
   }
 }
 
+class AlreadyRevokedError extends CustomError {
+  constructor(options) {
+    super('Object has already been revoked', options);
+  }
+}
+
+class SelfRevocationError extends CustomError {
+  constructor(options) {
+    super('An object cannot revoke itself', options);
+  }
+}
+
 class AlreadyReleasedError extends CustomError {
   constructor(version, options) {
     super(`This snapshot has already been tagged as version ${version}`, options);
@@ -243,6 +255,12 @@ class TrackNotFoundError extends CustomError {
   }
 }
 
+class ObjectHasValidationIssuesError extends CustomError {
+  constructor(message = 'Object has unresolved validation issues', options) {
+    super(message, options);
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -259,6 +277,11 @@ module.exports = {
   //** Validation errors */
   ValidationError,
   SchemaValidationError,
+  ObjectHasValidationIssuesError,
+
+  //** Revocation errors */
+  AlreadyRevokedError,
+  SelfRevocationError,
 
   //** Version control errors */
   AlreadyReleasedError,

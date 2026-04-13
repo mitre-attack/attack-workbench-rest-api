@@ -244,6 +244,7 @@ exports.importBundle = async function (req, res) {
 
   const options = {
     previewOnly: req.query.previewOnly || req.query.checkOnly,
+    validateContents: req.query.validateContents === 'true',
     forceImportParameters,
   };
 

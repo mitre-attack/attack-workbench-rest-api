@@ -31,12 +31,15 @@ const {
   InvalidPostOperationError,
   ValidationError,
   DefaultMarkingDefinitionsNotFoundError,
+  AlreadyRevokedError,
+  SelfRevocationError,
   AlreadyReleasedError,
   InvalidVersionError,
   ReleaseConflictError,
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
   TrackNotFoundError,
+  ObjectHasValidationIssuesError,
 } = require('../exceptions');
 
 exports.bodyParser = function (err, req, res, next) {
@@ -93,13 +96,14 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof InvalidTypeError ||
     err instanceof PropertyNotAllowedError ||
     err instanceof CannotUpdateStaticObjectError ||
+    err instanceof SelfRevocationError ||
     err instanceof BadRequestError ||
     err instanceof ValidationError ||
     err instanceof InvalidVersionError ||
     err instanceof NoTaggedSnapshotsError ||
     err instanceof InvalidComponentTypeError
   ) {
-    logger.warn(`Bad request: ${err.message}`);
+    logger.warn('Bad request: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(400).send(buildErrorResponse(err));
   }
 
@@ -112,7 +116,7 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof DefaultMarkingDefinitionsNotFoundError ||
     err instanceof TrackNotFoundError
   ) {
-    logger.warn(`Not found: ${err.message}`);
+    logger.warn('Not found: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(404).send(buildErrorResponse(err));
   }
 
@@ -121,10 +125,12 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof DuplicateIdError ||
     err instanceof DuplicateEmailError ||
     err instanceof DuplicateNameError ||
+    err instanceof AlreadyRevokedError ||
     err instanceof AlreadyReleasedError ||
-    err instanceof ReleaseConflictError
+    err instanceof ReleaseConflictError ||
+    err instanceof ObjectHasValidationIssuesError
   ) {
-    logger.warn(`Conflict: ${err.message}`);
+    logger.warn('Conflict: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(409).send(buildErrorResponse(err));
   }
 
@@ -136,13 +142,13 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof GenericServiceError ||
     err instanceof DatabaseError
   ) {
-    logger.error(`Service error: ${err.message}`);
+    logger.error('Service error: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(500).send(buildErrorResponse(err));
   }
 
   // Handle 502 Bad Gateway errors (external service errors)
   if (err instanceof HostNotFoundError || err instanceof ConnectionRefusedError) {
-    logger.error(`Bad gateway: ${err.message}`);
+    logger.error('Bad gateway: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(502).send(buildErrorResponse(err));
   }
 
@@ -152,13 +158,13 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof OrganizationIdentityNotSetError ||
     err instanceof AnonymousUserAccountNotSetError
   ) {
-    logger.error(`Service unavailable: ${err.message}`);
+    logger.error('Service unavailable: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(503).send(buildErrorResponse(err));
   }
 
   // Handle 501 Not Implemented errors
   if (err instanceof NotImplementedError) {
-    logger.warn(`Not implemented: ${err.message}`);
+    logger.warn('Not implemented: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(501).send(buildErrorResponse(err));
   }
 

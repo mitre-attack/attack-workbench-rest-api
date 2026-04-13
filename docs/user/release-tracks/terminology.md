@@ -33,7 +33,7 @@ A **release track** (RT) is a series/chain (linked list) of **snapshots**, where
 - The release track provides version control and release management for curated sets of STIX objects
 
 **Characteristics:**
-- Has a unique identifier (e.g., `release-track--uuid`) (see [naming conventions](./06_ENTITIES.md#naming-conventions) for details)
+- Has a unique identifier (e.g., `release-track--uuid`) (see [naming conventions](../../developer/release-tracks/entities.md#naming-conventions) for details)
 - Contains a chronological history of all changes
 - Supports Git-inspired versioning workflow
 
@@ -196,12 +196,12 @@ Standard release tracks use three tiers to manage the object lifecycle from deve
 **Definition:** Objects that have been reviewed (in this release track) and are ready for the next tagged release.
 
 **Characteristics:**
-- Once a candidate's workflow status meets the release track's ["candidacy threshold"](./05_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in `members`. 
+- Once a candidate's workflow status meets the release track's ["candidacy threshold"](./release-workflow.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in `members`. 
  
 When the release is exported as a `bundle`, all `members` will be included in the resultant bundle's `x_mitre_contents` array.
 
 - Each `staged` entry includes a version pin (`object_modified` timestamp), which can either equal an ISO 8601 timestamp (designating a specific object version) or `"latest"` (designating a dynamic reference to the latest permutation of the relevant object)
-- Auto-promoted from candidates when objects meet the [candidacy threshold](./05_RELEASE_WORKFLOW.md#candidacy-threshold-configuration)
+- Auto-promoted from candidates when objects meet the [candidacy threshold](./release-workflow.md#candidacy-threshold-configuration)
 - Moved to member objects tier (`members`) when the snapshot is tagged
 - NOT included in published STIX bundles until the snapshot is tagged
 

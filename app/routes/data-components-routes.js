@@ -64,4 +64,12 @@ router
     dataComponentsController.deleteVersionById,
   );
 
+router
+  .route('/data-components/:stixId/revoke')
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    dataComponentsController.revoke,
+  );
+
 module.exports = router;

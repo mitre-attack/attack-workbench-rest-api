@@ -24,6 +24,7 @@ const initialObjectData = {
     definition_type: 'statement',
     definition: { statement: 'This is a marking definition.' },
     created_by_ref: 'identity--6444f546-6900-4456-b3b1-015c88d70dab',
+    object_marking_refs: ['marking-definition--613f2e26-407d-48c7-9eca-b8e91df99dc9'],
   },
 };
 

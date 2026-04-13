@@ -1,0 +1,157 @@
+[
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-tactic",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "attack-pattern",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "intrusion-set",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "malware",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "tool",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "campaign",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "relationship",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "identity",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "course-of-action",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "marking-definition",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-asset",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-data-source",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-data-component",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-detection-strategy",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-analytic",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-matrix",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_modified_by_ref"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-collection",
+    "suppressError": true,
+    "_comment": "This error is expected for all Workbench deployments except for the official MITRE ATT&CK deployment"
+  },
+  {
+    "fieldPath": ["x_mitre_shortname"],
+    "errorCode": "invalid_value",
+    "stixType": "x-mitre-tactic",
+    "suppressError": false,
+    "warningMessage": "Tactic shortname does not match predefined ATT&CK tactics. This may prevent compatibility with official ATT&CK data but can be used for custom taxonomies.",
+    "_comment": "Warn about non-standard tactic shortnames instead of blocking"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "intrusion-set",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for intrusion-set (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "campaign",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for campaign (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "x-mitre-matrix",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for x-mitre-matrix (assigned during bundle export)"
+  },
+  {
+    "fieldPath": ["x_mitre_domains"],
+    "errorCode": "invalid_type",
+    "stixType": "x-mitre-detection-strategy",
+    "suppressError": true,
+    "_comment": "Server sets x_mitre_domains for x-mitre-detection-strategy (assigned during bundle export)"
+  }
+]

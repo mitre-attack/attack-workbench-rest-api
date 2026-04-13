@@ -187,6 +187,86 @@ class AttackObjectsService extends BaseService {
     }
   }
 
+  /**
+   * Initialize event listeners for organization identity propagation.
+   */
+  static initializeEventListeners() {
+    const EventBus = require('../../lib/event-bus');
+    const Events = require('../../lib/event-constants');
+
+    EventBus.on(
+      Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED,
+      AttackObjectsService.handleOrganizationIdentityChanged,
+    );
+
+    logger.info('AttackObjectsService: Event listeners initialized');
+  }
+
+  /**
+   * Handle organization identity changes by creating new versions of affected objects.
+   * Objects are updated based on field-specific provenance:
+   * - created_by_ref is updated only if it matches an identity in the provenance chain
+   * - x_mitre_modified_by_ref is updated only if it matches an identity in the provenance chain
+   * @param {Object} payload
+   * @param {string} payload.previousIdentityRef
+   * @param {string} payload.newIdentityRef
+   * @param {string[]} payload.organizationIdentityHistory
+   */
+  static async handleOrganizationIdentityChanged(payload) {
+    const { previousIdentityRef, newIdentityRef, organizationIdentityHistory } = payload;
+
+    // Skip propagation on first-time setup (no previous identity to propagate from)
+    // or if required payload fields are missing.
+    if (!previousIdentityRef || !organizationIdentityHistory || !newIdentityRef) {
+      return;
+    }
+
+    const objects = await attackObjectsRepository.retrieveAllLatestByOrgIdentityRefs(
+      organizationIdentityHistory,
+    );
+
+    logger.info(
+      `AttackObjectsService: Creating new versions for ${objects.length} object(s) due to organization identity change`,
+      { newIdentityRef },
+    );
+
+    for (const obj of objects) {
+      try {
+        const createdByInHistory = organizationIdentityHistory.includes(obj.stix.created_by_ref);
+        const modifiedByInHistory = organizationIdentityHistory.includes(
+          obj.stix.x_mitre_modified_by_ref,
+        );
+
+        const newVersion = {
+          workspace: obj.workspace,
+          stix: {
+            ...obj.stix,
+            modified: new Date().toISOString(),
+          },
+        };
+
+        if (createdByInHistory) {
+          newVersion.stix.created_by_ref = newIdentityRef;
+        }
+        if (modifiedByInHistory) {
+          newVersion.stix.x_mitre_modified_by_ref = newIdentityRef;
+        }
+
+        await attackObjectsRepository.save(newVersion);
+
+        logger.info(
+          `AttackObjectsService: Created new version of ${obj.stix.id} with updated identity refs`,
+          {
+            createdByUpdated: createdByInHistory,
+            modifiedByUpdated: modifiedByInHistory,
+          },
+        );
+      } catch (error) {
+        logger.error(`AttackObjectsService: Error creating new version of ${obj.stix?.id}:`, error);
+      }
+    }
+  }
+
   async retrieveOneByVersionLean(stixId, stixModified) {
     try {
       return await this.repository.retrieveOneByVersionLean(stixId, stixModified);
@@ -194,70 +274,12 @@ class AttackObjectsService extends BaseService {
       throw new DatabaseError(err);
     }
   }
-
-  /**
-   * Get the next available ATT&CK ID for a given STIX type
-   * @param {string} stixType - The STIX type (e.g., 'x-mitre-tactic', 'attack-pattern')
-   * @param {string} parentRef - Optional parent technique STIX ID (for subtechniques)
-   * @returns {Promise<string|null>} The next available ATT&CK ID, or null if type doesn't support IDs
-   */
-  async getNextAttackId(stixType, parentRef = null) {
-    const attackIdGenerator = require('../../lib/attack-id-generator');
-
-    // Map STIX types to their repositories
-    const repositoryMap = {
-      'x-mitre-tactic': require('../../repository/tactics-repository'),
-      'attack-pattern': require('../../repository/techniques-repository'),
-      'intrusion-set': require('../../repository/groups-repository'),
-      malware: require('../../repository/software-repository'),
-      tool: require('../../repository/software-repository'),
-      'course-of-action': require('../../repository/mitigations-repository'),
-      'x-mitre-data-source': require('../../repository/data-sources-repository'),
-      'x-mitre-data-component': require('../../repository/data-components-repository'),
-      'x-mitre-asset': require('../../repository/assets-repository'),
-      campaign: require('../../repository/campaigns-repository'),
-      'x-mitre-detection-strategy': require('../../repository/detection-strategies-repository'),
-      'x-mitre-analytic': require('../../repository/analytics-repository'),
-    };
-
-    const repository = repositoryMap[stixType];
-    if (!repository) {
-      throw new Error(`No repository found for STIX type: ${stixType}`);
-    }
-
-    // Handle subtechnique ID generation
-    if (parentRef) {
-      if (stixType !== 'attack-pattern') {
-        throw new Error('Parent reference is only valid for attack-pattern type');
-      }
-
-      // Get parent technique to extract its ATT&CK ID
-      const techniquesService = require('./techniques-service');
-      const parentTechniques = await techniquesService.retrieveById(parentRef, {
-        versions: 'latest',
-      });
-
-      if (!parentTechniques || parentTechniques.length === 0) {
-        throw new Error(`Parent technique not found: ${parentRef}`);
-      }
-
-      const parentTechnique = parentTechniques[0];
-      const parentAttackId = parentTechnique.workspace?.attack_id;
-
-      if (!parentAttackId) {
-        throw new Error('Parent technique does not have an ATT&CK ID');
-      }
-
-      // Generate subtechnique ID
-      return await attackIdGenerator.generateAttackId(stixType, repository, true, parentAttackId);
-    }
-
-    // Regular ID generation
-    return await attackIdGenerator.generateAttackId(stixType, repository, false);
-  }
 }
 
 module.exports.AttackObjectsService = AttackObjectsService;
+
+// Initialize event listeners for identity propagation
+AttackObjectsService.initializeEventListeners();
 
 // Export an instance of the service
 module.exports = new AttackObjectsService(null, attackObjectsRepository);

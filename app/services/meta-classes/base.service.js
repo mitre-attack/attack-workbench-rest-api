@@ -17,9 +17,14 @@ const {
   OrganizationIdentityNotSetError,
   InvalidPostOperationError,
   ValidationError,
+  BadRequestError,
+  NotFoundError,
+  AlreadyRevokedError,
+  SelfRevocationError,
 } = require('../../exceptions');
-const { getSchema, processValidationIssues } = require('../system/validate-service');
+const { getSchema } = require('../../lib/validation-schemas');
 const ServiceWithHooks = require('./hooks.service');
+const WorkflowResult = require('../../lib/workflow-result');
 
 // Import required repositories
 const systemConfigurationRepository = require('../../repository/system-configurations-repository');
@@ -326,7 +331,7 @@ class BaseService extends ServiceWithHooks {
    *
    * Future additions: 'id', 'created', 'modified' (when server takes control of these)
    */
-  static ALWAYS_STRIPPED_STIX_FIELDS = ['x_mitre_attack_spec_version'];
+  static ALWAYS_STRIPPED_STIX_FIELDS = ['x_mitre_attack_spec_version', 'revoked'];
 
   /**
    * Silently strips universally server-controlled fields from client input.
@@ -340,7 +345,7 @@ class BaseService extends ServiceWithHooks {
    * @param {boolean} [options.preserveAttackId] - If true, preserve workspace.attack_id
    *   and ATT&CK external references (plumbing for future admin override scenarios)
    */
-  stripServerControlledFields(data, options = {}) {
+  static stripServerControlledFields(data, options = {}) {
     const stix = data.stix;
     if (!stix) return;
 
@@ -366,19 +371,58 @@ class BaseService extends ServiceWithHooks {
   }
 
   /**
+   * Recursively removes properties whose value is an empty string from an object.
+   * This prevents clients from persisting meaningless empty-string values.
+   *
+   * @param {Object} obj - Any plain object (stix, workspace, nested sub-objects)
+   */
+  static stripEmptyStrings(obj) {
+    if (!obj || typeof obj !== 'object') return;
+
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (val === '') {
+        delete obj[key];
+      } else if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+        BaseService.stripEmptyStrings(val);
+      }
+    }
+  }
+
+  /**
+   * Coerces any STIX date fields that are JavaScript Date objects into ISO-8601 strings.
+   *
+   * Mongoose schemas define timestamp fields (created, modified, start_time, stop_time)
+   * as `{ type: Date }`, so documents retrieved from MongoDB carry JS Date objects.
+   * The ADM validation layer (Zod) expects RFC3339 strings.  This method bridges that
+   * gap so that data originating from the repository can safely pass through create()
+   * without manual per-call-site coercion.
+   *
+   * @param {Object} data - The request data ({ stix, workspace })
+   */
+  static normalizeDateFields(data) {
+    const stix = data.stix;
+    if (!stix) return;
+
+    const dateFields = ['created', 'modified', 'start_time', 'stop_time'];
+    for (const field of dateFields) {
+      if (stix[field] instanceof Date) {
+        stix[field] = stix[field].toISOString();
+      }
+    }
+  }
+
+  /**
    * Validates the fully-composed STIX object against the ADM schema.
    *
    * This runs AFTER all server-controlled fields have been populated (external_references,
    * x_mitre_attack_spec_version, created_by_ref, etc.) and BEFORE the repository save.
-   * Because the object is fully composed, the raw ADM schema validates cleanly —
-   * ERROR_TRANSFORMATION_RULES suppression rules naturally don't fire since the
-   * server-controlled fields are present. Only warning rules (e.g., x_mitre_shortname)
-   * may apply.
+   * Validation errors that match a stored bypass rule are filtered out.
    *
    * @param {Object} data - The composed request data ({ stix, workspace })
-   * @returns {{ errors: Array, warnings: Array }} Validation results
+   * @returns {Promise<{ errors: Array, warnings: Array }>} Validation results
    */
-  validateComposedObject(data) {
+  async validateComposedObject(data) {
     const empty = { errors: [], warnings: [] };
     if (!config.validateRequests.withAttackDataModel) return empty;
 
@@ -391,7 +435,26 @@ class BaseService extends ServiceWithHooks {
     const result = schema.safeParse(data.stix);
     if (result.success) return empty;
 
-    return processValidationIssues(result.error.issues, stixType);
+    // Convert Zod issues to error objects
+    const allErrors = result.error.issues.map((issue) => ({
+      message: `${issue.path.join('.')} is ${issue.message}`,
+      path: issue.path,
+      code: issue.code,
+      input: issue.input,
+    }));
+
+    // Filter out bypassed errors via the event bus
+    const EventBus = require('../../lib/event-bus');
+    const Events = require('../../lib/event-constants');
+    const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
+      errors: allErrors,
+      stixType,
+    });
+
+    // The handler returns { errors, warnings }
+    const bypassResult = results?.[0] ?? { errors: allErrors, warnings: [] };
+
+    return { errors: bypassResult.errors, warnings: bypassResult.warnings };
   }
 
   /**
@@ -444,7 +507,10 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
-    this.stripServerControlledFields(data, options);
+    BaseService.stripServerControlledFields(data, options);
+    BaseService.stripEmptyStrings(data.stix);
+    BaseService.stripEmptyStrings(data.workspace);
+    BaseService.normalizeDateFields(data);
     data.stix.external_references = data.stix.external_references || [];
 
     // Generate or reuse the ATT&CK ID
@@ -491,6 +557,12 @@ class BaseService extends ServiceWithHooks {
       data.stix.external_references.unshift(attackRef);
     }
 
+    // TODO is this the best approach?
+    if (data.stix.external_references.length === 0) {
+      // remove field
+      delete data.stix.external_references;
+    }
+
     // ──────────────────────────────────────────────
     // 3. SET SERVER-CONTROLLED FIELDS
     // ──────────────────────────────────────────────
@@ -507,16 +579,32 @@ class BaseService extends ServiceWithHooks {
     }
 
     if (existingObject) {
-      // New version of an existing object — only set modified_by
+      // Block POST if the existing object has unresolved validation issues.
+      // Users must fix via PUT/updateFull first.
+      if (existingObject.workspace?.validation?.errors?.length > 0) {
+        const warning =
+          `Object ${data.stix.id} has unresolved validation issues. ` +
+          `Use PUT to update the existing version and resolve the issues before creating new versions.`;
+        console.warn(warning);
+        // TODO figure out the optimal way to treat imported objects with known validation errors
+        // throw new ObjectHasValidationIssuesError({
+        //   details: warning,
+        //   validationErrors: existingObject.workspace.validation.errors,
+        // });
+      }
+
+      // New version of an existing object — carry forward revoked status, set modified_by
+      data.stix.revoked = existingObject.stix.revoked ?? false;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
     } else {
-      // Brand-new object — set ID, created_by, modified_by
+      // Brand-new object — set ID, created_by, modified_by, revoked
       if (!data.stix.id) {
         data.stix.id = `${data.stix.type}--${uuid.v4()}`;
       }
       if (!data.stix.created) {
         data.stix.created = new Date().toISOString();
       }
+      data.stix.revoked = false;
       data.stix.created_by_ref = organizationIdentityRef;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
     }
@@ -533,6 +621,10 @@ class BaseService extends ServiceWithHooks {
 
     // 3b. Metadata fields
     if (options.userAccountId) {
+      // TODO is this the best approach? We should explore using a DTO or similar pattern to avoid mutating the input data object directly
+      if (!data.workspace.workflow) {
+        data.workspace.workflow = {};
+      }
       data.workspace.workflow.created_by_user_account = options.userAccountId;
     }
     await this.setDefaultMarkingDefinitionsForObject(data);
@@ -545,7 +637,7 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
     // ──────────────────────────────────────────────
-    const { errors, warnings } = this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     if (errors.length > 0) {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });
@@ -586,10 +678,37 @@ class BaseService extends ServiceWithHooks {
       data.workspace.attack_id = attackIdInExternalReferences;
     }
 
-    const { errors, warnings } = this.validateComposedObject(data);
+    // Skip validation entirely for revoked or deprecated objects
+    const isRevoked = data.stix?.revoked === true;
+    const isDeprecated = data.stix?.x_mitre_deprecated === true;
+
+    let errors = [];
+    let warnings = [];
+
+    if (!isRevoked && !isDeprecated) {
+      ({ errors, warnings } = await this.validateComposedObject(data));
+    }
 
     if (errors.length > 0) {
-      throw new ValidationError('ADM validation failed', { details: errors, warnings });
+      if (options.validateContents) {
+        throw new ValidationError('ADM validation failed', { details: errors, warnings });
+      }
+
+      // Fail-open: store validation errors on the document
+      const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
+      const admPkg = require('@mitre-attack/attack-data-model/package.json');
+
+      data.workspace = data.workspace || {};
+      data.workspace.validation = {
+        errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
+        attack_spec_version: ATTACK_SPEC_VERSION,
+        adm_version: admPkg.version,
+        validated_at: new Date(),
+      };
+
+      logger.warn(
+        `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
+      );
     }
 
     if (options.dryRun) {
@@ -647,10 +766,20 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
-    this.stripServerControlledFields(data, options);
+    BaseService.stripServerControlledFields(data, options);
+    BaseService.stripEmptyStrings(data.stix);
+    BaseService.stripEmptyStrings(data.workspace);
+    BaseService.normalizeDateFields(data);
 
     // Compose server-controlled fields from existing document
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
+    data.stix.revoked = document.stix.revoked ?? false;
+
+    // Preserve x_mitre_is_subtechnique — changing subtechnique status requires
+    // the dedicated conversion endpoints, not the generic update path.
+    if (document.stix.x_mitre_is_subtechnique !== undefined) {
+      data.stix.x_mitre_is_subtechnique = document.stix.x_mitre_is_subtechnique;
+    }
 
     if (document.workspace?.attack_id) {
       data.workspace = data.workspace || {};
@@ -678,10 +807,16 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
     // ──────────────────────────────────────────────
-    const { errors, warnings } = this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     if (errors.length > 0) {
       throw new ValidationError('ADM validation failed', { details: errors, warnings });
+    }
+
+    // Validation passed — clear any stored validation issues from a previous import
+    if (document.workspace?.validation) {
+      data.workspace = data.workspace || {};
+      data.workspace.validation = undefined;
     }
 
     // ──────────────────────────────────────────────
@@ -692,6 +827,11 @@ class BaseService extends ServiceWithHooks {
     const newDocument = await this.repository.updateAndSave(document, data);
 
     if (newDocument === document) {
+      // If the document previously had validation issues, explicitly unset them
+      if (document.workspace?.validation !== undefined) {
+        await this.repository.unsetField(document._id, 'workspace.validation');
+      }
+
       await this.afterUpdate(newDocument, document);
       await this.emitUpdatedEvent(newDocument, document);
       const result = newDocument.toObject ? newDocument.toObject() : newDocument;
@@ -722,6 +862,278 @@ class BaseService extends ServiceWithHooks {
       return null;
     }
     return document;
+  }
+
+  // ============================
+  // Revoke Operation
+  // ============================
+
+  /**
+   * Revokes an object (Object A) in favor of another object (Object B).
+   *
+   * Workflow:
+   *   1. Validate inputs
+   *   2. Retrieve objects A and B
+   *   3. Lifecycle hook: beforeRevoke
+   *   4. Mark Object A as revoked (creates a new version via this.create)
+   *   5. Create a revoked-by relationship (A → B)
+   *   6. Handle relationships (transfer to B if preserveRelationships)
+   *   7. Lifecycle hook: afterRevoke
+   *   8. Emit revoked event (RelationshipsService deprecates original relationships via event listener)
+   *   9. Return result
+   *
+   * @param {string} stixId - The STIX ID of the object to revoke (Object A)
+   * @param {Object} data - Request body containing { revoking: { stixId, modified } }
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.preserveRelationships] - If true, clone relationships to Object B before deleting
+   * @param {string} [options.userAccountId] - The authenticated user's account ID
+   * @returns {Object} Result with revokedObject, revokedByRelationship, relationshipsSummary
+   */
+  async revoke(stixId, data, options = {}) {
+    logger.info(
+      `REVOKING ${stixId} in favor of ${data?.revoking?.stixId} (preserveRelationships: ${options.preserveRelationships})`,
+    );
+
+    // Lazy-load to avoid circular dependency
+    const relationshipsService = require('../stix/relationships-service');
+    const relationshipsRepository = require('../../repository/relationships-repository');
+
+    // ──────────────────────────────────────────────
+    // 1. VALIDATE INPUTS
+    // ──────────────────────────────────────────────
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+    if (!data?.revoking?.stixId) {
+      throw new MissingParameterError('revoking.stixId');
+    }
+    if (!data?.revoking?.modified) {
+      throw new MissingParameterError('revoking.modified');
+    }
+    if (stixId === data.revoking.stixId) {
+      throw new SelfRevocationError();
+    }
+
+    // ──────────────────────────────────────────────
+    // 2. RETRIEVE OBJECTS
+    // ──────────────────────────────────────────────
+    const objectA = await this.repository.retrieveLatestByStixId(stixId);
+    if (!objectA) {
+      throw new NotFoundError({ details: `Object A with stixId ${stixId} not found` });
+    }
+    if (objectA.stix.revoked === true) {
+      throw new AlreadyRevokedError({ details: `Object ${stixId} is already revoked` });
+    }
+
+    const objectB = await this.repository.retrieveOneByVersion(
+      data.revoking.stixId,
+      data.revoking.modified,
+    );
+    if (!objectB) {
+      throw new NotFoundError({
+        details: `Object B with stixId ${data.revoking.stixId} and modified ${data.revoking.modified} not found`,
+      });
+    }
+    if (objectB.stix.type !== this.type) {
+      throw new BadRequestError({
+        details: `Revoking object must be of the same type (${this.type}), got ${objectB.stix.type}`,
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // 3. LIFECYCLE HOOK: beforeRevoke
+    // ──────────────────────────────────────────────
+    await this.beforeRevoke(objectA, objectB, options);
+
+    // ──────────────────────────────────────────────
+    // 4. MARK OBJECT A AS REVOKED
+    // ──────────────────────────────────────────────
+    // Clone Object A and set revoked = true, then persist directly via the repository.
+    // We bypass this.create() because the object is already fully composed and validated —
+    // routing it through create() would strip the revoked flag (which is server-controlled).
+    const objectAData = objectA.toObject ? objectA.toObject() : { ...objectA };
+    delete objectAData._id;
+    delete objectAData.__v;
+    delete objectAData.__t;
+    objectAData.stix.revoked = true;
+    objectAData.stix.modified = new Date().toISOString();
+    if (options.userAccountId) {
+      objectAData.workspace = objectAData.workspace || {};
+      objectAData.workspace.workflow = objectAData.workspace.workflow || {};
+      objectAData.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+
+    const revokedDocument = await this.repository.save(objectAData);
+
+    const result = new WorkflowResult('revoke');
+    result.setPrimary(revokedDocument);
+
+    // ──────────────────────────────────────────────
+    // 5. CREATE REVOKED-BY RELATIONSHIP
+    // ──────────────────────────────────────────────
+    // NOTE: This is a direct cross-service write (BaseService → RelationshipsService.create).
+    // The revoke workflow predates the event-driven architecture and is shared by all SDO types.
+    // TODO: Migrate to an event-driven pattern for consistency with the conversion workflows.
+    const now = new Date().toISOString();
+    const revokedByRelationship = await relationshipsService.create(
+      {
+        workspace: {
+          workflow: {},
+        },
+        stix: {
+          type: 'relationship',
+          spec_version: '2.1',
+          relationship_type: 'revoked-by',
+          source_ref: objectA.stix.id,
+          target_ref: objectB.stix.id,
+          created: now,
+          modified: now,
+        },
+      },
+      { userAccountId: options.userAccountId },
+    );
+    result.addCreated(revokedByRelationship);
+
+    // TODO what if relationshipsService.create fails after we've already marked Object A as revoked?
+    // We should have error handling to attempt to roll back the revoked status if the relationship
+    // creation fails, to avoid leaving the system in a broken state where Object A is revoked but
+    // there's no link to Object B. This could be done with a try/catch around the relationship creation,
+    // and in the catch block we would attempt to set revoked back to false on Object A and save it again.
+    // We would also need to handle potential errors in that rollback attempt and log them appropriately.
+
+    // ──────────────────────────────────────────────
+    // 6. HANDLE RELATIONSHIPS (transfer if preserveRelationships is set)
+    // ──────────────────────────────────────────────
+    if (options.preserveRelationships) {
+      const existingRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
+        objectA.stix.id,
+      );
+
+      // Exclude the revoked-by relationship we just created
+      const relationshipsToProcess = existingRelationships.filter(
+        (rel) => rel.stix.id !== revokedByRelationship.stix.id,
+      );
+      // Build a set of relationship triples (source_ref--relationship_type--target_ref)
+      // that Object B already participates in, so we can skip duplicates.
+      const objectBRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
+        objectB.stix.id,
+      );
+      const objectBRelTriples = new Set(
+        objectBRelationships.map(
+          (r) => `${r.stix.source_ref}--${r.stix.relationship_type}--${r.stix.target_ref}`,
+        ),
+      );
+
+      for (const rel of relationshipsToProcess) {
+        try {
+          // Skip subtechnique-of relationships — hierarchy relationships must be managed
+          // separately via the conversion endpoints, not transferred during revocation.
+          if (rel.stix.relationship_type === 'subtechnique-of') {
+            logger.info(
+              `Skipping subtechnique-of relationship ${rel.stix.id} during preservation (hierarchy relationships are not transferred)`,
+            );
+            result.addWarning({
+              message: 'Hierarchy relationship not transferred',
+              reason: 'subtechnique-of',
+              relationship: {
+                id: rel.stix.id,
+                source_ref: rel.stix.source_ref,
+                target_ref: rel.stix.target_ref,
+                relationship_type: rel.stix.relationship_type,
+              },
+            });
+            continue;
+          }
+
+          // TODO here is another use case for a more robust composition layer or a DTO pattern — we are manually cloning and modifying relationship objects, which is error-prone and may not scale well if relationships have more complex fields in the future. A composition layer could handle cloning an existing relationship and substituting references while ensuring all required fields are correctly set.
+          const relData = { ...rel };
+          delete relData._id;
+          delete relData.__v;
+          delete relData.__t;
+
+          // Substitute Object B for Object A
+          if (relData.stix.source_ref === objectA.stix.id) {
+            relData.stix.source_ref = objectB.stix.id;
+          }
+          if (relData.stix.target_ref === objectA.stix.id) {
+            relData.stix.target_ref = objectB.stix.id;
+          }
+
+          // Skip if Object B already has an equivalent relationship
+          const candidateTriple = `${relData.stix.source_ref}--${relData.stix.relationship_type}--${relData.stix.target_ref}`;
+          if (objectBRelTriples.has(candidateTriple)) {
+            logger.info(
+              `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
+            );
+            result.addWarning({
+              message: 'Duplicate relationship transfer skipped',
+              skipped: {
+                id: rel.stix.id,
+                source_ref: rel.stix.source_ref,
+                target_ref: rel.stix.target_ref,
+                relationship_type: rel.stix.relationship_type,
+                description: rel.stix.description,
+              },
+              existing: {
+                id: relData.stix.id,
+                source_ref: relData.stix.source_ref,
+                target_ref: relData.stix.target_ref,
+                relationship_type: relData.stix.relationship_type,
+                description: relData.stix.description,
+              },
+            });
+            continue;
+          }
+
+          // Generate a new STIX ID for the cloned relationship
+          relData.stix.id = `relationship--${uuid.v4()}`;
+
+          const transferredRel = await relationshipsService.create(relData, {
+            userAccountId: options.userAccountId,
+          });
+          result.addCreated(transferredRel);
+
+          // Track the newly created triple so subsequent iterations don't create duplicates
+          objectBRelTriples.add(candidateTriple);
+        } catch (err) {
+          logger.warn(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
+          result.addWarning({
+            message: 'Relationship transfer failed',
+            relationship: {
+              id: rel.stix.id,
+              description: rel.stix.description,
+              source_ref: rel.stix.source_ref,
+              target_ref: rel.stix.target_ref,
+              relationship_type: rel.stix.relationship_type,
+            },
+            error: err.message,
+          });
+        }
+      }
+    }
+
+    // ──────────────────────────────────────────────
+    // 7. LIFECYCLE HOOK: afterRevoke
+    // ──────────────────────────────────────────────
+    await this.afterRevoke(revokedDocument, objectB, options);
+
+    // ──────────────────────────────────────────────
+    // 8. EMIT EVENT
+    // ──────────────────────────────────────────────
+    // RelationshipsService listens for revoked events and deprecates all relationships
+    // referencing the revoked object (except those in excludeRelationshipIds).
+    // EventBus.emit() awaits all listeners, so deprecation completes before we return.
+    // Handler results (deprecated docs, warnings) are merged into the WorkflowResult.
+    const excludeRelationshipIds = [revokedByRelationship.stix.id];
+    const eventResults = await this.emitRevokedEvent(revokedDocument, objectB, options, {
+      excludeRelationshipIds,
+    });
+    result.mergeEventResults(eventResults);
+
+    // ──────────────────────────────────────────────
+    // 9. RETURN RESULT
+    // ──────────────────────────────────────────────
+    return result.toJSON();
   }
 
   // TODO rename to deleteManyByStixId

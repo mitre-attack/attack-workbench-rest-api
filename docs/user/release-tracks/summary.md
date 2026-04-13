@@ -4,7 +4,7 @@
 
 This document provides a high-level summary of the Release Tracks API refactor (a.k.a. "Collections V2"), tying together the versioning system and workflow integration.
 
-**Note on Terminology:** We're replacing the overloaded term "collection" with **release track** to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [02_TERMINOLOGY.md](./02_TERMINOLOGY.md) for complete terminology guide.
+**Note on Terminology:** We're replacing the overloaded term "collection" with **release track** to avoid confusion with TAXII collections, MongoDB collections, STIX bundles, and `x-mitre-collection` SDOs. See [terminology.md](./terminology.md) for complete terminology guide.
 
 ## Problem Statement
 
@@ -39,7 +39,7 @@ The Release Tracks API supports two types of release tracks:
 
 Teams can organize objects into modular standard tracks by type (e.g., one track for Groups, one for Techniques), each with its own release cadence. Then create virtual tracks that aggregate these into domain-specific releases (e.g., Enterprise ATT&CK = Groups + Techniques + Software) without duplicating object tracking.
 
-See [04_VIRTUAL_TRACKS.md](./04_VIRTUAL_TRACKS.md) for complete virtual track documentation.
+See [virtual-tracks.md](./virtual-tracks.md) for complete virtual track documentation.
 
 ### 1. Unified API Structure
 
@@ -55,7 +55,7 @@ GET  /api/collections/:id            (retrieve)
 
 **New API V2 (partial preview):**
 
-The new API is still a work in progress. The source of truth is located in [00_API_REFERENCE.md](./00_API_REFERENCE.md). The following is a preview. If there are any discrepencies between what is shown here and what is shown in [00_API_REFERENCE.md](./00_API_REFERENCE.md), defer to the latter.
+The new API is still a work in progress. The source of truth is located in [api-reference.md](./api-reference.md). The following is a preview. If there are any discrepencies between what is shown here and what is shown in [api-reference.md](./api-reference.md), defer to the latter.
 ```
 # Ephemeral bundles (stateless)
 GET  /api/release-tracks/ephemeral/:domain
@@ -107,7 +107,7 @@ We use the preexisting object workflow statuses, `work-in-progress`, `awaiting-r
 
 There are three types of membership "standings":
   1. **Candidate**: When an object is first added to a release track, is it considered a candidate. It does not have full membership yet; if the snapshot were to be tagged and released right now, candidates would not be included.
-  2. **Staged**: Once a candidate's workflow status meets the release track's ["candidacy threshold"](./4_RELEASE_WORKFLOW.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in the resultant bundle's `x_mitre_contents`.
+  2. **Staged**: Once a candidate's workflow status meets the release track's ["candidacy threshold"](./release-workflow.md#candidacy-threshold-configuration) criteria, it will automatically become staged. Once the snapshot is tagged/released, staged objects will be included in the resultant bundle's `x_mitre_contents`.
   3. **Member**: Objects are considered "members" if they are "cooked" into the `x_mitre_contents` array of the current snapshot. These are considered already released.
 
 This presents a tenable solution to the classic "STIX freeze" dilemma wherein editors cannot begin working on the next-*next* (e.g., v20) release until all objects in the next (e.g., v19) release have been released. Staged objects are locked in for the imminent release, but editors are free to continue iterating on future object changes and can queue them up as candidates without affecting the permutation that has already been staged for the imminent release.

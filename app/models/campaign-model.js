@@ -10,7 +10,7 @@ const stixCampaign = {
   modified: { type: Date, required: true },
   name: { type: String, required: true },
   description: String,
-  aliases: [String],
+  aliases: { type: [String], default: undefined },
   first_seen: { type: Date, required: true },
   last_seen: { type: Date, required: true },
 
@@ -21,7 +21,7 @@ const stixCampaign = {
   x_mitre_deprecated: { type: Boolean, required: true, default: false },
   x_mitre_version: String,
   x_mitre_attack_spec_version: String,
-  x_mitre_contributors: [String],
+  x_mitre_contributors: { type: [String], default: undefined },
 };
 
 // Create the definition
