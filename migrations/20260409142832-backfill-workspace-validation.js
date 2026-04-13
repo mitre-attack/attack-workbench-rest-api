@@ -40,6 +40,8 @@ module.exports = {
     const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
     const admPkg = require('@mitre-attack/attack-data-model/package.json');
 
+    const BATCH_SIZE = 500;
+
     // EventBus + bypass listener may not be wired up during migrations,
     // so we load the bypass rules directly for filtering.
     let bypassRules = [];
@@ -57,12 +59,19 @@ module.exports = {
 
     for (const collectionName of collections) {
       const collection = db.collection(collectionName);
+      const totalDocs = await collection.countDocuments({});
+      let collectionValidated = 0;
+
+      console.log(`[${collectionName}] Starting validation of ${totalDocs} documents...`);
+
       // Target ALL objects (including non-latest, revoked, and deprecated)
-      const cursor = collection.find({});
+      const cursor = collection.find({}).batchSize(BATCH_SIZE);
+      let ops = [];
 
       while (await cursor.hasNext()) {
         const doc = await cursor.next();
         totalValidated++;
+        collectionValidated++;
 
         const stixType = doc.stix?.type;
         if (!stixType) continue;
@@ -76,10 +85,12 @@ module.exports = {
         if (result.success) {
           // Valid — remove any stale validation errors
           if (doc.workspace?.validation) {
-            await collection.updateOne(
-              { _id: doc._id },
-              { $unset: { 'workspace.validation': '' } },
-            );
+            ops.push({
+              updateOne: {
+                filter: { _id: doc._id },
+                update: { $unset: { 'workspace.validation': '' } },
+              },
+            });
             totalCleared++;
           }
           continue;
@@ -109,35 +120,60 @@ module.exports = {
         if (errors.length === 0) {
           // All errors were bypassed — clear stale validation
           if (doc.workspace?.validation) {
-            await collection.updateOne(
-              { _id: doc._id },
-              { $unset: { 'workspace.validation': '' } },
-            );
+            ops.push({
+              updateOne: {
+                filter: { _id: doc._id },
+                update: { $unset: { 'workspace.validation': '' } },
+              },
+            });
             totalCleared++;
           }
           continue;
         }
 
         // Set validation errors on the document
-        await collection.updateOne(
-          { _id: doc._id },
-          {
-            $set: {
-              'workspace.validation': {
-                errors: errors.map((e) => ({
-                  message: e.message,
-                  path: e.path,
-                  code: e.code,
-                })),
-                attack_spec_version: ATTACK_SPEC_VERSION,
-                adm_version: admPkg.version,
-                validated_at: new Date(),
+        ops.push({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: {
+              $set: {
+                'workspace.validation': {
+                  errors: errors.map((e) => ({
+                    message: e.message,
+                    path: e.path,
+                    code: e.code,
+                  })),
+                  attack_spec_version: ATTACK_SPEC_VERSION,
+                  adm_version: admPkg.version,
+                  validated_at: new Date(),
+                },
               },
             },
           },
-        );
+        });
         totalErrored++;
+
+        // Flush batch when it reaches BATCH_SIZE
+        if (ops.length >= BATCH_SIZE) {
+          await collection.bulkWrite(ops, { ordered: false });
+          ops = [];
+        }
+
+        // Progress reporting
+        if (collectionValidated % 10000 === 0) {
+          console.log(
+            `  [${collectionName}] ${collectionValidated} / ${totalDocs} processed ` +
+              `(${totalErrored} errors, ${totalCleared} cleared)`,
+          );
+        }
       }
+
+      // Flush remaining ops
+      if (ops.length > 0) {
+        await collection.bulkWrite(ops, { ordered: false });
+      }
+
+      console.log(`[${collectionName}] Done — ${collectionValidated} documents processed.`);
     }
 
     console.log(
