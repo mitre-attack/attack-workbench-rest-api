@@ -42,7 +42,7 @@ Both techniques (parents) and subtechniques are of STIX type `attack-pattern`, s
 |---|---|---|
 | Parent revokes parent | Yes | Standard flow, no hierarchy concerns |
 | Sub revokes sub (same parent) | Yes | `subtechnique-of` relationships are skipped during preservation (shared parent) |
-| Sub revokes sub (different parent) | **No** | Would give the revoking subtechnique two parents, which is not permitted |
+| Sub revokes sub (different parent) | Yes | `subtechnique-of` relationships are skipped during preservation; the revoking sub retains its existing parent |
 | Parent revokes sub | Yes | `subtechnique-of` relationships are skipped during preservation |
 | Sub revokes parent (parent has no children) | Yes | `subtechnique-of` relationships are skipped during preservation |
 | Sub revokes parent (parent has children) | **No** | Would orphan the parent's subtechniques; convert the subtechnique to a parent first via the conversion endpoint |
