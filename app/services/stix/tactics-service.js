@@ -88,6 +88,7 @@ class TacticsService extends BaseService {
         tacticId: document.stix.id,
         oldShortname,
         newShortname,
+        domains: document.stix.x_mitre_domains || [],
         createNewVersion: true,
       });
 
@@ -126,6 +127,7 @@ class TacticsService extends BaseService {
         tacticId: updatedDocument.stix.id,
         oldShortname,
         newShortname,
+        domains: updatedDocument.stix.x_mitre_domains || [],
       });
 
       delete this._shortnameChange;
