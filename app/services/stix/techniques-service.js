@@ -50,13 +50,22 @@ class TechniquesService extends BaseService {
    * @param {string} payload.tacticId - STIX ID of the updated tactic
    * @param {string} payload.oldShortname - Previous x_mitre_shortname value
    * @param {string} payload.newShortname - New x_mitre_shortname value
+   * @param {string[]} payload.domains - The tactic's x_mitre_domains (e.g. ['enterprise-attack'])
    */
   static async handleTacticShortnameChanged(payload) {
-    const { tacticId, oldShortname, newShortname, createNewVersion } = payload;
+    const { tacticId, oldShortname, newShortname, domains = [], createNewVersion } = payload;
+
+    // Convert the tactic's domains to kill chain names so we only update
+    // techniques whose kill_chain_phases match both the phase_name AND the
+    // kill_chain_name.  This prevents cross-domain propagation (e.g. an
+    // enterprise tactic rename bleeding into mobile techniques).
+    const killChainNames = domains
+      .map((domain) => config.domainToKillChainMap[domain])
+      .filter(Boolean);
 
     logger.info(
       `TechniquesService: Propagating tactic shortname change '${oldShortname}' -> '${newShortname}' via ${createNewVersion ? 'new technique versions' : 'in-place update'}`,
-      { tacticId },
+      { tacticId, killChainNames },
     );
 
     if (createNewVersion) {
@@ -64,9 +73,15 @@ class TechniquesService extends BaseService {
         tacticId,
         oldShortname,
         newShortname,
+        killChainNames,
       );
     } else {
-      await TechniquesService._propagateShortnameInPlace(tacticId, oldShortname, newShortname);
+      await TechniquesService._propagateShortnameInPlace(
+        tacticId,
+        oldShortname,
+        newShortname,
+        killChainNames,
+      );
     }
   }
 
@@ -78,25 +93,37 @@ class TechniquesService extends BaseService {
    * @param {string} tacticId - STIX ID of the updated tactic (for logging)
    * @param {string} oldShortname - Previous x_mitre_shortname value
    * @param {string} newShortname - New x_mitre_shortname value
+   * @param {string[]} killChainNames - Kill chain names derived from the tactic's domains
    */
-  static async _propagateShortnameViaNewVersions(tacticId, oldShortname, newShortname) {
-    const techniques = await techniquesRepository.retrieveAllLatestByPhaseName(oldShortname);
+  static async _propagateShortnameViaNewVersions(
+    tacticId,
+    oldShortname,
+    newShortname,
+    killChainNames,
+  ) {
+    const techniques = await techniquesRepository.retrieveAllLatestByPhaseName(
+      oldShortname,
+      killChainNames,
+    );
 
     logger.info(
       `TechniquesService: Creating new versions for ${techniques.length} technique(s) due to tactic shortname change`,
-      { tacticId, oldShortname, newShortname },
+      { tacticId, oldShortname, newShortname, killChainNames },
     );
 
     for (const technique of techniques) {
       try {
-        // Clone stix shallowly — only kill_chain_phases needs to change
+        // Clone stix shallowly — only kill_chain_phases needs to change.
+        // Only rename phases that match BOTH the old phase_name AND one of the
+        // tactic's kill chain names, so cross-domain phases are left untouched.
         const newVersion = {
           ...technique,
           stix: {
             ...technique.stix,
             modified: new Date().toISOString(),
             kill_chain_phases: (technique.stix.kill_chain_phases || []).map((phase) =>
-              phase.phase_name === oldShortname
+              phase.phase_name === oldShortname &&
+              (killChainNames.length === 0 || killChainNames.includes(phase.kill_chain_name))
                 ? { ...phase, phase_name: newShortname }
                 : { ...phase },
             ),
@@ -125,13 +152,18 @@ class TechniquesService extends BaseService {
    * @param {string} tacticId - STIX ID of the updated tactic (for logging)
    * @param {string} oldShortname - Previous x_mitre_shortname value
    * @param {string} newShortname - New x_mitre_shortname value
+   * @param {string[]} killChainNames - Kill chain names derived from the tactic's domains
    */
-  static async _propagateShortnameInPlace(tacticId, oldShortname, newShortname) {
+  static async _propagateShortnameInPlace(tacticId, oldShortname, newShortname, killChainNames) {
     try {
-      const result = await techniquesRepository.updatePhaseName(oldShortname, newShortname);
+      const result = await techniquesRepository.updatePhaseName(
+        oldShortname,
+        newShortname,
+        killChainNames,
+      );
       logger.info(
         `TechniquesService: Updated ${result.modifiedCount} technique document(s) in-place for tactic shortname change`,
-        { tacticId, oldShortname, newShortname },
+        { tacticId, oldShortname, newShortname, killChainNames },
       );
     } catch (error) {
       logger.error(
