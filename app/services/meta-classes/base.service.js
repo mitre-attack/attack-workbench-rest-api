@@ -5,6 +5,7 @@ const logger = require('../../lib/logger');
 const config = require('../../config/config');
 const attackIdGenerator = require('../../lib/attack-id-generator');
 const {
+  buildAttackExternalReference,
   createAttackExternalReference,
   findAttackExternalReference,
 } = require('../../lib/external-reference-builder');
@@ -507,6 +508,17 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
+
+    // For matrices, capture the external_id from the client-provided ATT&CK reference
+    // before stripping removes it. Matrices don't have auto-generated ATT&CK IDs;
+    // their external_id is the domain name (e.g., "enterprise-attack").
+    let matrixExternalId;
+    if (data.stix?.type === 'x-mitre-matrix') {
+      matrixExternalId =
+        findAttackExternalReference(existingVersion?.stix?.external_references)?.external_id ||
+        findAttackExternalReference(data.stix?.external_references)?.external_id;
+    }
+
     BaseService.stripServerControlledFields(data, options);
     BaseService.stripEmptyStrings(data.stix);
     BaseService.stripEmptyStrings(data.workspace);
@@ -552,7 +564,13 @@ class BaseService extends ServiceWithHooks {
     }
 
     // Generate and prepend the ATT&CK external reference
-    const attackRef = createAttackExternalReference(data);
+    let attackRef;
+    if (matrixExternalId) {
+      // Matrices derive their external reference from the domain name, not workspace.attack_id
+      attackRef = buildAttackExternalReference(matrixExternalId, data.stix.type);
+    } else {
+      attackRef = createAttackExternalReference(data);
+    }
     if (attackRef) {
       data.stix.external_references.unshift(attackRef);
     }
@@ -766,6 +784,17 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 2. COMPOSE OBJECT
     // ──────────────────────────────────────────────
+
+    // For matrices, capture the external_id before stripping removes the client-provided
+    // ATT&CK reference. Used as a fallback when the stored document lacks one
+    // (e.g., matrices created before ATT&CK ref generation was added).
+    let matrixExternalId;
+    if (data.stix?.type === 'x-mitre-matrix') {
+      matrixExternalId =
+        findAttackExternalReference(document.stix?.external_references)?.external_id ||
+        findAttackExternalReference(data.stix?.external_references)?.external_id;
+    }
+
     BaseService.stripServerControlledFields(data, options);
     BaseService.stripEmptyStrings(data.stix);
     BaseService.stripEmptyStrings(data.workspace);
@@ -791,6 +820,12 @@ class BaseService extends ServiceWithHooks {
     const existingAttackRef = findAttackExternalReference(document.stix.external_references);
     if (existingAttackRef) {
       data.stix.external_references.unshift(existingAttackRef);
+    } else if (matrixExternalId) {
+      // Fallback for matrices created before ATT&CK ref generation was added
+      const matrixRef = buildAttackExternalReference(matrixExternalId, data.stix.type);
+      if (matrixRef) {
+        data.stix.external_references.unshift(matrixRef);
+      }
     }
 
     // ──────────────────────────────────────────────

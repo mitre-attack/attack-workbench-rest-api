@@ -18,6 +18,7 @@ const STIX_TYPE_TO_URL_PATH = {
   'x-mitre-analytic': 'analytics',
   'x-mitre-asset': 'assets',
   'x-mitre-tactic': 'tactics',
+  'x-mitre-matrix': 'matrices',
 };
 
 /**
@@ -65,13 +66,20 @@ function buildAttackExternalReference(attackId, stixType, options = {}) {
   }
 
   let url;
-  const isSubtechnique = options.isSubtechnique || attackId.includes('.');
-  if (stixType === 'attack-pattern' && isSubtechnique) {
-    // Subtechniques use format: /techniques/T1234/001
-    const [parentId, subId] = attackId.split('.');
-    url = `https://attack.mitre.org/${urlPath}/${parentId}/${subId}`;
+  if (stixType === 'x-mitre-matrix') {
+    // Matrices use the domain name as external_id (e.g., "enterprise-attack")
+    // and the URL path strips the "-attack" suffix (e.g., /matrices/enterprise)
+    const urlSegment = attackId.replace(/-attack$/, '');
+    url = `https://attack.mitre.org/${urlPath}/${urlSegment}`;
   } else {
-    url = `https://attack.mitre.org/${urlPath}/${attackId}`;
+    const isSubtechnique = options.isSubtechnique || attackId.includes('.');
+    if (stixType === 'attack-pattern' && isSubtechnique) {
+      // Subtechniques use format: /techniques/T1234/001
+      const [parentId, subId] = attackId.split('.');
+      url = `https://attack.mitre.org/${urlPath}/${parentId}/${subId}`;
+    } else {
+      url = `https://attack.mitre.org/${urlPath}/${attackId}`;
+    }
   }
 
   return {
@@ -121,8 +129,20 @@ function extractParentDetectionStrategyId(data) {
  * @returns {object|null} The ATT&CK external reference object, or null if not applicable
  */
 function createAttackExternalReference(data) {
-  const attackId = data.workspace?.attack_id;
   const stixType = data.stix?.type;
+
+  // Matrices don't have ATT&CK IDs; their external_id is the domain name
+  // (e.g., "enterprise-attack") taken from x_mitre_domains[0].
+  if (stixType === 'x-mitre-matrix') {
+    const domain = data.stix?.x_mitre_domains?.[0];
+    if (!domain) {
+      logger.debug('Matrix has no x_mitre_domains; omitting ATT&CK external reference');
+      return null;
+    }
+    return buildAttackExternalReference(domain, stixType);
+  }
+
+  const attackId = data.workspace?.attack_id;
 
   if (!attackId) {
     // No ATT&CK ID means no external reference to generate.
