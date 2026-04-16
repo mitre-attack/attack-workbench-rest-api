@@ -569,7 +569,7 @@ class BaseService extends ServiceWithHooks {
       // Matrices derive their external reference from the domain name, not workspace.attack_id
       attackRef = buildAttackExternalReference(matrixExternalId, data.stix.type);
     } else {
-      attackRef = createAttackExternalReference(data);
+      attackRef = createAttackExternalReference(data, { previousVersion: existingVersion });
     }
     if (attackRef) {
       data.stix.external_references.unshift(attackRef);

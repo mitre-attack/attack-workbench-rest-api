@@ -3,6 +3,7 @@ const { expect } = require('expect');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
+const detectionStrategiesRepository = require('../../../repository/detection-strategies-repository');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
@@ -332,9 +333,58 @@ describe('Detection Strategies API', function () {
     expect(detectionStrategy).toBeDefined();
   });
 
+  let detectionStrategy4;
+  it('POST /api/detection-strategies preserves non-analytic embedded relationships when creating a new version', async function () {
+    const latestDetectionStrategy = await detectionStrategiesRepository.retrieveLatestByStixId(
+      detectionStrategy3.stix.id,
+    );
+
+    latestDetectionStrategy.workspace.embedded_relationships = [
+      ...(latestDetectionStrategy.workspace?.embedded_relationships || []),
+      {
+        stix_id: 'x-mitre-data-component--00000000-0000-4000-8000-000000000001',
+        attack_id: 'DCP-TEST',
+        direction: 'inbound',
+      },
+    ];
+    await detectionStrategiesRepository.saveDocument(latestDetectionStrategy);
+
+    const nextVersion = cloneForCreate(
+      latestDetectionStrategy.toObject
+        ? latestDetectionStrategy.toObject()
+        : latestDetectionStrategy,
+    );
+    delete nextVersion.workspace.embedded_relationships;
+    nextVersion.stix.modified = new Date(Date.now() + 1000).toISOString();
+
+    const res = await request(app)
+      .post('/api/detection-strategies')
+      .send(nextVersion)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    detectionStrategy4 = res.body;
+    expect(detectionStrategy4.workspace.embedded_relationships).toBeDefined();
+    expect(detectionStrategy4.workspace.embedded_relationships).toHaveLength(3);
+
+    const preservedRel = detectionStrategy4.workspace.embedded_relationships.find(
+      (rel) => rel.stix_id === 'x-mitre-data-component--00000000-0000-4000-8000-000000000001',
+    );
+    expect(preservedRel).toBeDefined();
+    expect(preservedRel.direction).toBe('inbound');
+    expect(preservedRel.attack_id).toBe('DCP-TEST');
+
+    const analyticRels = detectionStrategy4.workspace.embedded_relationships.filter((rel) =>
+      rel.stix_id?.startsWith('x-mitre-analytic--'),
+    );
+    expect(analyticRels).toHaveLength(2);
+  });
+
   it('GET /api/detection-strategies returns the latest added detection strategy', async function () {
     const res = await request(app)
-      .get('/api/detection-strategies/' + detectionStrategy3.stix.id)
+      .get('/api/detection-strategies/' + detectionStrategy4.stix.id)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
@@ -346,8 +396,8 @@ describe('Detection Strategies API', function () {
     expect(Array.isArray(detectionStrategies)).toBe(true);
     expect(detectionStrategies.length).toBe(1);
     const detectionStrategy = detectionStrategies[0];
-    expect(detectionStrategy.stix.id).toBe(detectionStrategy3.stix.id);
-    expect(detectionStrategy.stix.modified).toBe(detectionStrategy3.stix.modified);
+    expect(detectionStrategy.stix.id).toBe(detectionStrategy4.stix.id);
+    expect(detectionStrategy.stix.modified).toBe(detectionStrategy4.stix.modified);
   });
 
   it('GET /api/detection-strategies returns all added detection strategies', async function () {
@@ -358,11 +408,11 @@ describe('Detection Strategies API', function () {
       .expect(200)
       .expect('Content-Type', /json/);
 
-    // We expect to get two detection strategies in an array
+    // We expect to get four detection strategies in an array
     const detectionStrategies = res.body;
     expect(detectionStrategies).toBeDefined();
     expect(Array.isArray(detectionStrategies)).toBe(true);
-    expect(detectionStrategies.length).toBe(3);
+    expect(detectionStrategies.length).toBe(4);
   });
 
   it('GET /api/detection-strategies/:id/modified/:modified returns the first added detection strategy', async function () {

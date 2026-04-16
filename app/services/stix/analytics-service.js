@@ -229,10 +229,30 @@ class AnalyticsService extends BaseService {
       data.workspace.embedded_relationships = [];
     }
 
+    // Check if this is a new version of an existing analytic.
+    let previousVersion = null;
+    if (data.stix?.id) {
+      try {
+        previousVersion = await this.repository.retrieveLatestByStixId(data.stix.id);
+      } catch {
+        logger.debug(`No previous version found for analytic ${data.stix.id}`);
+      }
+    }
+
     // Build outbound embedded_relationships for data component references
-    // Cross-repository READS are allowed for denormalization (see CROSS_SERVICE_READS_PATTERN.md)
     const dataComponentRefs =
       data.stix?.x_mitre_log_source_references?.map((ref) => ref.x_mitre_data_component_ref) || [];
+
+    // Preserve non-data-component relationships from the previous persisted version when POST
+    // is creating a new version. Client payloads often omit server-managed workspace metadata.
+    const baselineEmbeddedRelationships =
+      previousVersion?.workspace?.embedded_relationships ||
+      data.workspace.embedded_relationships ||
+      [];
+    const existingNonDataComponentRels = baselineEmbeddedRelationships.filter(
+      (rel) => !rel.stix_id?.startsWith('x-mitre-data-component--'),
+    );
+    data.workspace.embedded_relationships = [...existingNonDataComponentRels];
 
     if (dataComponentRefs.length > 0) {
       for (const dataComponentId of dataComponentRefs) {
