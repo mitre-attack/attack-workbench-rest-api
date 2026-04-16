@@ -247,6 +247,7 @@ describe('Analytics API', function () {
     expect(analytic3).toBeDefined();
   });
 
+  let analytic4;
   it('POST /api/analytics preserves inbound embedded relationships when creating a new version', async function () {
     const latestAnalytic = await analyticsRepository.retrieveLatestByStixId(analytic3.stix.id);
 
@@ -274,10 +275,10 @@ describe('Analytics API', function () {
       .expect(201)
       .expect('Content-Type', /json/);
 
-    const analytic = res.body;
-    expect(analytic.workspace.embedded_relationships).toBeDefined();
-    expect(analytic.workspace.embedded_relationships).toHaveLength(1);
-    expect(analytic.workspace.embedded_relationships[0]).toEqual(
+    analytic4 = res.body;
+    expect(analytic4.workspace.embedded_relationships).toBeDefined();
+    expect(analytic4.workspace.embedded_relationships).toHaveLength(1);
+    expect(analytic4.workspace.embedded_relationships[0]).toEqual(
       expect.objectContaining({
         stix_id: 'x-mitre-detection-strategy--00000000-0000-4000-8000-000000000001',
         attack_id: 'DET-TEST',
@@ -285,18 +286,18 @@ describe('Analytics API', function () {
       }),
     );
 
-    const attackRef = analytic.stix.external_references.find(
+    const attackRef = analytic4.stix.external_references.find(
       (ref) => ref.source_name === 'mitre-attack',
     );
     expect(attackRef).toBeDefined();
     expect(attackRef.url).toBe(
-      `https://attack.mitre.org/detectionstrategies/DET-TEST#${analytic.workspace.attack_id}`,
+      `https://attack.mitre.org/detectionstrategies/DET-TEST#${analytic4.workspace.attack_id}`,
     );
   });
 
   it('GET /api/analytics returns the latest added analytic', async function () {
     const res = await request(app)
-      .get('/api/analytics/' + analytic3.stix.id)
+      .get('/api/analytics/' + analytic4.stix.id)
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
@@ -308,8 +309,8 @@ describe('Analytics API', function () {
     expect(Array.isArray(analytics)).toBe(true);
     expect(analytics.length).toBe(1);
     const analytic = analytics[0];
-    expect(analytic.stix.id).toBe(analytic3.stix.id);
-    expect(analytic.stix.modified).toBe(analytic3.stix.modified);
+    expect(analytic.stix.id).toBe(analytic4.stix.id);
+    expect(analytic.stix.modified).toBe(analytic4.stix.modified);
   });
 
   it('GET /api/analytics returns all added analytics', async function () {
@@ -320,11 +321,11 @@ describe('Analytics API', function () {
       .expect(200)
       .expect('Content-Type', /json/);
 
-    // We expect to get two analytics in an array
+    // We expect to get four analytics in an array
     const analytics = res.body;
     expect(analytics).toBeDefined();
     expect(Array.isArray(analytics)).toBe(true);
-    expect(analytics.length).toBe(3);
+    expect(analytics.length).toBe(4);
   });
 
   it('GET /api/analytics/:id/modified/:modified returns the first added analytic', async function () {
