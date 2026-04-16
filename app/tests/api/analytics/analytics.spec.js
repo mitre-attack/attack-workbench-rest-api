@@ -4,6 +4,7 @@ const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
+const analyticsRepository = require('../../../repository/analytics-repository');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
@@ -244,6 +245,53 @@ describe('Analytics API', function () {
     // We expect to get the created analytic
     analytic3 = res.body;
     expect(analytic3).toBeDefined();
+  });
+
+  it('POST /api/analytics preserves inbound embedded relationships when creating a new version', async function () {
+    const latestAnalytic = await analyticsRepository.retrieveLatestByStixId(analytic3.stix.id);
+
+    latestAnalytic.workspace.embedded_relationships = [
+      ...(latestAnalytic.workspace?.embedded_relationships || []),
+      {
+        stix_id: 'x-mitre-detection-strategy--00000000-0000-4000-8000-000000000001',
+        attack_id: 'DET-TEST',
+        direction: 'inbound',
+      },
+    ];
+    await analyticsRepository.saveDocument(latestAnalytic);
+
+    const nextVersion = cloneForCreate(
+      latestAnalytic.toObject ? latestAnalytic.toObject() : latestAnalytic,
+    );
+    delete nextVersion.workspace.embedded_relationships;
+    nextVersion.stix.modified = new Date(Date.now() + 1000).toISOString();
+
+    const res = await request(app)
+      .post('/api/analytics')
+      .send(nextVersion)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    const analytic = res.body;
+    expect(analytic.workspace.embedded_relationships).toBeDefined();
+    expect(analytic.workspace.embedded_relationships).toHaveLength(1);
+    expect(analytic.workspace.embedded_relationships[0]).toEqual(
+      expect.objectContaining({
+        stix_id: 'x-mitre-detection-strategy--00000000-0000-4000-8000-000000000001',
+        attack_id: 'DET-TEST',
+        direction: 'inbound',
+      }),
+    );
+
+    const attackRef = analytic.stix.external_references.find(
+      (ref) => ref.source_name === 'mitre-attack',
+    );
+    expect(attackRef).toBeDefined();
+    expect(attackRef.url).toBe(
+      `https://attack.mitre.org/detectionstrategies/DET-TEST#${analytic.workspace.attack_id}`,
+    );
   });
 
   it('GET /api/analytics returns the latest added analytic', async function () {

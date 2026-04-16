@@ -3,6 +3,7 @@ const { expect } = require('expect');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
+const detectionStrategiesRepository = require('../../../repository/detection-strategies-repository');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
@@ -330,6 +331,54 @@ describe('Detection Strategies API', function () {
     // We expect to get the created detection strategy
     const detectionStrategy = res.body;
     expect(detectionStrategy).toBeDefined();
+  });
+
+  it('POST /api/detection-strategies preserves non-analytic embedded relationships when creating a new version', async function () {
+    const latestDetectionStrategy = await detectionStrategiesRepository.retrieveLatestByStixId(
+      detectionStrategy3.stix.id,
+    );
+
+    latestDetectionStrategy.workspace.embedded_relationships = [
+      ...(latestDetectionStrategy.workspace?.embedded_relationships || []),
+      {
+        stix_id: 'x-mitre-data-component--00000000-0000-4000-8000-000000000001',
+        attack_id: 'DCP-TEST',
+        direction: 'inbound',
+      },
+    ];
+    await detectionStrategiesRepository.saveDocument(latestDetectionStrategy);
+
+    const nextVersion = cloneForCreate(
+      latestDetectionStrategy.toObject
+        ? latestDetectionStrategy.toObject()
+        : latestDetectionStrategy,
+    );
+    delete nextVersion.workspace.embedded_relationships;
+    nextVersion.stix.modified = new Date(Date.now() + 1000).toISOString();
+
+    const res = await request(app)
+      .post('/api/detection-strategies')
+      .send(nextVersion)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    const detectionStrategy = res.body;
+    expect(detectionStrategy.workspace.embedded_relationships).toBeDefined();
+    expect(detectionStrategy.workspace.embedded_relationships).toHaveLength(3);
+
+    const preservedRel = detectionStrategy.workspace.embedded_relationships.find(
+      (rel) => rel.stix_id === 'x-mitre-data-component--00000000-0000-4000-8000-000000000001',
+    );
+    expect(preservedRel).toBeDefined();
+    expect(preservedRel.direction).toBe('inbound');
+    expect(preservedRel.attack_id).toBe('DCP-TEST');
+
+    const analyticRels = detectionStrategy.workspace.embedded_relationships.filter((rel) =>
+      rel.stix_id?.startsWith('x-mitre-analytic--'),
+    );
+    expect(analyticRels).toHaveLength(2);
   });
 
   it('GET /api/detection-strategies returns the latest added detection strategy', async function () {

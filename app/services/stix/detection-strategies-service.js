@@ -56,7 +56,7 @@ class DetectionStrategiesService extends BaseService {
     let previousVersion = null;
     if (data.stix?.id) {
       try {
-        previousVersion = await detectionStrategiesRepository.retrieveLatestByStixId(data.stix.id);
+        previousVersion = await this.repository.retrieveLatestByStixId(data.stix.id);
       } catch {
         // It's okay if there's no previous version - this might be the first version
         logger.debug(`No previous version found for detection strategy ${data.stix.id}`);
@@ -75,10 +75,16 @@ class DetectionStrategiesService extends BaseService {
       this._removedAnalyticRefs = oldAnalyticRefs.filter((ref) => !newAnalyticRefs.includes(ref));
     }
 
-    // Preserve non-analytic embedded_relationships and rebuild only analytic refs
-    // This ensures stale analytic relationships from previous versions are not carried over
-    // while preserving any other embedded relationships that may exist
-    const existingNonAnalyticRels = (data.workspace.embedded_relationships || []).filter(
+    // Preserve non-analytic embedded_relationships from the previous version when POST is
+    // creating a new version. Client payloads often omit server-managed workspace metadata,
+    // so using the request body here would drop unrelated relationships on version creation.
+    const baselineEmbeddedRelationships =
+      previousVersion?.workspace?.embedded_relationships ||
+      data.workspace.embedded_relationships ||
+      [];
+
+    // Rebuild only the analytic outbound relationships for the new version.
+    const existingNonAnalyticRels = baselineEmbeddedRelationships.filter(
       (rel) => !rel.stix_id?.startsWith('x-mitre-analytic--'),
     );
 
