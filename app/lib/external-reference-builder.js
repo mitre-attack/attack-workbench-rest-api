@@ -92,31 +92,37 @@ function buildAttackExternalReference(attackId, stixType, options = {}) {
 /**
  * Extract parent detection strategy ATT&CK ID from workspace embedded relationships
  * @param {object} data - The data object containing workspace
+ * @param {object} options - Optional fallback context
+ * @param {object} options.previousVersion - Previous persisted version for version-aware lookups
  * @returns {string|null} The detection strategy ATT&CK ID or null
  */
-function extractParentDetectionStrategyId(data) {
+function extractParentDetectionStrategyId(data, options = {}) {
   // Check if this is an analytic
   if (data.stix?.type !== 'x-mitre-analytic') {
     return null;
   }
 
-  // Look for parent detection strategy in embedded relationships
-  // Analytics are referenced by detection strategies via x_mitre_analytic_refs
-  // So we look for inbound relationships from detection strategies
-  const embeddedRelationships = data.workspace?.embedded_relationships;
-  if (
-    embeddedRelationships &&
-    Array.isArray(embeddedRelationships) &&
-    embeddedRelationships.length > 0
-  ) {
-    // Find any inbound relationship from a detection strategy
-    const parentDetectionStrategy = embeddedRelationships.find(
-      (rel) =>
-        rel.direction === 'inbound' && rel.stix_id?.startsWith('x-mitre-detection-strategy--'),
-    );
+  const embeddedRelationshipCandidates = [
+    data.workspace?.embedded_relationships,
+    options.previousVersion?.workspace?.embedded_relationships,
+  ];
 
-    if (parentDetectionStrategy) {
-      return parentDetectionStrategy.attack_id || null;
+  // Look for parent detection strategy in embedded relationships. Analytics are referenced
+  // by detection strategies via x_mitre_analytic_refs, so we look for inbound relationships.
+  for (const embeddedRelationships of embeddedRelationshipCandidates) {
+    if (
+      embeddedRelationships &&
+      Array.isArray(embeddedRelationships) &&
+      embeddedRelationships.length > 0
+    ) {
+      const parentDetectionStrategy = embeddedRelationships.find(
+        (rel) =>
+          rel.direction === 'inbound' && rel.stix_id?.startsWith('x-mitre-detection-strategy--'),
+      );
+
+      if (parentDetectionStrategy) {
+        return parentDetectionStrategy.attack_id || null;
+      }
     }
   }
 
@@ -126,9 +132,11 @@ function extractParentDetectionStrategyId(data) {
 /**
  * Create an ATT&CK external reference for the given data
  * @param {object} data - The data object containing stix and workspace
+ * @param {object} options - Optional context for deriving the reference
+ * @param {object} options.previousVersion - Previous persisted version for version-aware lookups
  * @returns {object|null} The ATT&CK external reference object, or null if not applicable
  */
-function createAttackExternalReference(data) {
+function createAttackExternalReference(data, options = {}) {
   const stixType = data.stix?.type;
 
   // Matrices don't have ATT&CK IDs; their external_id is the domain name
@@ -151,15 +159,16 @@ function createAttackExternalReference(data) {
   }
 
   // Prepare options for URL building
-  const options = {};
+  const buildOptions = {};
   if (stixType === 'attack-pattern') {
-    options.isSubtechnique = data.stix?.x_mitre_is_subtechnique === true;
+    buildOptions.isSubtechnique = data.stix?.x_mitre_is_subtechnique === true;
   }
   if (stixType === 'x-mitre-analytic') {
-    options.parentDetectionStrategyId = extractParentDetectionStrategyId(data);
+    buildOptions.parentDetectionStrategyId =
+      options.parentDetectionStrategyId || extractParentDetectionStrategyId(data, options);
   }
 
-  return buildAttackExternalReference(attackId, stixType, options);
+  return buildAttackExternalReference(attackId, stixType, buildOptions);
 }
 
 /**
