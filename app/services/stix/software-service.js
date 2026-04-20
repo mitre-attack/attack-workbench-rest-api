@@ -92,4 +92,4 @@ class SoftwareService extends BaseService {
   }
 }
 
-module.exports = new SoftwareService(null, softwareRepository);
+module.exports = new SoftwareService('software', softwareRepository);
