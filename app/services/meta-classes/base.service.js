@@ -16,7 +16,7 @@ const {
   InvalidQueryStringParameterError,
   InvalidTypeError,
   OrganizationIdentityNotSetError,
-  InvalidPostOperationError,
+  //InvalidPostOperationError,
   ValidationError,
   BadRequestError,
   NotFoundError,
@@ -539,14 +539,22 @@ class BaseService extends ServiceWithHooks {
 
         // Validate subtechnique requirements
         if (isSubtechnique && !parentTechniqueId) {
-          throw new InvalidPostOperationError(
+          logger.warn(
             'Subtechniques require a parentTechniqueId query parameter. Provide the parent technique ATT&CK ID (e.g., T1234).',
           );
+          // TODO start throwing after migrating workflow to BE
+          // throw new InvalidPostOperationError(
+          //   'Subtechniques require a parentTechniqueId query parameter. Provide the parent technique ATT&CK ID (e.g., T1234).',
+          // );
         }
         if (!isSubtechnique && parentTechniqueId) {
-          throw new InvalidPostOperationError(
+          logger.warn(
             'parentTechniqueId query parameter is only valid for subtechniques (x_mitre_is_subtechnique: true).',
           );
+          // TODO start throwing after migrating workflow to BE
+          // throw new InvalidPostOperationError(
+          //   'parentTechniqueId query parameter is only valid for subtechniques (x_mitre_is_subtechnique: true).',
+          // );
         }
 
         // Generate a new ATT&CK ID
