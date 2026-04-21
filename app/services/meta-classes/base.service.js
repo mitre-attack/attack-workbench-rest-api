@@ -1094,6 +1094,10 @@ class BaseService extends ServiceWithHooks {
           delete relData.__v;
           delete relData.__t;
 
+          // Reset timestamps
+          relData.stix.created = now;
+          relData.stix.modified = now;
+
           // Substitute Object B for Object A
           if (relData.stix.source_ref === objectA.stix.id) {
             relData.stix.source_ref = objectB.stix.id;
