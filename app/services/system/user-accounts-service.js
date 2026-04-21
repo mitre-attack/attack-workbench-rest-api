@@ -82,7 +82,7 @@ class UserAccountsService {
       return userAccount;
     } catch (err) {
       if (err.name === 'CastError') {
-        throw new Exceptions.BadlyFormattedParameterError('userId');
+        throw new Exceptions.BadlyFormattedParameterError({ parameterName: 'userId' });
       } else {
         throw err;
       }
@@ -101,7 +101,7 @@ class UserAccountsService {
       return userAccount;
     } catch (err) {
       if (err.name === 'CastError') {
-        throw new Exceptions.BadlyFormattedParameterError('email');
+        throw new Exceptions.BadlyFormattedParameterError({ parameterName: 'email' });
       } else {
         throw err;
       }
