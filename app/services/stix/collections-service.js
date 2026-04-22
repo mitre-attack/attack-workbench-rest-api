@@ -263,7 +263,7 @@ class CollectionsService extends BaseService {
 
     const collections = await this.repository.retrieveOneByIdLean(stixId);
     if (!collections) {
-      throw new BadlyFormattedParameterError('stixId');
+      throw new BadlyFormattedParameterError({ parameterName: 'stixId' });
     }
 
     if (deleteAllContents) {
@@ -287,7 +287,7 @@ class CollectionsService extends BaseService {
     const collection = await this.repository.retrieveOneByVersionLean(stixId, modified);
 
     if (!collection) {
-      throw new BadlyFormattedParameterError('stixId');
+      throw new BadlyFormattedParameterError({ parameterName: 'stixId' });
     }
 
     if (deleteAllContents) {

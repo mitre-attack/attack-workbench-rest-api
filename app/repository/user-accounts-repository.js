@@ -171,7 +171,7 @@ class UserAccountsRepository {
       }
     } catch (err) {
       if (err.name === 'CastError') {
-        throw new BadlyFormattedParameterError('userId');
+        throw new BadlyFormattedParameterError({ parameterName: 'userId' });
       } else {
         throw err;
       }

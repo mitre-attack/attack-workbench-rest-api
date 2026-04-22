@@ -1,5 +1,35 @@
 'use strict';
 
+function isErrorOptions(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeErrorOptions(options) {
+  if (options instanceof Error) {
+    const normalized = {};
+
+    if (options.message) {
+      normalized.details = options.message;
+    }
+
+    normalized.cause = options;
+
+    for (const key of Object.keys(options)) {
+      if (!(key in normalized)) {
+        normalized[key] = options[key];
+      }
+    }
+
+    return normalized;
+  }
+
+  if (isErrorOptions(options)) {
+    return options;
+  }
+
+  return null;
+}
+
 class CustomError extends Error {
   constructor(message, options = {}) {
     super(message);
@@ -8,9 +38,21 @@ class CustomError extends Error {
     this.name = this.constructor.name;
 
     // Apply options (if defined) to the error object
-    for (const key in options) {
-      if (Object.prototype.hasOwnProperty.call(options, key)) {
-        this[key] = options[key];
+    const normalizedOptions = normalizeErrorOptions(options);
+    if (normalizedOptions) {
+      if (normalizedOptions.cause instanceof Error) {
+        Object.defineProperty(this, 'cause', {
+          value: normalizedOptions.cause,
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+      }
+
+      for (const key in normalizedOptions) {
+        if (key !== 'cause' && Object.prototype.hasOwnProperty.call(normalizedOptions, key)) {
+          this[key] = normalizedOptions[key];
+        }
       }
     }
   }
@@ -29,8 +71,13 @@ class BadlyFormattedParameterError extends CustomError {
 }
 
 class DuplicateIdError extends CustomError {
-  constructor(options) {
-    super('Duplicate id', options);
+  constructor(messageOrOptions, options) {
+    if (typeof messageOrOptions === 'string') {
+      super(messageOrOptions, options);
+      return;
+    }
+
+    super('Duplicate id', messageOrOptions);
   }
 }
 
@@ -167,8 +214,13 @@ class AnonymousUserAccountNotFoundError extends CustomError {
 }
 
 class InvalidTypeError extends CustomError {
-  constructor(options) {
-    super('Invalid stix.type', options);
+  constructor(messageOrOptions, options) {
+    if (typeof messageOrOptions === 'string') {
+      super(messageOrOptions, options);
+      return;
+    }
+
+    super('Invalid stix.type', messageOrOptions);
   }
 }
 
@@ -179,8 +231,13 @@ class ImmutablePropertyError extends CustomError {
 }
 
 class InvalidPostOperationError extends CustomError {
-  constructor(options) {
-    super('Cannot set the following keys:', options);
+  constructor(messageOrOptions, options) {
+    if (typeof messageOrOptions === 'string') {
+      super(messageOrOptions, options);
+      return;
+    }
+
+    super('Cannot set the following keys:', messageOrOptions);
   }
 }
 

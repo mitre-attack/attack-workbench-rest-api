@@ -164,7 +164,9 @@ async function generateAttackId(
       throw new Error('Subtechniques are only valid for attack-pattern STIX type');
     }
     if (!parentTechniqueAttackId) {
-      throw new Error('Parent technique ATT&CK ID is required for subtechnique generation');
+      const errorMessage = 'Parent technique ATT&CK ID is required for subtechnique generation';
+      logger.warn(errorMessage);
+      // throw new Error(errorMessage); // TODO reenable after migrating workflow to BE
     }
 
     // Validate parent ID format (must be T#### or PREFIX-T####)

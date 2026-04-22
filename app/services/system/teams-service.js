@@ -166,14 +166,14 @@ class TeamsService {
         }
       } catch (err) {
         if (err.name === 'CastError') {
-          throw new BadlyFormattedParameterError('teamId');
+          throw new BadlyFormattedParameterError({ parameterName: 'teamId' });
         } else {
           throw err;
         }
       }
     } catch (err) {
       if (err.name === 'CastError') {
-        throw new BadlyFormattedParameterError('teamId');
+        throw new BadlyFormattedParameterError({ parameterName: 'teamId' });
       } else {
         throw err;
       }
