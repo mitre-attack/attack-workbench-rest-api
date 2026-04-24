@@ -23,6 +23,8 @@ const fields = [
   'stix.x_mitre_aliases',
   'stix.x_mitre_analytic_refs',
   'stix.x_mitre_collection_layers',
+  'stix.x_mitre_log_source_references',
+  'stix.x_mitre_mutable_elements',
   'stix.x_mitre_contributors',
   'stix.x_mitre_domains',
   'stix.x_mitre_platforms',
