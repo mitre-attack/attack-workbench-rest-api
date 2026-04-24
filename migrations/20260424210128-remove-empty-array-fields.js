@@ -28,6 +28,7 @@ const fields = [
   'stix.x_mitre_contributors',
   'stix.x_mitre_domains',
   'stix.x_mitre_platforms',
+  'stix.x_mitre_contents',
   'workspace.embedded_relationships',
   'workspace.collections',
 ];
