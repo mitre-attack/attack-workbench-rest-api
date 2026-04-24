@@ -218,7 +218,8 @@ class AnalyticsService extends BaseService {
   // eslint-disable-next-line no-unused-vars
   async beforeCreate(data, options) {
     // Analytic name matches its ATT&CK ID
-    data.stix.name = data.workspace.attack_id;
+    const id = data.workspace.attack_id;
+    data.stix.name = id.replace(/^AN(\d+)$/, 'Analytic $1');
     logger.debug(`Setting name to match ATT&CK ID: ${data.stix.name}`);
 
     // Initialize embedded_relationships if not present

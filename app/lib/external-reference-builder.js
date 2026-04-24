@@ -14,7 +14,7 @@ const STIX_TYPE_TO_URL_PATH = {
   campaign: 'campaigns',
   'x-mitre-data-source': 'datasources',
   'x-mitre-data-component': 'datacomponents',
-  'x-mitre-detection-strategy': 'detection-strategies',
+  'x-mitre-detection-strategy': 'detectionstrategies',
   'x-mitre-analytic': 'analytics',
   'x-mitre-asset': 'assets',
   'x-mitre-tactic': 'tactics',
