@@ -132,7 +132,7 @@ async function createFilteredViews(db, viewType, typeToFilter) {
 // ---------------------------------------------------------------------------
 
 const ATTACK_TYPE_TO_MONGO_FILTER = {
-  assets: 'asset',
+  assets: 'x-mitre-asset',
   campaigns: 'campaign',
   datacomponents: 'x-mitre-data-component',
   datasources: 'x-mitre-data-source',
