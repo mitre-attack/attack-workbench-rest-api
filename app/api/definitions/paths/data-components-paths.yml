@@ -61,6 +61,18 @@ paths:
             type: string
           allowReserved: true
           example: 'windows'
+        - name: domain
+          in: query
+          description: |
+            Only return data components in the given domain.
+            This parameter may be set multiple times to retrieve data components in any of the provided domains.
+          schema:
+            oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
+          example: 'enterprise-attack'
         - name: lastUpdatedBy
           in: query
           description: |
