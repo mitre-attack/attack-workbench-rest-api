@@ -138,7 +138,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components?domain=enterprise-attack')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -153,7 +153,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components?domain=enterprise-attack&domain=mobile-attack')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -168,7 +168,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components?domain=not-a-domain')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
