@@ -26,6 +26,7 @@ JSON configuration files, or a combination of both.
       - [Basic API Key](#basic-api-key)
       - [Multiple Service Authentication Methods](#multiple-service-authentication-methods)
     - [Scheduler](#scheduler)
+    - [Validation](#validation)
     - [Collection Indexes](#collection-indexes)
     - [Configuration Files](#configuration-files)
     - [ATT\&CK Specific](#attck-specific)
@@ -530,6 +531,59 @@ Background job scheduler configuration.
 ```bash
 ENABLE_SCHEDULER=true
 CHECK_WORKBENCH_INTERVAL=30
+```
+
+### Validation
+
+Configuration for ATT&CK Data Model (ADM) request validation and the scheduled re-validation task.
+
+| Option            | Environment Variable        | JSON Path                              | Type    | Default     | Description                                                                                  |
+|-------------------|-----------------------------|----------------------------------------|---------|-------------|----------------------------------------------------------------------------------------------|
+| Validate Requests | `VALIDATE_WITH_ADM_SCHEMAS` | `validateRequests.withAttackDataModel` | boolean | `false`     | Run incoming POST/PUT bodies through the ADM schemas before persisting                       |
+| Re-validate Cron  | `VALIDATE_OBJECTS_CRON`     | `scheduler.validateObjectsCron`        | string  | `0 3 * * *` | Cron pattern for the background task that refreshes `workspace.validation` on every document |
+| ADM Log Level     | `ADM_LOG_LEVEL`             | *(env only)*                           | enum    | `warn`      | Verbosity of the ADM library's internal logger                                               |
+
+**`VALIDATE_WITH_ADM_SCHEMAS`**
+
+When enabled, every POST and PUT validates the composed STIX payload against the ADM schemas before saving. Failed validations cause the request to throw with an HTTP error and the document is not persisted. When disabled, the write pipeline does not gate on ADM compliance and downstream tools are responsible for detecting non-compliant content.
+
+This setting does not affect the legacy OpenAPI request validation (`VALIDATE_WITH_LEGACY_SCHEMAS`), which can be enabled or disabled independently.
+
+**`VALIDATE_OBJECTS_CRON`**
+
+The Workbench scheduler periodically re-validates every SDO and SRO in the database against the current ADM and refreshes each document's `workspace.validation` field. This combats *concept drift*: documents that passed validation under an older ADM version may become non-compliant after a Workbench upgrade.
+
+The cron pattern follows standard 5-field syntax (`minute hour day-of-month month day-of-week`). The default `0 3 * * *` runs the task daily at 3:00 AM. The task is skipped entirely if the global scheduler is disabled (`ENABLE_SCHEDULER=false`).
+
+For the lifecycle of `workspace.validation` itself, see [Stateful Validation Tracking](../developer/workspace-validation.md).
+
+**`ADM_LOG_LEVEL`**
+
+Read by the `@mitre-attack/attack-data-model` library directly — *not* a Convict-managed setting and not configurable via `JSON_CONFIG_PATH`. It controls the verbosity of the ADM library's own logger, which is independent of the Workbench `LOG_LEVEL`.
+
+This was introduced primarily to suppress the deprecation warning that the ADM emits for every relationship in the database during a re-validation run. Setting `ADM_LOG_LEVEL=error` (or `silent`) keeps the scheduled task quiet without affecting Workbench's own logs.
+
+| Level    | Description                                                        |
+|----------|--------------------------------------------------------------------|
+| `debug`  | Verbose diagnostic output                                          |
+| `info`   | Informational status messages (data retrieval, parse counts, etc.) |
+| `warn`   | Validation issues in `relaxed` mode and deprecation warnings       |
+| `error`  | Errors only                                                        |
+| `silent` | Disables all output                                                |
+
+Levels are inclusive: setting `info` enables `info`, `warn`, and `error`. The default is `warn`.
+
+**Examples:**
+
+```bash
+# Enable ADM-based request validation
+VALIDATE_WITH_ADM_SCHEMAS=true
+
+# Run re-validation hourly instead of daily at 3 AM
+VALIDATE_OBJECTS_CRON=0 * * * *
+
+# Suppress noisy ADM deprecation warnings during scheduler runs
+ADM_LOG_LEVEL=error
 ```
 
 ### Collection Indexes
