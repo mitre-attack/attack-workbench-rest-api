@@ -355,6 +355,12 @@ class BaseService extends ServiceWithHooks {
       delete stix[field];
     }
 
+    // Strip workspace.validation — server-controlled; recomputed on every
+    // create/update so a stale entry from a prior GET cannot ride along.
+    if (data.workspace) {
+      delete data.workspace.validation;
+    }
+
     if (!options.preserveAttackId) {
       // Strip workspace.attack_id — server generates/carries forward
       if (data.workspace) {
@@ -695,6 +701,12 @@ class BaseService extends ServiceWithHooks {
    * @private
    */
   async _createFromImport(data, options) {
+    // Strip workspace.validation — server-controlled; the fail-open block
+    // below is the only legitimate writer of this field on the import path.
+    if (data.workspace) {
+      delete data.workspace.validation;
+    }
+
     // Extract ATT&CK ID from external_references and propagate to workspace.attack_id
     const attackIdInExternalReferences = attackIdGenerator.extractAttackIdFromExternalReferences(
       data.stix,
