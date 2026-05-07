@@ -481,6 +481,7 @@ class BaseService extends ServiceWithHooks {
    * @param {string} [options.userAccountId] - The authenticated user's account ID
    * @param {string} [options.parentTechniqueId] - Parent technique ATT&CK ID (for subtechniques)
    * @param {boolean} [options.dryRun] - If true, compose and validate but skip persistence
+   * @param {object} [options.automationContext] - Optional automation metadata for logging ({ automationName, runId })
    * @returns {Object} The created document (or composed data if dryRun) with warnings array
    */
   async create(data, options) {

@@ -13,10 +13,12 @@
               "macOS",
               "Windows",
               "Network Devices",
+              "Google Workspace",
               "SaaS",
               "IaaS",
               "Containers",
               "Identity Provider",
+              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -30,7 +32,6 @@
             "allowedValues": [
               "Field Controller/RTU/PLC/IED",
               "Safety Instrumented System/Protection Relay",
-              "Device Configuration/Parameters",
               "Control Server",
               "Input/Output Server",
               "Data Historian",
@@ -58,10 +59,12 @@
               "macOS",
               "Windows",
               "Network Devices",
+              "Google Workspace",
               "SaaS",
               "IaaS",
               "Containers",
               "Identity Provider",
+              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -75,7 +78,6 @@
             "allowedValues": [
               "Field Controller/RTU/PLC/IED",
               "Safety Instrumented System/Protection Relay",
-              "Device Configuration/Parameters",
               "Control Server",
               "Input/Output Server",
               "Data Historian",
@@ -186,10 +188,12 @@
               "macOS",
               "Windows",
               "Network Devices",
+              "Google Workspace",
               "IaaS",
               "SaaS",
               "Containers",
               "Identity Provider",
+              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -249,6 +253,8 @@
               "SaaS",
               "Network Devices",
               "Identity Provider",
+              "Azure AD",
+              "Google Workspace",
               "Office Suite",
               "ESXi"
             ]
@@ -305,7 +311,7 @@
         "domains": [
           {
             "domainName": "ics-attack",
-            "allowedValues": ["Windows", "Linux", "Network", "Embedded", "Cloud"]
+            "allowedValues": ["Windows", "Linux", "Network Devices", "Embedded", "IaaS", "SaaS"]
           }
         ]
       }

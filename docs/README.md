@@ -34,6 +34,7 @@ Architecture, patterns, and implementation details for contributors.
 - [Service Exception Middleware](developer/service-exception-middleware.md): Global error handler middleware
 - [STIX Versioning and Embedded Relationships](developer/stix-versioning-and-embedded-relationships.md): How STIX versioning interacts with embedded relationships
 - [Task Scheduler](developer/task-scheduler.md): Task scheduler implementation
+- [Automation Run Audit Trail](developer/automation-runs.md): Taxonomy and implementation guidance for durable automation auditing
 
 ### Release Tracks (Internals)
 
@@ -47,6 +48,7 @@ Architecture, patterns, and implementation details for contributors.
 Configuration, deployment, and identity provider setup.
 
 - [Configuration](admin/configuration.md): Complete configuration guide (environment variables, JSON files)
+- [Automation Run Audit Trail](admin/automation-runs.md): How to inspect migration and scheduler audit records
 
 ### Authentication
 
