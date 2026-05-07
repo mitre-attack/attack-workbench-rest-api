@@ -134,6 +134,50 @@ describe('Data Components API', function () {
     expect(dataComponent.length).toBe(1);
   });
 
+  it('GET /api/data-components should return data components containing the domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=enterprise-attack')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(1);
+    expect(dataComponents[0].stix.x_mitre_domains).toContain('enterprise-attack');
+  });
+
+  it('GET /api/data-components should return data components containing any provided domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=enterprise-attack&domain=mobile-attack')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(1);
+    expect(dataComponents[0].stix.x_mitre_domains).toContain('enterprise-attack');
+  });
+
+  it('GET /api/data-components should not return any data components when searching for a non-existent domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=not-a-domain')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(0);
+  });
+
   it('GET /api/data-components/:id/channels returns the log source channels of the added data component', async function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent1.stix.id + '/channels')
