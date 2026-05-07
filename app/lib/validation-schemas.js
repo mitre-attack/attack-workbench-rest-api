@@ -4,22 +4,28 @@ const {
   tacticSchema,
 
   /** techniques */
-  techniqueBaseSchema,
+  techniqueSchema,
+  techniquePartialSchema,
 
   /** groups */
-  groupBaseSchema,
+  groupSchema,
+  groupPartialSchema,
 
   /** malware */
-  malwareBaseSchema,
+  malwareSchema,
+  malwarePartialSchema,
 
   /** tools */
-  toolBaseSchema,
+  toolSchema,
+  toolPartialSchema,
 
   /** campaigns */
-  campaignBaseSchema,
+  campaignSchema,
+  campaignPartialSchema,
 
   /** relationships */
-  relationshipBaseSchema,
+  relationshipSchema,
+  relationshipPartialSchema,
 
   /** simple schemas (no checks/refinements) */
   identitySchema,
@@ -32,63 +38,46 @@ const {
   matrixSchema,
   collectionSchema,
   markingDefinitionSchema,
-} = require('@mitre-attack/attack-data-model/dist');
+} = require('@mitre-attack/attack-data-model/dist/index.cjs');
 
-// The ADM exports bundles of refinements (checks) for any schemas which support partial schema derivatives.
-// e.g., The technique.schema module exports: (1) techniqueBaseSchema, (2) techniquePartialSchema, (3) techniqueChecks
+// The ADM package exposes two validation shapes for several STIX types:
+// - a full schema for normal validation
+// - a prebuilt partial schema for draft/work-in-progress validation
 //
-// This enables users to easily compose custom schemas w/o running into the Zod restriction introduced in v4.3.6 where
-// `.omit`, `.pick`, and `.partial` throw when `.check` is chained on.
-// (Details: https://github.com/mitre-attack/attack-data-model/pull/65)
+// Workbench treats `work-in-progress` objects differently from objects in
+// later workflow states. WIP objects are allowed to omit fields that are still
+// being authored, while `awaiting-review` and `reviewed` objects should be
+// held to the complete schema.
 //
-// In Workbench, this is specifically necessary because the ADM validation middleware needs to omit checking fields
-// which only the backend sets, e.g., `x_mitre_attack_spec_version` is set by the backend, therefore it's never passed/set in
-// the req.body of POST/create requests, therefore we need to avoid scrutinizing that field in the ADM validation middleware.
-//
-// Composition order (for schemas with checks):
-//   base schema → .omit() → .partial() (if WIP) → .check(checks)
-// This ensures .omit() and .partial() are called BEFORE .check(), avoiding the Zod restriction.
-
-const {
-  techniqueChecks,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/technique.schema');
-const { groupChecks } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/group.schema');
-const {
-  campaignChecks,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/campaign.schema');
-const {
-  relationshipChecks,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sro/relationship.schema');
-const {
-  malwareChecks,
-} = require('@mitre-attack/attack-data-model/dist/schemas/sdo/malware.schema');
-const { toolChecks } = require('@mitre-attack/attack-data-model/dist/schemas/sdo/tool.schema');
-
+// We prefer the ADM-provided `*PartialSchema` exports when they exist rather
+// than deriving them ourselves at call time. That keeps this layer aligned
+// with however ADM composes partial validation for schemas that may include
+// additional checks or refinements.
 const STIX_SCHEMAS = {
   'x-mitre-tactic': tacticSchema,
   'attack-pattern': {
-    base: techniqueBaseSchema,
-    checks: techniqueChecks,
+    full: techniqueSchema,
+    partial: techniquePartialSchema,
   },
   'intrusion-set': {
-    base: groupBaseSchema,
-    checks: groupChecks,
+    full: groupSchema,
+    partial: groupPartialSchema,
   },
   malware: {
-    base: malwareBaseSchema,
-    checks: malwareChecks,
+    full: malwareSchema,
+    partial: malwarePartialSchema,
   },
   tool: {
-    base: toolBaseSchema,
-    checks: toolChecks,
+    full: toolSchema,
+    partial: toolPartialSchema,
   },
   campaign: {
-    base: campaignBaseSchema,
-    checks: campaignChecks,
+    full: campaignSchema,
+    partial: campaignPartialSchema,
   },
   relationship: {
-    base: relationshipBaseSchema,
-    checks: relationshipChecks,
+    full: relationshipSchema,
+    partial: relationshipPartialSchema,
   },
   identity: identitySchema,
   'course-of-action': mitigationSchema,
@@ -105,12 +94,15 @@ const STIX_SCHEMAS = {
 /**
  * Get the schema to use for validating a STIX object.
  *
- * Some STIX types define both a "base" schema and "checks" (refinements),
- * while others only define a single schema (no refinements). This helper
- * composes the correct schema based on the STIX type and workflow status.
+ * Some STIX types define both a full schema and a prebuilt partial schema,
+ * while others only define a single schema (no partial variant). This helper
+ * selects the correct schema based on the STIX type and workflow status.
  *
- * Composition order (for schemas with checks):
- *   base → .partial() (if WIP) → .check(checks)
+ * Determination rules:
+ * - `work-in-progress` uses partial validation so drafts can omit required fields
+ * - every other workflow state uses full validation
+ * - if ADM exports a dedicated partial schema, use it directly
+ * - otherwise, derive a partial schema locally with `.partial()`
  *
  * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
  * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
@@ -120,11 +112,12 @@ function getSchema(stixType, status) {
   const admSchemaRef = STIX_SCHEMAS[stixType];
   if (!admSchemaRef) return null;
 
+  // Only draft objects get partial validation. Once an object leaves the
+  // work-in-progress state, we validate it against the full schema.
   const isWip = status === 'work-in-progress';
 
-  if (admSchemaRef.base && admSchemaRef.checks) {
-    const base = isWip ? admSchemaRef.base.partial() : admSchemaRef.base;
-    return base.check(admSchemaRef.checks);
+  if (admSchemaRef.full && admSchemaRef.partial) {
+    return isWip ? admSchemaRef.partial : admSchemaRef.full;
   }
 
   return isWip ? admSchemaRef.partial() : admSchemaRef;
