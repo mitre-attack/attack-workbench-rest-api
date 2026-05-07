@@ -875,7 +875,7 @@ class StixBundlesService extends BaseService {
       }
 
       // Use the existing repository method that exactly matches the original logic
-      const attackObject = await this.repositories.attackObject.retrieveLatestByStixId(stixId);
+      const attackObject = await this.repositories.attackObject.retrieveLatestByStixIdLean(stixId);
 
       if (attackObject) {
         this.attackObjectCache.set(cacheKey, attackObject);
