@@ -13,12 +13,10 @@
               "macOS",
               "Windows",
               "Network Devices",
-              "Google Workspace",
               "SaaS",
               "IaaS",
               "Containers",
               "Identity Provider",
-              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -59,12 +57,10 @@
               "macOS",
               "Windows",
               "Network Devices",
-              "Google Workspace",
               "SaaS",
               "IaaS",
               "Containers",
               "Identity Provider",
-              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -188,12 +184,10 @@
               "macOS",
               "Windows",
               "Network Devices",
-              "Google Workspace",
               "IaaS",
               "SaaS",
               "Containers",
               "Identity Provider",
-              "Azure AD",
               "Office Suite",
               "ESXi"
             ]
@@ -253,8 +247,6 @@
               "SaaS",
               "Network Devices",
               "Identity Provider",
-              "Azure AD",
-              "Google Workspace",
               "Office Suite",
               "ESXi"
             ]

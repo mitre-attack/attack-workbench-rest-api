@@ -20,12 +20,14 @@
  * - Network -> Network Devices
  * - Cloud -> IaaS, SaaS
  * - Office 365 -> Office Suite
+ * - Google Workspace -> Office Suite
  * - AWS -> IaaS
  * - Azure -> IaaS
  * - GCP -> IaaS
+ * - Azure AD -> Identity Provider
  * - Device Configuration/Parameters -> removed
  *
- * Newly-added canonical values such as Azure AD and Google Workspace are not
+ * Newly-added canonical values such as Identity Provider and Office Suite are not
  * inferred automatically; the migration only rewrites existing values.
  */
 
@@ -45,9 +47,11 @@ const LEGACY_PLATFORM_MAPPINGS = {
   Network: ['Network Devices'],
   Cloud: ['IaaS', 'SaaS'],
   'Office 365': ['Office Suite'],
+  'Google Workspace': ['Office Suite'],
   AWS: ['IaaS'],
   Azure: ['IaaS'],
   GCP: ['IaaS'],
+  'Azure AD': ['Identity Provider'],
   'Device Configuration/Parameters': [],
 };
 

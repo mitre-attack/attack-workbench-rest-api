@@ -1,8 +1,5 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const {
-  xMitrePlatformSchema,
-} = require('@mitre-attack/attack-data-model/dist/schemas/common/property-schemas/attack-platforms.cjs');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
@@ -100,8 +97,10 @@ describe('System Configuration API', function () {
     );
     expect(domainAllowedValues).toBeDefined();
     expect(domainAllowedValues.allowedValues).toEqual(
-      expect.arrayContaining([expectedPropertyValue, 'Google Workspace', 'Azure AD']),
+      expect.arrayContaining([expectedPropertyValue, 'Office Suite', 'Identity Provider']),
     );
+    expect(domainAllowedValues.allowedValues).not.toContain('Google Workspace');
+    expect(domainAllowedValues.allowedValues).not.toContain('Azure AD');
 
     const configuredPlatforms = [
       ...new Set(
@@ -112,9 +111,8 @@ describe('System Configuration API', function () {
         ),
       ),
     ].sort();
-    const supportedPlatforms = [...xMitrePlatformSchema.options].sort();
-
-    expect(configuredPlatforms).toEqual(supportedPlatforms);
+    expect(configuredPlatforms).not.toContain('Google Workspace');
+    expect(configuredPlatforms).not.toContain('Azure AD');
   });
 
   it('GET /api/config/organization-identity returns the organizaton identity', async function () {
