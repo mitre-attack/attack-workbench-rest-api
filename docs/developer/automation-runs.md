@@ -27,51 +27,36 @@ once:
    tooling.
 4. Avoid forcing every automation into one rigid per-item schema.
 
-## Dialectic design rationale
+## Design rationale
 
-### Thesis: a rigid, fully-normalized schema
-
-A strict schema is attractive because it gives easy querying and
-strong conventions. For example, it is tempting to make every item
-carry first-class fields like `stix_id`, `stix_type`,
+The obvious starting point is a strict, fully-normalized schema. It
+makes querying easy and forces strong conventions, and it is tempting
+to give every item first-class fields like `stix_id`, `stix_type`,
 `previous_modified`, `new_modified`, `changes`, and so on.
 
-That works well for STIX-object migrations, but it breaks down for
-other automation:
+That fits STIX-object migrations cleanly, but it starts to chafe as
+soon as the next automation looks slightly different. Scheduler jobs
+may operate on many collections. Admin repair tasks may act on one
+system document. Future jobs may not be versioned STIX objects at
+all. A taxonomy that hard-codes the shape of a STIX migration forces
+every later automation to either violate the schema or trigger
+another round of schema changes.
 
-- scheduler jobs may operate on many collections
-- admin repair tasks may act on one system document
-- future jobs may not be versioned STIX objects at all
+The reflex when that becomes painful is to retreat to the other
+extreme: store only opaque JSON blobs — a `payload` or `details`
+field at both the run and item levels — and let each automation
+describe itself however it likes. That removes schema churn entirely,
+but it also removes the parts operators and tooling actually rely on:
+run status, start and end timestamps, automation class, counts and
+warnings, per-item status, and the linkage between a run and its
+items. A purely free-form audit trail is durable but not operationally
+useful.
 
-If the schema is too rigid, every new automation either violates the
-taxonomy or forces another schema change.
-
-### Antithesis: a completely free-form blob
-
-The opposite extreme is to store only opaque JSON blobs like
-`payload` or `details` at both the run and item levels.
-
-That avoids schema churn, but it throws away the parts that operators
-and tooling actually need to query consistently:
-
-- run status
-- start/end timestamps
-- automation class
-- counts and warnings
-- per-item status
-- stable linkage between a run and its items
-
-If everything is free-form, the audit trail becomes durable but not
-operationally useful.
-
-### Synthesis: stable envelope, extensible payload
-
-The chosen design is a synthesis of those two extremes:
-
-- The **envelope** is stable and query-oriented.
-- The **payload** is extensible and automation-specific.
-
-That means:
+The split that falls out of that tension is the design used here. The
+parts every automation must expose for querying and dashboards — the
+**envelope** — stay stable and structured. The parts that legitimately
+vary by automation class — the **payload** — stay extensible and
+free-form. Concretely:
 
 - `automationRuns` has stable top-level fields like `run_id`,
   `automation_type`, `status`, `started_at`, `finished_at`, `scope`,
@@ -81,8 +66,8 @@ That means:
 - Automation-specific detail lives under `metadata` on the run and
   under `details` on the item.
 
-This keeps the taxonomy durable while still supporting new classes of
-automation without schema redesign.
+That keeps the taxonomy durable for tooling while still absorbing new
+classes of automation without a schema redesign.
 
 ## Collection taxonomy
 
