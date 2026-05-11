@@ -481,6 +481,7 @@ class BaseService extends ServiceWithHooks {
    * @param {string} [options.userAccountId] - The authenticated user's account ID
    * @param {string} [options.parentTechniqueId] - Parent technique ATT&CK ID (for subtechniques)
    * @param {boolean} [options.dryRun] - If true, compose and validate but skip persistence
+   * @param {object} [options.automationContext] - Optional automation metadata for logging ({ automationName, runId })
    * @returns {Object} The created document (or composed data if dryRun) with warnings array
    */
   async create(data, options) {
@@ -611,20 +612,6 @@ class BaseService extends ServiceWithHooks {
     }
 
     if (existingObject) {
-      // Block POST if the existing object has unresolved validation issues.
-      // Users must fix via PUT/updateFull first.
-      if (existingObject.workspace?.validation?.errors?.length > 0) {
-        const warning =
-          `Object ${data.stix.id} has unresolved validation issues. ` +
-          `Use PUT to update the existing version and resolve the issues before creating new versions.`;
-        console.warn(warning);
-        // TODO figure out the optimal way to treat imported objects with known validation errors
-        // throw new ObjectHasValidationIssuesError({
-        //   details: warning,
-        //   validationErrors: existingObject.workspace.validation.errors,
-        // });
-      }
-
       // New version of an existing object — carry forward revoked status, set modified_by
       data.stix.revoked = existingObject.stix.revoked ?? false;
       data.stix.x_mitre_modified_by_ref = organizationIdentityRef;

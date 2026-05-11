@@ -30,7 +30,6 @@
             "allowedValues": [
               "Field Controller/RTU/PLC/IED",
               "Safety Instrumented System/Protection Relay",
-              "Device Configuration/Parameters",
               "Control Server",
               "Input/Output Server",
               "Data Historian",
@@ -75,7 +74,6 @@
             "allowedValues": [
               "Field Controller/RTU/PLC/IED",
               "Safety Instrumented System/Protection Relay",
-              "Device Configuration/Parameters",
               "Control Server",
               "Input/Output Server",
               "Data Historian",
@@ -305,7 +303,7 @@
         "domains": [
           {
             "domainName": "ics-attack",
-            "allowedValues": ["Windows", "Linux", "Network", "Embedded", "Cloud"]
+            "allowedValues": ["Windows", "Linux", "Network Devices", "Embedded", "IaaS", "SaaS"]
           }
         ]
       }

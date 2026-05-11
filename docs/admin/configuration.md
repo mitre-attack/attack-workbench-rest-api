@@ -199,6 +199,7 @@ DATABASE_URL=mongodb://attack-workbench-database/attack-workspace
 - When `database.migration.enable` is `true`, migrations run automatically at startup
 - Set to `false` if you manage migrations separately (e.g., in a Kubernetes init container)
 - Migrations are idempotent and safe to run multiple times
+- Automation-enabled migrations may also write durable audit records to `automationRuns` and `automationRunItems`; see [Automation Run Audit Trail](automation-runs.md)
 
 ### Application
 

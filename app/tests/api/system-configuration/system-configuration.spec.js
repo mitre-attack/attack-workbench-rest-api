@@ -96,7 +96,23 @@ describe('System Configuration API', function () {
       (item) => item.domainName === expectedDomainName,
     );
     expect(domainAllowedValues).toBeDefined();
-    expect(domainAllowedValues.allowedValues).toContain(expectedPropertyValue);
+    expect(domainAllowedValues.allowedValues).toEqual(
+      expect.arrayContaining([expectedPropertyValue, 'Office Suite', 'Identity Provider']),
+    );
+    expect(domainAllowedValues.allowedValues).not.toContain('Google Workspace');
+    expect(domainAllowedValues.allowedValues).not.toContain('Azure AD');
+
+    const configuredPlatforms = [
+      ...new Set(
+        allowedValues.flatMap((item) =>
+          item.properties
+            .filter((property) => property.propertyName === expectedPropertyName)
+            .flatMap((property) => property.domains.flatMap((domain) => domain.allowedValues)),
+        ),
+      ),
+    ].sort();
+    expect(configuredPlatforms).not.toContain('Google Workspace');
+    expect(configuredPlatforms).not.toContain('Azure AD');
   });
 
   it('GET /api/config/organization-identity returns the organizaton identity', async function () {
