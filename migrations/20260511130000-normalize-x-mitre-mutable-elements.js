@@ -109,7 +109,15 @@ function latestActiveAnalyticsWithDuplicateMutableElementsPipeline() {
         $expr: { $ne: ['$__mutable_element_count', '$__unique_mutable_element_count'] },
       },
     },
-    { $project: { _id: 0, __v: 0, __t: 0, __mutable_element_count: 0, __unique_mutable_element_count: 0 } },
+    {
+      $project: {
+        _id: 0,
+        __v: 0,
+        __t: 0,
+        __mutable_element_count: 0,
+        __unique_mutable_element_count: 0,
+      },
+    },
   ];
 }
 
