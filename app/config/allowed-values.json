@@ -303,7 +303,7 @@
         "domains": [
           {
             "domainName": "ics-attack",
-            "allowedValues": ["Windows", "Linux", "Network Devices", "Embedded", "IaaS", "SaaS"]
+            "allowedValues": ["Windows", "Linux", "Network", "Embedded", "IaaS", "SaaS"]
           }
         ]
       }
