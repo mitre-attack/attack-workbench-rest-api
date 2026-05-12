@@ -143,7 +143,9 @@ async function prepareServiceLayer(client) {
   ensureMongooseUsesClient(client);
 
   await validationBypassesService.loadStaticRules(config.configurationFiles.staticBypassRulesPath);
+}
 
+async function assertOrganizationIdentityConfigured() {
   const systemConfig = await systemConfigurationRepository.retrieveOne({ lean: true });
   if (!systemConfig?.organization_identity_ref) {
     throw new Error(
@@ -191,6 +193,38 @@ module.exports = {
 
     try {
       await prepareServiceLayer(client);
+
+      const candidateCount =
+        await countRemainingLatestActiveAnalyticsWithDuplicateMutableElements(db);
+      if (candidateCount === 0) {
+        verification = {
+          remaining_latest_active_analytics_with_duplicate_mutable_elements: 0,
+        };
+
+        const summary = {
+          message:
+            'No active latest analytic(s) require mutable-elements deduplication; migration is a no-op.',
+        };
+
+        await recorder.finish({
+          status: 'completed',
+          counts,
+          warnings,
+          verification,
+          summary,
+          errorSummary: null,
+        });
+
+        recorder.log('info', summary.message, {
+          counts,
+          warnings,
+          verification,
+        });
+
+        return;
+      }
+
+      await assertOrganizationIdentityConfigured();
 
       const analyticsService = require('../app/services/stix/analytics-service');
 
