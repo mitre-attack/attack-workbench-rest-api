@@ -40,7 +40,7 @@
   },
   "dependencies": {
     "@apidevtools/json-schema-ref-parser": "^13.0.1",
-    "@mitre-attack/attack-data-model": "^4.11.6",
+    "@mitre-attack/attack-data-model": "^4.11.7",
     "async": "^3.2.6",
     "async-await-retry": "^2.1.0",
     "body-parser": "^2.2.1",
