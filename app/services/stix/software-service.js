@@ -40,10 +40,19 @@ class SoftwareService extends BaseService {
    * - Ensures x_mitre_aliases[0] matches the object name
    *
    * @param {Object} data - The software object data
-   * @param {Object} _options - Creation options (unused)
+   * @param {Object} [options] - Creation options
    */
-  // eslint-disable-next-line no-unused-vars
-  async beforeCreate(data, _options) {
+  async beforeCreate(data, options) {
+    // Import-fidelity contract: defaulting `stix.is_family` and rewriting
+    // `stix.x_mitre_aliases` is correct for user-driven flows where the
+    // server is the authority on these fields, but incorrect on the import
+    // path — the bundle carries authoritative values (including a deliberate
+    // omission of `is_family` for malware that doesn't represent a family,
+    // which must NOT be defaulted to `true`). `data.stix` is frozen during
+    // import-mode hooks (app/lib/import-safety.js), so a missing gate would
+    // throw a TypeError at the first attempted stix write below.
+    if (options?.import) return;
+
     // Set is_family default for malware
     if (data.stix && data.stix.type === MalwareType && typeof data.stix.is_family !== 'boolean') {
       data.stix.is_family = true;

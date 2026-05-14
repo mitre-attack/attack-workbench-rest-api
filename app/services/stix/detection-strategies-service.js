@@ -114,8 +114,14 @@ class DetectionStrategiesService extends BaseService {
    * Handle post-creation logic
    * Emit domain events to notify AnalyticsService about referenced/removed analytics
    * This handles both first-time creation and new version creation (versioning)
+   *
+   * @param {Object} document - The persisted detection strategy
+   * @param {Object} [options] - Create options forwarded from BaseService.
+   *   Threaded into the event payload so listeners can honor the
+   *   import-fidelity contract (no stix mutations when `options.import`).
+   *   See app/lib/import-safety.js for the contract.
    */
-  async afterCreate(document) {
+  async afterCreate(document, options) {
     const addedRefs = this._addedAnalyticRefs || [];
     const removedRefs = this._removedAnalyticRefs || [];
 
@@ -130,6 +136,7 @@ class DetectionStrategiesService extends BaseService {
         detectionStrategyId: document.stix.id,
         detectionStrategy: document.toObject ? document.toObject() : document,
         analyticIds: addedRefs,
+        options,
       });
     }
 
@@ -143,6 +150,7 @@ class DetectionStrategiesService extends BaseService {
       await EventBus.emit('x-mitre-detection-strategy::analytics-removed', {
         detectionStrategyId: document.stix.id,
         analyticIds: removedRefs,
+        options,
       });
     }
 
@@ -159,6 +167,7 @@ class DetectionStrategiesService extends BaseService {
         detectionStrategyId: document.stix.id,
         detectionStrategy: document.toObject ? document.toObject() : document,
         analyticIds: currentAnalyticRefs,
+        options,
       });
     }
 

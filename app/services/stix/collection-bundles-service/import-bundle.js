@@ -15,6 +15,7 @@ const {
 const logger = require('../../../lib/logger');
 const config = require('../../../config/config');
 const types = require('../../../lib/types');
+const { deepFreezeStix } = require('../../../lib/import-safety');
 
 // Bounded concurrency for the compose-and-validate phase. Each task runs Zod
 // validation and a small amount of synchronous work, so we cap concurrency
@@ -356,6 +357,12 @@ async function processTier(type, objects, ctx) {
       // and any other pre-persist data shaping are present on the doc when
       // saveMany writes it. Failures here are recorded as save errors and the
       // doc is dropped from the bulk insert.
+      //
+      // Import-fidelity guard: freeze stix before invoking the hook so any
+      // forgotten `if (!options.import)` gate inside the service crashes
+      // loudly with a TypeError instead of silently mutating bundle content.
+      // See app/lib/import-safety.js for the full contract.
+      deepFreezeStix(composed);
       try {
         await service.beforeCreate(composed, composeOptions);
       } catch (hookErr) {
@@ -418,6 +425,13 @@ async function processTier(type, objects, ctx) {
   // Run in parallel with bounded concurrency; per-doc hook failures are
   // logged but never abort the import.
   await runWithConcurrency(inserted, COMPOSE_CONCURRENCY, async (doc) => {
+    // Import-fidelity guard for the post-insert lifecycle. afterCreate and
+    // the listeners that subscribe to the emitted `{type}::created` event
+    // are allowed to populate workspace metadata on referenced documents
+    // but must not deviate this freshly saved document's stix from the
+    // bundle. Freezing forces violations to crash here rather than
+    // silently corrupting the imported content. See app/lib/import-safety.js.
+    deepFreezeStix(doc);
     try {
       await service.afterCreate(doc, composeOptions);
     } catch (err) {

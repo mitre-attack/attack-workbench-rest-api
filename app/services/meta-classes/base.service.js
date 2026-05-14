@@ -24,6 +24,7 @@ const {
   SelfRevocationError,
 } = require('../../exceptions');
 const { getSchema } = require('../../lib/validation-schemas');
+const { deepFreezeStix } = require('../../lib/import-safety');
 const ServiceWithHooks = require('./hooks.service');
 const WorkflowResult = require('../../lib/workflow-result');
 
@@ -700,8 +701,23 @@ class BaseService extends ServiceWithHooks {
       return { ...composed, warnings };
     }
 
+    // Import-fidelity contract: bundle stix must be persisted byte-faithful.
+    // Several `beforeCreate` hooks normally rewrite stix fields (e.g.
+    // AnalyticsService stamps stix.name from the ATT&CK ID; SoftwareService
+    // defaults stix.is_family). Those rewrites are intentional on user-driven
+    // POST/PUT flows but must NOT run during import. We freeze stix before
+    // invoking the hook so any forgotten `if (!options.import)` gate throws
+    // a TypeError at the violating line instead of silently corrupting the
+    // imported content. See app/lib/import-safety.js for the full rationale.
+    deepFreezeStix(composed);
     await this.beforeCreate(composed, options);
+
     const createdDocument = await this.repository.save(composed);
+
+    // Same contract applies to `afterCreate` and the listeners it triggers
+    // via emitted domain events — anything that reaches stix on this freshly
+    // saved document during import must crash, not silently mutate.
+    deepFreezeStix(createdDocument);
     await this.afterCreate(createdDocument, options);
     await this.emitCreatedEvent(createdDocument, options);
 
