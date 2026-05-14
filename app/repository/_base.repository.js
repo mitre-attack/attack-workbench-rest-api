@@ -399,6 +399,83 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  /**
+   * Bulk insert. Used by the STIX bundle import path to avoid one round-trip
+   * per object. `ordered: false` keeps MongoDB inserting the remaining docs
+   * after an individual failure; per-doc errors are returned on the thrown
+   * BulkWriteError's `writeErrors` for the caller to fold into import errors.
+   *
+   * Discriminator-aware: each child model's `insertMany` sets the correct
+   * `__t` discriminator key automatically, so callers should invoke this on
+   * the type-specific repository (not the AttackObject parent).
+   *
+   * @param {Array<Object>} dataArr - Array of plain objects to insert
+   * @param {Object} [options]
+   * @param {boolean} [options.ordered=false] - Stop on first error if true
+   * @returns {Promise<{ inserted: Array, errors: Array<{ index, message, code }> }>}
+   */
+  async saveMany(dataArr, { ordered = false } = {}) {
+    if (!Array.isArray(dataArr) || dataArr.length === 0) {
+      return { inserted: [], errors: [] };
+    }
+    try {
+      const inserted = await this.model.insertMany(dataArr, { ordered });
+      return { inserted, errors: [] };
+    } catch (err) {
+      // Mongoose BulkWriteError surfaces partial success when ordered:false.
+      // Successful inserts are on err.insertedDocs; failures on err.writeErrors.
+      if (err?.name === 'MongoBulkWriteError' || err?.writeErrors) {
+        const errors = (err.writeErrors || []).map((we) => ({
+          index: we.index ?? we.err?.index,
+          message: we.errmsg || we.err?.errmsg || we.message,
+          code: we.code || we.err?.code,
+        }));
+        return { inserted: err.insertedDocs || [], errors };
+      }
+      throw new DatabaseError(err);
+    }
+  }
+
+  /**
+   * Retrieve every version of every document whose `stix.id` is in `stixIds`.
+   * Returns a Map keyed by stixId, value is an array of versions sorted
+   * newest-first (matching `retrieveAllById`'s ordering).
+   *
+   * Used by the bundle-import path to pre-fetch all existing versions in one
+   * query instead of N queries (one per imported object).
+   *
+   * @param {Array<string>} stixIds - List of STIX IDs to look up
+   * @returns {Promise<Map<string, Array<Object>>>}
+   */
+  async retrieveAllByStixIds(stixIds) {
+    if (!Array.isArray(stixIds) || stixIds.length === 0) {
+      return new Map();
+    }
+
+    try {
+      const documents = await this.model
+        .find({ 'stix.id': { $in: stixIds } })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
+
+      const byStixId = new Map();
+      for (const doc of documents) {
+        const id = doc.stix.id;
+        let arr = byStixId.get(id);
+        if (!arr) {
+          arr = [];
+          byStixId.set(id, arr);
+        }
+        arr.push(doc);
+      }
+      return byStixId;
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async updateAndSave(document, data) {
     try {
       // TODO validate that document is valid mongoose object first

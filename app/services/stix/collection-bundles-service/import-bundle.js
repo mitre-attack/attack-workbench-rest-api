@@ -11,11 +11,35 @@ const {
   defaultAttackSpecVersion,
   toEpoch,
 } = require('./bundle-helpers');
-const { DuplicateIdError } = require('../../../exceptions');
 
 const logger = require('../../../lib/logger');
 const config = require('../../../config/config');
 const types = require('../../../lib/types');
+
+// Bounded concurrency for the compose-and-validate phase. Each task runs Zod
+// validation and a small amount of synchronous work, so we cap concurrency
+// to avoid pinning the event loop on extremely large bundles.
+const COMPOSE_CONCURRENCY = 25;
+
+/**
+ * Run `task` against every item in `items` with at most `limit` in flight.
+ * Inline replacement for p-limit so we don't pull a new dependency (and
+ * avoid the ESM-only issue in recent p-limit versions).
+ */
+async function runWithConcurrency(items, limit, task) {
+  let next = 0;
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      await task(items[i], i);
+    }
+  }
+  const workerCount = Math.min(limit, items.length);
+  const workers = [];
+  for (let i = 0; i < workerCount; i++) workers.push(worker());
+  await Promise.all(workers);
+}
 
 const collectionsService = require('../collections-service');
 const referencesService = require('../../system/references-service');
@@ -151,109 +175,260 @@ function checkIfAlias(importObject, sourceName) {
 }
 
 /**
- * Process a single STIX object during bundle import
- * @param {Object} importObject - The STIX object to process
- * @param {Object} options - Import options
+ * Records an unknown-object-type error against the imported collection.
+ * @param {Object} importObject - The unknown STIX object
  * @param {Object} importedCollection - Collection being imported
- * @param {Object} collectionReference - Reference to the collection
- * @param {Map} importReferences - Map of references being imported
- * @param {Object} referenceImportResults - Tracking of reference import stats
- * @returns {Promise} Resolves when object is processed
  */
-async function processStixObject(
-  importObject,
-  options,
-  importedCollection,
-  collectionReference,
-  importReferences,
-  referenceImportResults,
-) {
-  const service = getServiceForType(importObject.type);
+function recordUnknownTypeError(importObject, importedCollection) {
+  const importError = {
+    object_ref: importObject.id,
+    object_modified: importObject.modified,
+    error_type: importErrors.unknownObjectType,
+    error_message: `Unknown object type: ${importObject.type}`,
+  };
+  logger.verbose(
+    `Import Bundle Error: Unknown object type. id=${importObject.id}, modified=${importObject.modified}, type=${importObject.type}`,
+  );
+  importedCollection.workspace.import_categories.errors.push(importError);
+}
 
-  if (!service) {
-    if (importObject.type === types.Collection) {
-      return; // Skip x-mitre-collection objects
+/**
+ * Process one tier of same-type STIX objects: contents-map check, spec-version
+ * gate, bulk pre-fetch of existing versions, parallel compose-and-validate,
+ * then a single bulk insert.
+ *
+ * Tier-based grouping is sound because `sortObjectsByDependencies` returns a
+ * stable sort that keeps every type together — and types appear in dependency
+ * order (data-source before data-component, etc.). Each tier persists fully
+ * before the next tier begins.
+ *
+ * @param {string} type - STIX type for this tier
+ * @param {Array<Object>} objects - STIX objects of this type
+ * @param {Object} ctx - Shared import context
+ */
+async function processTier(type, objects, ctx) {
+  const {
+    options,
+    importedCollection,
+    contentsMap,
+    collectionReference,
+    importReferences,
+    referenceImportResults,
+  } = ctx;
+
+  // Filter the tier: drain contents-map, gate on ATT&CK spec version, and
+  // record per-object errors. The result is the set of objects eligible for
+  // compose-and-insert.
+  const eligible = [];
+  for (const importObject of objects) {
+    if (
+      !contentsMap.delete(makeKeyFromObject(importObject)) &&
+      importObject.type !== types.Collection
+    ) {
+      const importError = {
+        object_ref: importObject.id,
+        object_modified: importObject.modified,
+        error_type: importErrors.notInContents,
+        error_message:
+          'Warning: Object in bundle but not in x_mitre_contents. Object will be saved in database.',
+      };
+      logger.verbose(
+        `Import Bundle Warning: Object not in x_mitre_contents. id=${importObject.id}, modified=${importObject.modified}`,
+      );
+      importedCollection.workspace.import_categories.errors.push(importError);
     }
 
-    // Record error for unknown type but continue import
-    const importError = {
-      object_ref: importObject.id,
-      object_modified: importObject.modified,
-      error_type: importErrors.unknownObjectType,
-      error_message: `Unknown object type: ${importObject.type}`,
-    };
-    logger.verbose(
-      `Import Bundle Error: Unknown object type. id=${importObject.id}, modified=${importObject.modified}, type=${importObject.type}`,
-    );
-    importedCollection.workspace.import_categories.errors.push(importError);
+    if (importObject.type !== 'marking-definition') {
+      const objectAttackSpecVersion =
+        importObject.x_mitre_attack_spec_version ?? defaultAttackSpecVersion;
+      if (semver.gt(objectAttackSpecVersion, config.app.attackSpecVersion)) {
+        const importError = {
+          object_ref: importObject.id,
+          object_modified: importObject.modified,
+          error_type: importErrors.attackSpecVersionViolation,
+          error_message: 'Error: Object x_mitre_attack_spec_version later than system.',
+        };
+        logger.verbose(
+          `Import Bundle Error: Object's x_mitre_attack_spec_version later than system. id=${importObject.id}, modified=${importObject.modified}`,
+        );
+        importedCollection.workspace.import_categories.errors.push(importError);
+
+        if (
+          !options.forceImportParameters?.includes(
+            forceImportParameters.attackSpecVersionViolations,
+          )
+        ) {
+          throw new Error(errors.attackSpecVersionViolation);
+        }
+        continue;
+      }
+    }
+    eligible.push(importObject);
+  }
+
+  const service = getServiceForType(type);
+
+  // Unknown / unsupported types: record per-object errors but continue the import.
+  // Collection objects (the bundle itself) are deliberately skipped.
+  if (!service) {
+    if (type === types.Collection) return;
+    for (const importObject of eligible) {
+      recordUnknownTypeError(importObject, importedCollection);
+    }
     return;
   }
 
+  // Pre-fetch every existing version of every stixId in this tier in ONE query.
+  // Replaces N calls to service.retrieveById from the old per-object loop.
+  let existingByStixId;
   try {
-    // Retrieve existing objects with same STIX ID
-    const objects = await service.retrieveById(importObject.id, { versions: 'all' });
+    const ids = eligible.map((o) => o.id);
+    existingByStixId = await service.repository.retrieveAllByStixIds(ids);
+  } catch (err) {
+    logger.error(err);
+    for (const importObject of eligible) {
+      const importError = {
+        object_ref: importObject.id,
+        object_modified: importObject.modified,
+        error_type: importErrors.retrievalError,
+      };
+      logger.verbose(
+        `Import Bundle Error: Unable to retrieve objects with matching STIX id. id=${importObject.id}, modified=${importObject.modified}`,
+      );
+      importedCollection.workspace.import_categories.errors.push(importError);
+    }
+    return;
+  }
 
-    // Check for duplicate object
-    const isDuplicate = checkForDuplicate(importObject, objects);
-    if (isDuplicate) {
+  // Compose-and-validate in parallel with bounded concurrency. Each task runs
+  // the duplicate check, categorization, external-references collection,
+  // Zod validation via `composeForImport`, and the service's `beforeCreate`
+  // hook (which populates outbound `workspace.embedded_relationships` on the
+  // doc being saved). Composed docs are accumulated into a single array for
+  // bulk insert.
+  const composedToInsert = [];
+  const composeOptions = {
+    import: true,
+    validateContents: options.validateContents,
+  };
+
+  await runWithConcurrency(eligible, COMPOSE_CONCURRENCY, async (importObject) => {
+    const existing = existingByStixId.get(importObject.id) || [];
+
+    if (checkForDuplicate(importObject, existing)) {
       importedCollection.workspace.import_categories.duplicates.push(importObject.id);
       return;
     }
 
-    // Categorize the object (addition, change, etc)
-    categorizeObject(importObject, objects, importedCollection);
-
-    // Process external references
+    categorizeObject(importObject, existing, importedCollection);
     processExternalReferences(importObject, importReferences, referenceImportResults);
 
-    // Save the object if not preview mode
-    if (!options.previewOnly) {
-      const newObject = {
-        workspace: {
-          collections: [collectionReference],
-        },
-        stix: importObject,
-      };
+    if (options.previewOnly) return;
 
-      try {
-        // TODO should we bypass validation for imports?
-        // or possibly fail open on validation errors where we record the validation error on the object but still allow the import to proceed?
-        // for validation errors, the object may need to be placed into a quarantined state where it is visible but read-only except through a PUT operation that allows updates to be made to fix the validation errors
-        await service.create(newObject, {
-          import: true,
-          validateContents: options.validateContents,
-        });
-      } catch (err) {
-        if (err.message === service.errors?.duplicateId || err instanceof DuplicateIdError) {
-          throw err;
-        }
-        // Record save error but continue import
+    const stagingDoc = {
+      workspace: {
+        collections: [collectionReference],
+      },
+      stix: importObject,
+    };
+
+    try {
+      const { data: composed, throwIfValidating } = await service.composeForImport(
+        stagingDoc,
+        composeOptions,
+      );
+
+      if (throwIfValidating) {
         const importError = {
           object_ref: importObject.id,
           object_modified: importObject.modified,
           error_type: importErrors.saveError,
-          error_message: err.message,
+          error_message: throwIfValidating.message,
         };
         logger.verbose(
-          `Import Bundle Error: Unable to save object. id=${importObject.id}, modified=${importObject.modified}, ${err.message}`,
+          `Import Bundle Error: Validation failed. id=${importObject.id}, ${throwIfValidating.message}`,
         );
         importedCollection.workspace.import_categories.errors.push(importError);
+        return;
       }
-    }
-  } catch (err) {
-    logger.error(err);
 
-    // Record retrieval error but continue import
+      // Run the service's beforeCreate hook so outbound embedded_relationships
+      // and any other pre-persist data shaping are present on the doc when
+      // saveMany writes it. Failures here are recorded as save errors and the
+      // doc is dropped from the bulk insert.
+      try {
+        await service.beforeCreate(composed, composeOptions);
+      } catch (hookErr) {
+        const importError = {
+          object_ref: importObject.id,
+          object_modified: importObject.modified,
+          error_type: importErrors.saveError,
+          error_message: hookErr.message,
+        };
+        logger.verbose(
+          `Import Bundle Error: beforeCreate hook failed. id=${importObject.id}, ${hookErr.message}`,
+        );
+        importedCollection.workspace.import_categories.errors.push(importError);
+        return;
+      }
+
+      composedToInsert.push(composed);
+    } catch (err) {
+      const importError = {
+        object_ref: importObject.id,
+        object_modified: importObject.modified,
+        error_type: importErrors.saveError,
+        error_message: err.message,
+      };
+      logger.verbose(
+        `Import Bundle Error: Unable to compose object. id=${importObject.id}, modified=${importObject.modified}, ${err.message}`,
+      );
+      importedCollection.workspace.import_categories.errors.push(importError);
+    }
+  });
+
+  if (composedToInsert.length === 0) return;
+
+  // Bulk insert. `saveMany` uses MongoDB `insertMany` with `ordered:false`,
+  // so individual document failures (e.g., duplicate-id races) are returned
+  // per-doc and folded into the import errors below — they don't abort the
+  // remaining inserts.
+  const { inserted, errors: insertErrors } = await service.repository.saveMany(composedToInsert);
+  for (const wErr of insertErrors) {
+    const failedDoc = typeof wErr.index === 'number' ? composedToInsert[wErr.index] : undefined;
     const importError = {
-      object_ref: importObject.id,
-      object_modified: importObject.modified,
-      error_type: importErrors.retrievalError,
+      object_ref: failedDoc?.stix?.id,
+      object_modified: failedDoc?.stix?.modified,
+      error_type: importErrors.saveError,
+      error_message: wErr.message,
     };
     logger.verbose(
-      `Import Bundle Error: Unable to retrieve objects with matching STIX id. id=${importObject.id}, modified=${importObject.modified}`,
+      `Import Bundle Error: Unable to save object. id=${importError.object_ref}, modified=${importError.object_modified}, ${wErr.message}`,
     );
     importedCollection.workspace.import_categories.errors.push(importError);
   }
+
+  // Post-insert lifecycle: run `afterCreate` and emit the `{type}::created`
+  // event for each successfully inserted doc. These fire cross-service domain
+  // events that maintain INBOUND `workspace.embedded_relationships` on
+  // referenced documents (e.g., DetectionStrategy → Analytic, Analytic →
+  // DataComponent, DataComponent → DataSource). Skipping them would leave
+  // the frontend unable to navigate inbound relationships.
+  //
+  // Run in parallel with bounded concurrency; per-doc hook failures are
+  // logged but never abort the import.
+  await runWithConcurrency(inserted, COMPOSE_CONCURRENCY, async (doc) => {
+    try {
+      await service.afterCreate(doc, composeOptions);
+    } catch (err) {
+      logger.warn(`Import Bundle: afterCreate failed for ${doc?.stix?.id}: ${err.message}`);
+    }
+    try {
+      await service.emitCreatedEvent(doc, composeOptions);
+    } catch (err) {
+      logger.warn(`Import Bundle: emitCreatedEvent failed for ${doc?.stix?.id}: ${err.message}`);
+    }
+  });
 }
 
 /**
@@ -296,7 +471,14 @@ function sortObjectsByDependencies(objects) {
 }
 
 /**
- * Process all objects in the bundle
+ * Process all objects in the bundle, batched by STIX type in dependency order.
+ *
+ * Each type tier runs sequentially (so e.g. data-sources finish before
+ * data-components start), but objects within a tier are composed in parallel
+ * and persisted with a single bulk `insertMany`. This replaces the previous
+ * per-object sequential loop that did a DB read + DB write + lifecycle hooks
+ * + event emission per imported object — the dominant cost in large bundles.
+ *
  * @param {Array} objects - Array of STIX objects to process
  * @param {Object} options - Import options
  * @param {Object} importedCollection - Collection being imported
@@ -314,62 +496,32 @@ async function processObjects(
   importReferences,
   referenceImportResults,
 ) {
-  // Sort objects by dependencies before processing
   const sortedObjects = sortObjectsByDependencies(objects);
 
-  for (const importObject of sortedObjects) {
-    // Check if object is in x_mitre_contents
-    if (
-      !contentsMap.delete(makeKeyFromObject(importObject)) &&
-      importObject.type !== types.Collection
-    ) {
-      const importError = {
-        object_ref: importObject.id,
-        object_modified: importObject.modified,
-        error_type: importErrors.notInContents,
-        error_message:
-          'Warning: Object in bundle but not in x_mitre_contents. Object will be saved in database.',
-      };
-      logger.verbose(
-        `Import Bundle Warning: Object not in x_mitre_contents. id=${importObject.id}, modified=${importObject.modified}`,
-      );
-      importedCollection.workspace.import_categories.errors.push(importError);
+  // Group consecutive same-type objects into tiers. The sort above places
+  // every type contiguously and in dependency order, so a single pass over
+  // the sorted list is enough.
+  const tiers = [];
+  let currentTier = null;
+  for (const obj of sortedObjects) {
+    if (!currentTier || currentTier.type !== obj.type) {
+      currentTier = { type: obj.type, objects: [] };
+      tiers.push(currentTier);
     }
+    currentTier.objects.push(obj);
+  }
 
-    if (importObject.type != 'marking-definition') {
-      // Check ATT&CK Spec Version compatibility
-      const objectAttackSpecVersion =
-        importObject.x_mitre_attack_spec_version ?? defaultAttackSpecVersion;
-      if (semver.gt(objectAttackSpecVersion, config.app.attackSpecVersion)) {
-        const importError = {
-          object_ref: importObject.id,
-          object_modified: importObject.modified,
-          error_type: importErrors.attackSpecVersionViolation,
-          error_message: 'Error: Object x_mitre_attack_spec_version later than system.',
-        };
-        logger.verbose(
-          `Import Bundle Error: Object's x_mitre_attack_spec_version later than system. id=${importObject.id}, modified=${importObject.modified}`,
-        );
-        importedCollection.workspace.import_categories.errors.push(importError);
+  const ctx = {
+    options,
+    importedCollection,
+    contentsMap,
+    collectionReference,
+    importReferences,
+    referenceImportResults,
+  };
 
-        if (
-          !options.forceImportParameters?.includes(
-            forceImportParameters.attackSpecVersionViolations,
-          )
-        ) {
-          throw new Error(errors.attackSpecVersionViolation);
-        }
-        continue;
-      }
-    }
-    await processStixObject(
-      importObject,
-      options,
-      importedCollection,
-      collectionReference,
-      importReferences,
-      referenceImportResults,
-    );
+  for (const tier of tiers) {
+    await processTier(tier.type, tier.objects, ctx);
   }
 
   // Check for objects in x_mitre_contents but not in bundle

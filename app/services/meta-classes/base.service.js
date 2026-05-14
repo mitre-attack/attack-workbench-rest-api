@@ -688,6 +688,46 @@ class BaseService extends ServiceWithHooks {
    * @private
    */
   async _createFromImport(data, options) {
+    const {
+      data: composed,
+      warnings,
+      throwIfValidating,
+    } = await this.composeForImport(data, options);
+
+    if (throwIfValidating) throw throwIfValidating;
+
+    if (options.dryRun) {
+      return { ...composed, warnings };
+    }
+
+    await this.beforeCreate(composed, options);
+    const createdDocument = await this.repository.save(composed);
+    await this.afterCreate(createdDocument, options);
+    await this.emitCreatedEvent(createdDocument, options);
+
+    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
+    result.warnings = warnings;
+    return result;
+  }
+
+  /**
+   * Compose and validate an object for import — no I/O, no events.
+   *
+   * Stamps `workspace.attack_id` from the bundle's ATT&CK external reference,
+   * runs ADM validation (unless the object is revoked/deprecated), and
+   * applies fail-open semantics by attaching `workspace.validation` when
+   * errors are found and `options.validateContents` is not set.
+   *
+   * The result is a plain object ready to hand to `repository.save()` or
+   * `repository.saveMany()`. The bundle-import path uses this directly so it
+   * can batch persistence; the single-object import path wraps it in
+   * `_createFromImport` to keep lifecycle hooks and event emission.
+   *
+   * @param {Object} data - The request data ({ stix, workspace })
+   * @param {Object} options - Options passed from create()
+   * @returns {Promise<{ data: Object, warnings: Array, throwIfValidating: ValidationError|null }>}
+   */
+  async composeForImport(data, options) {
     // Strip workspace.validation — server-controlled; the fail-open block
     // below is the only legitimate writer of this field on the import path.
     if (data.workspace) {
@@ -714,40 +754,33 @@ class BaseService extends ServiceWithHooks {
       ({ errors, warnings } = await this.validateComposedObject(data));
     }
 
+    let throwIfValidating = null;
     if (errors.length > 0) {
       if (options.validateContents) {
-        throw new ValidationError('ADM validation failed', { details: errors, warnings });
+        throwIfValidating = new ValidationError('ADM validation failed', {
+          details: errors,
+          warnings,
+        });
+      } else {
+        // Fail-open: store validation errors on the document
+        const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
+        const admPkg = require('@mitre-attack/attack-data-model/package.json');
+
+        data.workspace = data.workspace || {};
+        data.workspace.validation = {
+          errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
+          attack_spec_version: ATTACK_SPEC_VERSION,
+          adm_version: admPkg.version,
+          validated_at: new Date(),
+        };
+
+        logger.warn(
+          `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
+        );
       }
-
-      // Fail-open: store validation errors on the document
-      const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
-      const admPkg = require('@mitre-attack/attack-data-model/package.json');
-
-      data.workspace = data.workspace || {};
-      data.workspace.validation = {
-        errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
-        attack_spec_version: ATTACK_SPEC_VERSION,
-        adm_version: admPkg.version,
-        validated_at: new Date(),
-      };
-
-      logger.warn(
-        `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
-      );
     }
 
-    if (options.dryRun) {
-      return { ...data, warnings };
-    }
-
-    await this.beforeCreate(data, options);
-    const createdDocument = await this.repository.save(data);
-    await this.afterCreate(createdDocument, options);
-    await this.emitCreatedEvent(createdDocument, options);
-
-    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
-    result.warnings = warnings;
-    return result;
+    return { data, warnings, throwIfValidating };
   }
 
   /**
