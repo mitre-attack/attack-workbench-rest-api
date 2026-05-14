@@ -222,9 +222,20 @@ async function processTier(type, objects, ctx) {
   // compose-and-insert.
   const eligible = [];
   for (const importObject of objects) {
+    // The contents-map check verifies that every imported object is also
+    // listed in the collection's `x_mitre_contents`. Two types are exempt
+    // because the export side (stix-bundles-service) deliberately omits them
+    // from `x_mitre_contents`:
+    //   - `x-mitre-collection`: the collection is the container; it doesn't
+    //     list itself.
+    //   - `marking-definition`: marking-defs are referenced by the
+    //     collection via `object_marking_refs` instead. Treating their
+    //     absence from x_mitre_contents as a warning produces a false
+    //     positive on every well-formed bundle (one per marking-def).
     if (
       !contentsMap.delete(makeKeyFromObject(importObject)) &&
-      importObject.type !== types.Collection
+      importObject.type !== types.Collection &&
+      importObject.type !== types.MarkingDefinition
     ) {
       const importError = {
         object_ref: importObject.id,
