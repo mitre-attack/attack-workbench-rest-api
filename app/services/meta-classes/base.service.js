@@ -741,7 +741,19 @@ class BaseService extends ServiceWithHooks {
    *
    * @param {Object} data - The request data ({ stix, workspace })
    * @param {Object} options - Options passed from create()
-   * @returns {Promise<{ data: Object, warnings: Array, throwIfValidating: ValidationError|null }>}
+   * @returns {Promise<{
+   *   data: Object,
+   *   warnings: Array,
+   *   throwIfValidating: ValidationError|null,
+   *   validationErrors: Array<{message,path,code,input}>
+   * }>}
+   *   - `validationErrors` is the full list of ADM errors that fired against
+   *     this object (after bypass filtering). The bundle-import path uses it
+   *     to surface per-object validation failures in
+   *     `workspace.import_categories.errors` so an import response
+   *     accurately reflects what was wrong — without that, fail-open mode
+   *     silently buries the errors on each document and the import looks
+   *     successful even when many objects are malformed.
    */
   async composeForImport(data, options) {
     // Strip workspace.validation — server-controlled; the fail-open block
@@ -796,7 +808,7 @@ class BaseService extends ServiceWithHooks {
       }
     }
 
-    return { data, warnings, throwIfValidating };
+    return { data, warnings, throwIfValidating, validationErrors: errors };
   }
 
   /**

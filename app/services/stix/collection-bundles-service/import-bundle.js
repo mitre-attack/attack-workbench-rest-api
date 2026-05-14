@@ -334,23 +334,63 @@ async function processTier(type, objects, ctx) {
     };
 
     try {
-      const { data: composed, throwIfValidating } = await service.composeForImport(
-        stagingDoc,
-        composeOptions,
-      );
+      const {
+        data: composed,
+        throwIfValidating,
+        validationErrors,
+      } = await service.composeForImport(stagingDoc, composeOptions);
 
+      // Strict-mode validation failure (`validateContents=true`). Surface the
+      // full ADM error list, not just the wrapper message — without `details`
+      // the caller has no way to act on the failure other than re-running the
+      // import with logs at debug level. Drop the doc from the bulk insert.
       if (throwIfValidating) {
         const importError = {
           object_ref: importObject.id,
           object_modified: importObject.modified,
-          error_type: importErrors.saveError,
-          error_message: throwIfValidating.message,
+          error_type: importErrors.validationError,
+          error_message: `${validationErrors.length} ADM validation error(s)`,
+          details: validationErrors.map((e) => ({
+            message: e.message,
+            path: e.path,
+            code: e.code,
+          })),
         };
         logger.verbose(
           `Import Bundle Error: Validation failed. id=${importObject.id}, ${throwIfValidating.message}`,
         );
         importedCollection.workspace.import_categories.errors.push(importError);
         return;
+      }
+
+      // Fail-open validation failures (`validateContents=false`, the default).
+      // The object IS persisted with the error list attached to its own
+      // `workspace.validation`, but a clean import response would otherwise
+      // give the caller no signal that anything was wrong. We mirror the
+      // per-object errors into `import_categories.errors` so the response
+      // surfaces them up front. One taxonomy entry per object regardless of
+      // how many issues that object had — the full per-issue list lives in
+      // `details` so the caller can drill down without querying each doc.
+      if (validationErrors.length > 0) {
+        const firstFew = validationErrors
+          .slice(0, 3)
+          .map((e) => e.message)
+          .join('; ');
+        const summary =
+          validationErrors.length > 3
+            ? `${firstFew}; ...and ${validationErrors.length - 3} more`
+            : firstFew;
+        importedCollection.workspace.import_categories.errors.push({
+          object_ref: importObject.id,
+          object_modified: importObject.modified,
+          error_type: importErrors.validationError,
+          error_message: `${validationErrors.length} ADM validation error(s): ${summary}`,
+          details: validationErrors.map((e) => ({
+            message: e.message,
+            path: e.path,
+            code: e.code,
+          })),
+        });
       }
 
       // Run the service's beforeCreate hook so outbound embedded_relationships
