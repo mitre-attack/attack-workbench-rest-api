@@ -401,9 +401,16 @@ class BaseRepository extends AbstractRepository {
 
   /**
    * Bulk insert. Used by the STIX bundle import path to avoid one round-trip
-   * per object. `ordered: false` keeps MongoDB inserting the remaining docs
-   * after an individual failure; per-doc errors are returned on the thrown
-   * BulkWriteError's `writeErrors` for the caller to fold into import errors.
+   * per object.
+   *
+   * `ordered: false` keeps MongoDB inserting the remaining docs after an
+   * individual failure. `throwOnValidationError: true` is critical: without
+   * it, Mongoose's `insertMany` silently drops documents that fail schema
+   * validation (e.g. a required field is missing) and reports success for
+   * the remaining valid docs — leaving the caller unable to record per-object
+   * import errors. With the flag, Mongoose throws a `MongooseBulkWriteError`
+   * after attempting the valid docs, carrying both the validation errors and
+   * the `results` array we use to map each failure back to its source index.
    *
    * Discriminator-aware: each child model's `insertMany` sets the correct
    * `__t` discriminator key automatically, so callers should invoke this on
@@ -413,17 +420,51 @@ class BaseRepository extends AbstractRepository {
    * @param {Object} [options]
    * @param {boolean} [options.ordered=false] - Stop on first error if true
    * @returns {Promise<{ inserted: Array, errors: Array<{ index, message, code }> }>}
+   *   `errors[].index` is the index into the input `dataArr`; the caller can
+   *   use it to recover the original document for error reporting.
    */
   async saveMany(dataArr, { ordered = false } = {}) {
     if (!Array.isArray(dataArr) || dataArr.length === 0) {
       return { inserted: [], errors: [] };
     }
     try {
-      const inserted = await this.model.insertMany(dataArr, { ordered });
+      const inserted = await this.model.insertMany(dataArr, {
+        ordered,
+        throwOnValidationError: true,
+      });
       return { inserted, errors: [] };
     } catch (err) {
-      // Mongoose BulkWriteError surfaces partial success when ordered:false.
-      // Successful inserts are on err.insertedDocs; failures on err.writeErrors.
+      // MongooseBulkWriteError: one or more docs failed Mongoose schema
+      // validation. `err.results` mirrors the input order — successfully
+      // inserted entries are Mongoose documents (identifiable by `_id`),
+      // while failures are the original input objects (no `_id`). Walking
+      // the results in order, the k-th failure corresponds to
+      // `err.validationErrors[k]` (Mongoose pre-sorts validationErrors by
+      // source index).
+      if (err?.name === 'MongooseBulkWriteError') {
+        const errors = [];
+        const inserted = [];
+        const validationErrors = err.validationErrors || [];
+        const results = err.results || [];
+        let veIdx = 0;
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r && r._id) {
+            inserted.push(r);
+          } else {
+            const ve = validationErrors[veIdx++];
+            errors.push({
+              index: i,
+              message: ve?.message ?? 'Mongoose validation error',
+              code: ve?.name || 'ValidationError',
+            });
+          }
+        }
+        return { inserted, errors };
+      }
+      // MongoDB driver-side failure (e.g., duplicate-key race). Per-doc
+      // errors are on `err.writeErrors`; successful inserts on
+      // `err.insertedDocs`.
       if (err?.name === 'MongoBulkWriteError' || err?.writeErrors) {
         const errors = (err.writeErrors || []).map((we) => ({
           index: we.index ?? we.err?.index,
