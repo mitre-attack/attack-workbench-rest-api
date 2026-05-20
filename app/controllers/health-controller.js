@@ -4,7 +4,7 @@
 const logger = require('../lib/logger');
 
 exports.getPing = function (req, res) {
-  return res.status(200).send('rest api watch worx!');
+  return res.status(204).send();
 };
 
 exports.getStatus = function (req, res) {
