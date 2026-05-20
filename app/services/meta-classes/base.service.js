@@ -24,6 +24,7 @@ const {
   SelfRevocationError,
 } = require('../../exceptions');
 const { getSchema } = require('../../lib/validation-schemas');
+const { deepFreezeStix } = require('../../lib/import-safety');
 const ServiceWithHooks = require('./hooks.service');
 const WorkflowResult = require('../../lib/workflow-result');
 
@@ -688,6 +689,73 @@ class BaseService extends ServiceWithHooks {
    * @private
    */
   async _createFromImport(data, options) {
+    const {
+      data: composed,
+      warnings,
+      throwIfValidating,
+    } = await this.composeForImport(data, options);
+
+    if (throwIfValidating) throw throwIfValidating;
+
+    if (options.dryRun) {
+      return { ...composed, warnings };
+    }
+
+    // Import-fidelity contract: bundle stix must be persisted byte-faithful.
+    // Several `beforeCreate` hooks normally rewrite stix fields (e.g.
+    // AnalyticsService stamps stix.name from the ATT&CK ID; SoftwareService
+    // defaults stix.is_family). Those rewrites are intentional on user-driven
+    // POST/PUT flows but must NOT run during import. We freeze stix before
+    // invoking the hook so any forgotten `if (!options.import)` gate throws
+    // a TypeError at the violating line instead of silently corrupting the
+    // imported content. See app/lib/import-safety.js for the full rationale.
+    deepFreezeStix(composed);
+    await this.beforeCreate(composed, options);
+
+    const createdDocument = await this.repository.save(composed);
+
+    // Same contract applies to `afterCreate` and the listeners it triggers
+    // via emitted domain events — anything that reaches stix on this freshly
+    // saved document during import must crash, not silently mutate.
+    deepFreezeStix(createdDocument);
+    await this.afterCreate(createdDocument, options);
+    await this.emitCreatedEvent(createdDocument, options);
+
+    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
+    result.warnings = warnings;
+    return result;
+  }
+
+  /**
+   * Compose and validate an object for import — no I/O, no events.
+   *
+   * Stamps `workspace.attack_id` from the bundle's ATT&CK external reference,
+   * runs ADM validation (unless the object is revoked/deprecated), and
+   * applies fail-open semantics by attaching `workspace.validation` when
+   * errors are found and `options.validateContents` is not set.
+   *
+   * The result is a plain object ready to hand to `repository.save()` or
+   * `repository.saveMany()`. The bundle-import path uses this directly so it
+   * can batch persistence; the single-object import path wraps it in
+   * `_createFromImport` to keep lifecycle hooks and event emission.
+   *
+   * @param {Object} data - The request data ({ stix, workspace })
+   * @param {Object} options - Options passed from create()
+   * @returns {Promise<{
+   *   data: Object,
+   *   warnings: Array,
+   *   throwIfValidating: ValidationError|null,
+   *   validationErrors: Array<{message,path,code,input}>
+   * }>}
+   *   - `validationErrors` is the full list of ADM errors that fired against
+   *     this object (after bypass filtering). The bundle-import path uses it
+   *     to surface per-object validation failures in
+   *     `workspace.import_categories.errors` so an import response
+   *     accurately reflects what was wrong — without that, fail-open mode
+   *     silently buries the errors on each document and the import looks
+   *     successful even when many objects are malformed.
+   */
+  async composeForImport(data, options) {
     // Strip workspace.validation — server-controlled; the fail-open block
     // below is the only legitimate writer of this field on the import path.
     if (data.workspace) {
@@ -714,40 +782,33 @@ class BaseService extends ServiceWithHooks {
       ({ errors, warnings } = await this.validateComposedObject(data));
     }
 
+    let throwIfValidating = null;
     if (errors.length > 0) {
       if (options.validateContents) {
-        throw new ValidationError('ADM validation failed', { details: errors, warnings });
+        throwIfValidating = new ValidationError('ADM validation failed', {
+          details: errors,
+          warnings,
+        });
+      } else {
+        // Fail-open: store validation errors on the document
+        const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
+        const admPkg = require('@mitre-attack/attack-data-model/package.json');
+
+        data.workspace = data.workspace || {};
+        data.workspace.validation = {
+          errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
+          attack_spec_version: ATTACK_SPEC_VERSION,
+          adm_version: admPkg.version,
+          validated_at: new Date(),
+        };
+
+        logger.warn(
+          `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
+        );
       }
-
-      // Fail-open: store validation errors on the document
-      const { ATTACK_SPEC_VERSION } = require('@mitre-attack/attack-data-model');
-      const admPkg = require('@mitre-attack/attack-data-model/package.json');
-
-      data.workspace = data.workspace || {};
-      data.workspace.validation = {
-        errors: errors.map((e) => ({ message: e.message, path: e.path, code: e.code })),
-        attack_spec_version: ATTACK_SPEC_VERSION,
-        adm_version: admPkg.version,
-        validated_at: new Date(),
-      };
-
-      logger.warn(
-        `Import: ${data.stix.id} has ${errors.length} validation error(s), storing on document`,
-      );
     }
 
-    if (options.dryRun) {
-      return { ...data, warnings };
-    }
-
-    await this.beforeCreate(data, options);
-    const createdDocument = await this.repository.save(data);
-    await this.afterCreate(createdDocument, options);
-    await this.emitCreatedEvent(createdDocument, options);
-
-    const result = createdDocument.toObject ? createdDocument.toObject() : createdDocument;
-    result.warnings = warnings;
-    return result;
+    return { data, warnings, throwIfValidating, validationErrors: errors };
   }
 
   /**

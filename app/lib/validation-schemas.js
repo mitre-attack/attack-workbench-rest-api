@@ -91,6 +91,12 @@ const STIX_SCHEMAS = {
   'x-mitre-collection': collectionSchema,
 };
 
+// Cache for locally-derived partial schemas. ADM does not export prebuilt
+// partials for every STIX type; for those types we call `.partial()` ourselves.
+// That call is expensive enough to show up in bulk-import profiles, so we
+// memoize the result per STIX type.
+const derivedPartialCache = new Map();
+
 /**
  * Get the schema to use for validating a STIX object.
  *
@@ -102,7 +108,7 @@ const STIX_SCHEMAS = {
  * - `work-in-progress` uses partial validation so drafts can omit required fields
  * - every other workflow state uses full validation
  * - if ADM exports a dedicated partial schema, use it directly
- * - otherwise, derive a partial schema locally with `.partial()`
+ * - otherwise, derive a partial schema locally with `.partial()` (memoized)
  *
  * @param {string} stixType - The STIX `type` being validated (e.g. "attack-pattern")
  * @param {string} status - The workflow state (e.g. "work-in-progress", "awaiting-review", "reviewed")
@@ -120,7 +126,14 @@ function getSchema(stixType, status) {
     return isWip ? admSchemaRef.partial : admSchemaRef.full;
   }
 
-  return isWip ? admSchemaRef.partial() : admSchemaRef;
+  if (!isWip) return admSchemaRef;
+
+  let derived = derivedPartialCache.get(stixType);
+  if (!derived) {
+    derived = admSchemaRef.partial();
+    derivedPartialCache.set(stixType, derived);
+  }
+  return derived;
 }
 
 module.exports = {

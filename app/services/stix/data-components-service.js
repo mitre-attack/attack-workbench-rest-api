@@ -239,11 +239,13 @@ class DataComponentsService extends BaseService {
    * This handles both first-time creation and new version creation (versioning)
    *
    * @param {Object} createdDocument - The created data component document
-   * @param {Object} _options - Creation options (unused)
+   * @param {Object} [options] - Creation options forwarded from BaseService.
+   *   Threaded into the event payload so listeners can honor the
+   *   import-fidelity contract (no stix mutations when `options.import`).
+   *   See app/lib/import-safety.js.
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
-  async afterCreate(createdDocument, _options) {
+  async afterCreate(createdDocument, options) {
     const addedRef = this._addedDataSourceRef;
     const removedRef = this._removedDataSourceRef;
 
@@ -258,6 +260,7 @@ class DataComponentsService extends BaseService {
         dataComponentId: createdDocument.stix.id,
         dataComponent: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
         dataSourceId: addedRef,
+        options,
       });
     }
 
@@ -271,6 +274,7 @@ class DataComponentsService extends BaseService {
       await EventBus.emit('x-mitre-data-component::data-source-removed', {
         dataComponentId: createdDocument.stix.id,
         dataSourceId: removedRef,
+        options,
       });
     }
 
@@ -287,6 +291,7 @@ class DataComponentsService extends BaseService {
         dataComponentId: createdDocument.stix.id,
         dataComponent: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
         dataSourceId: currentDataSourceRef,
+        options,
       });
     }
 

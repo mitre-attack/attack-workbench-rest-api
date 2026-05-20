@@ -205,7 +205,7 @@ function loadConfig() {
       withAttackDataModel: {
         doc: 'Enable validation of POST and PUT request bodies using the ATT&CK Data Model',
         format: Boolean,
-        default: false,
+        default: true,
         env: 'VALIDATE_WITH_ADM_SCHEMAS',
       },
       withOpenApi: {

@@ -34,10 +34,17 @@ class CampaignService extends BaseService {
    * Ensures aliases[0] matches the object name
    *
    * @param {Object} data - The campaign object data
-   * @param {Object} _options - Creation options (unused)
+   * @param {Object} [options] - Creation options
    */
-  // eslint-disable-next-line no-unused-vars
-  async beforeCreate(data, _options) {
+  async beforeCreate(data, options) {
+    // Import-fidelity contract: skip the alias normalization on the import
+    // path. The normalization rewrites `stix.aliases` (rearranging entries
+    // and prepending `stix.name`), which is correct for user-driven flows
+    // but deviates the persisted analytic from the bundle source-of-truth.
+    // `data.stix` is frozen during import-mode hooks (app/lib/import-safety.js),
+    // so a missing gate here would throw a TypeError at the assignment in
+    // `_normalizeAliases`.
+    if (options?.import) return;
     this._normalizeAliases(data);
   }
 

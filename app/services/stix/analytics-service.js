@@ -11,6 +11,7 @@ const {
 const EventBus = require('../../lib/event-bus');
 const logger = require('../../lib/logger');
 const Exceptions = require('../../exceptions');
+const { deepFreezeStix } = require('../../lib/import-safety');
 
 /**
  * Service for managing analytics
@@ -50,15 +51,21 @@ class AnalyticsService extends BaseService {
 
   /**
    * Handle analytics being referenced by a detection strategy
-   * Add inbound embedded_relationship and update external_references
+   * Add inbound embedded_relationship and (when not importing) refresh the
+   * ATT&CK external_references URL on each referenced analytic.
    *
    * @param {Object} payload - Event payload
    * @param {Object} payload.detectionStrategy - The detection strategy document that references the analytics
    * @param {string[]} payload.analyticIds - Array of analytic STIX IDs being referenced
+   * @param {Object} [payload.options] - The originating create-options forwarded from
+   *   DetectionStrategiesService.afterCreate. Used here to honor the
+   *   import-fidelity contract — see app/lib/import-safety.js. When
+   *   `options.import` is true, the workspace metadata update still runs but
+   *   the stix.external_references rewrite is skipped.
    * @returns {Promise<void>}
    */
   static async handleAnalyticsReferenced(payload) {
-    const { detectionStrategy, analyticIds } = payload;
+    const { detectionStrategy, analyticIds, options } = payload;
 
     logger.info(
       `Analytics Service heard event: 'x-mitre-detection-strategy::analytics-referenced' for ${detectionStrategy.stix.id}`,
@@ -74,6 +81,13 @@ class AnalyticsService extends BaseService {
           );
           continue;
         }
+
+        // Import-fidelity guard: when the triggering create came from a
+        // bundle import, freeze this analytic's stix so any forgotten
+        // import gate below crashes loudly with a TypeError instead of
+        // silently rewriting the persisted analytic's stix fields.
+        // Workspace mutations are unaffected. See app/lib/import-safety.js.
+        if (options?.import) deepFreezeStix(analytic);
 
         // Initialize embedded_relationships if needed
         if (!analytic.workspace) {
@@ -102,23 +116,30 @@ class AnalyticsService extends BaseService {
           );
         }
 
-        // Update external_references with URL to parent detection strategy
-        if (!analytic.stix.external_references) {
-          analytic.stix.external_references = [];
-        }
+        // Refresh the analytic's ATT&CK external_references URL so it
+        // points at the parent detection strategy. This rewrites
+        // `stix.external_references` and must therefore be skipped on the
+        // import path; the bundle is the source of truth for stix content.
+        // The framework freeze above would throw here if this gate were
+        // missing — that's intentional.
+        if (!options?.import) {
+          if (!analytic.stix.external_references) {
+            analytic.stix.external_references = [];
+          }
 
-        // Remove existing ATT&CK external references
-        analytic.stix.external_references = removeAttackExternalReferences(
-          analytic.stix.external_references,
-        );
-
-        // Create new ATT&CK external reference with URL
-        const attackRef = createAttackExternalReference(analytic.toObject());
-        if (attackRef) {
-          analytic.stix.external_references.unshift(attackRef);
-          logger.info(
-            `AnalyticsService: Updated external_references URL for analytic ${analyticId}`,
+          // Remove existing ATT&CK external references
+          analytic.stix.external_references = removeAttackExternalReferences(
+            analytic.stix.external_references,
           );
+
+          // Create new ATT&CK external reference with URL
+          const attackRef = createAttackExternalReference(analytic.toObject());
+          if (attackRef) {
+            analytic.stix.external_references.unshift(attackRef);
+            logger.info(
+              `AnalyticsService: Updated external_references URL for analytic ${analyticId}`,
+            );
+          }
         }
 
         await analyticsRepository.saveDocument(analytic);
@@ -215,12 +236,21 @@ class AnalyticsService extends BaseService {
    * @throws {Exceptions.NotFoundError} If a referenced data component does not exist
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
   async beforeCreate(data, options) {
-    // Analytic name matches its ATT&CK ID
-    const id = data.workspace.attack_id;
-    data.stix.name = id.replace(/^AN(\d+)$/, 'Analytic $1');
-    logger.debug(`Setting name to match ATT&CK ID: ${data.stix.name}`);
+    // Import-fidelity contract: when a STIX bundle is being imported, the
+    // bundle's `stix` content must be persisted byte-faithful. Stamping
+    // `stix.name` from the ATT&CK ID is correct for user-driven POST flows,
+    // where the server is the authority on the analytic's display name, but
+    // incorrect for an import — the bundle already carries the name. The
+    // framework freezes `data.stix` during import-mode hooks (see
+    // app/lib/import-safety.js), so the assignment below would throw a
+    // TypeError without this gate. Workspace mutations further down still
+    // run unconditionally.
+    if (!options?.import) {
+      const id = data.workspace.attack_id;
+      data.stix.name = id.replace(/^AN(\d+)$/, 'Analytic $1');
+      logger.debug(`Setting name to match ATT&CK ID: ${data.stix.name}`);
+    }
 
     // Initialize embedded_relationships if not present
     if (!data.workspace) {
@@ -286,11 +316,13 @@ class AnalyticsService extends BaseService {
    * Emits domain event to notify DataComponentsService that data components were referenced
    *
    * @param {Object} createdDocument - The created analytic document
-   * @param {Object} _options - Creation options (unused)
+   * @param {Object} [options] - Creation options forwarded from BaseService.
+   *   Threaded into the event payload so listeners can honor the
+   *   import-fidelity contract (no stix mutations when `options.import`).
+   *   See app/lib/import-safety.js.
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
-  async afterCreate(createdDocument, _options) {
+  async afterCreate(createdDocument, options) {
     // Extract data component IDs from x_mitre_log_source_references
     const dataComponentRefs =
       createdDocument.stix?.x_mitre_log_source_references?.map(
@@ -307,6 +339,7 @@ class AnalyticsService extends BaseService {
         analyticId: createdDocument.stix.id,
         analytic: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
         dataComponentIds: dataComponentRefs,
+        options,
       });
     }
   }
