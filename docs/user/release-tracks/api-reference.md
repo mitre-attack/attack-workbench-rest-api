@@ -153,7 +153,12 @@ GET /api/release-tracks
       "latest_version": "14.1",
       "latest_modified": "2024-01-15T16:20:00Z",
       "snapshot_count": 47,
-      "tagged_release_count": 12
+      "tagged_release_count": 12,
+      "summary": {
+        "members_count": 3247,
+        "staged_count": 18,
+        "candidates_count": 42
+      }
     },
     {
       "id": "release-track--456",
@@ -163,7 +168,12 @@ GET /api/release-tracks
       "latest_version": null,
       "latest_modified": "2024-01-10T10:00:00Z",
       "snapshot_count": 3,
-      "tagged_release_count": 2
+      "tagged_release_count": 2,
+      "summary": {
+        "members_count": 870,
+        "staged_count": 0,
+        "candidates_count": 0
+      }
     }
   ],
   "total": 2,

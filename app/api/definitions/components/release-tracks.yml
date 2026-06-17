@@ -302,6 +302,19 @@ components:
         tagged_release_count:
           type: number
           description: 'Number of tagged releases'
+        summary:
+          type: object
+          description: 'Counts of objects in each release track tier for the latest snapshot'
+          properties:
+            members_count:
+              type: number
+              description: 'Number of objects in the members tier'
+            staged_count:
+              type: number
+              description: 'Number of objects in the staged tier'
+            candidates_count:
+              type: number
+              description: 'Number of objects in the candidates tier'
         created_at:
           type: string
           format: date-time
