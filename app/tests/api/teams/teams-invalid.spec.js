@@ -7,9 +7,16 @@ logger.level = 'debug';
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const teams = require('./teams.invalid.json');
-
 const login = require('../../shared/login');
+
+// Invalid team payloads — each is missing a required field. Used to assert the
+// API rejects malformed input with a 400.
+const teams = [
+  {
+    description: 'no name',
+    userIDs: [],
+  },
+];
 
 describe('Teams API Test Invalid Data', function () {
   let app;
