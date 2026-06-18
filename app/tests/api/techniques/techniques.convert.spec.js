@@ -36,7 +36,7 @@ describe('Techniques Convert API', function () {
     await database.initializeConnection();
     await databaseConfiguration.checkSystemConfiguration();
 
-    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = false;
 
     app = await require('../../../index').initializeApp();

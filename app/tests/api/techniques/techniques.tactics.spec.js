@@ -30,8 +30,12 @@ describe('Techniques with Tactics API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation. NOTE: this suite seeds via the collection-bundle
+    // import path, which records per-object ADM issues (import-fidelity contract)
+    // rather than rejecting them — so the bundle below is imported even though it
+    // is not fully ADM-compliant. This suite exercises the technique<->tactic
+    // relationship endpoints, not request-level ADM enforcement.
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app

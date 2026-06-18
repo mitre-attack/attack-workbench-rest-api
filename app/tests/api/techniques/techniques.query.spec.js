@@ -1,5 +1,3 @@
-const fs = require('fs').promises;
-
 const request = require('supertest');
 const { expect } = require('expect');
 const _ = require('lodash');
@@ -16,13 +14,31 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 
 const techniquesService = require('../../../services/stix/techniques-service');
 
+// Base technique used to derive all of the seeded query fixtures. Each created
+// technique deep-clones this and overrides only the fields a given test cares
+// about (deprecated/revoked status, workflow state, domain, platform).
+const baseTechnique = {
+  workspace: {
+    workflow: {},
+  },
+  stix: {
+    spec_version: '2.1',
+    type: 'attack-pattern',
+    description: 'This is a technique.',
+    external_references: [{ source_name: 'source-1', external_id: 's1' }],
+    object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+    created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
+    kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }],
+    x_mitre_detection: 'detection text',
+    x_mitre_is_subtechnique: false,
+    x_mitre_version: '1.0',
+    x_mitre_domains: ['enterprise-attack'],
+    x_mitre_platforms: ['Linux', 'macOS'],
+  },
+};
+
 function asyncWait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function readJson(path) {
-  const data = await fs.readFile(require.resolve(path));
-  return JSON.parse(data);
 }
 
 async function configureAndLoadTechniques(baseTechnique) {
@@ -49,12 +65,13 @@ async function configureAndLoadTechniques(baseTechnique) {
   // technique 1: x_mitre_deprecated,revoked undefined, state undefined
   const technique1 = await createTechnique({});
 
-  // technique 2: x_mitre_deprecated = false, state = work-in-progress, mobile-attack domain
+  // technique 2: x_mitre_deprecated = false, state = work-in-progress, mobile-attack domain.
+  // Adds a unique platform ('Windows') so the platform-filter test can target it.
   await createTechnique({
     stix: {
       x_mitre_deprecated: false,
       x_mitre_domains: ['mobile-attack'],
-      x_mitre_platforms: [...baseTechnique.stix.x_mitre_platforms, 'platform-3'],
+      x_mitre_platforms: [...baseTechnique.stix.x_mitre_platforms, 'Windows'],
     },
     workspace: { workflow: { state: 'work-in-progress' } },
   });
@@ -136,14 +153,13 @@ describe('Techniques Query API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the seeded fixtures below are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
-    const baseTechnique = await readJson('./techniques.query.json');
     await configureAndLoadTechniques(baseTechnique);
 
     // Log into the app
@@ -286,7 +302,7 @@ describe('Techniques Query API', function () {
 
   it('GET /api/techniques should return techniques containing the platform', async function () {
     const res = await request(app)
-      .get('/api/techniques?platform=platform-3')
+      .get('/api/techniques?platform=Windows')
       .set('Accept', 'application/json')
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
