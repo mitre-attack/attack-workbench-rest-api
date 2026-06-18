@@ -30,7 +30,7 @@ const initialObjectData = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
-    x_mitre_platforms: ['windows'],
+    x_mitre_platforms: ['Windows'],
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_mutable_elements: [
       {
@@ -56,6 +56,10 @@ describe('Analytics API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -393,7 +397,7 @@ describe('Analytics API', function () {
         name: 'Network Connection Creation Detection Strategy',
         spec_version: '2.1',
         type: 'x-mitre-detection-strategy',
-        description: 'Strategy for detecting network connections',
+        // Note: the x-mitre-detection-strategy ADM schema does not define a description field
         object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
         created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
         x_mitre_version: '1.0',
