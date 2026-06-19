@@ -39,6 +39,7 @@ const initialCollectionData = {
     // external_references: [{ source_name: 'source-1', external_id: 's1' }],
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
+    x_mitre_version: '1.0',
     x_mitre_contents: [],
   },
 };
@@ -96,7 +97,7 @@ const softwareData = {
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.1',
     x_mitre_aliases: ['software-1'],
-    x_mitre_platforms: ['platform-1'],
+    x_mitre_platforms: ['Android'],
     x_mitre_contributors: ['contributor-1', 'contributor-2'],
     x_mitre_domains: ['mobile-attack'],
   },
@@ -115,7 +116,7 @@ describe('Collections (x-mitre-collection) Basic API', function () {
     await databaseConfiguration.checkSystemConfiguration();
 
     // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
