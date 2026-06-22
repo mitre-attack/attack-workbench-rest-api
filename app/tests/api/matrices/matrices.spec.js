@@ -40,7 +40,7 @@ const initialObjectData = {
       'x-mitre-tactic--daa4cbb1-b4f4-4723-a824-7f1efd6e0592',
       'x-mitre-tactic--d679bca2-e57d-4935-8650-8031c87a4400',
     ],
-    x_mitre_domains: ['mitre-attack'],
+    x_mitre_domains: ['enterprise-attack'],
     x_mitre_version: '1.0',
   },
 };
@@ -60,8 +60,8 @@ describe('Matrices API', function () {
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Log into the app
