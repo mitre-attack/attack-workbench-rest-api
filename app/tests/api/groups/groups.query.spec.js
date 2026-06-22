@@ -29,6 +29,7 @@ const baseGroup = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
+    x_mitre_domains: ['enterprise-attack'],
   },
 };
 
@@ -154,8 +155,8 @@ describe('Groups API Queries', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
