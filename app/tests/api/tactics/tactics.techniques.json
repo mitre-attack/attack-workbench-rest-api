@@ -84,21 +84,21 @@
       "kill_chain_phases": [
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "enlil"
+          "phase_name": "execution"
         },
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "nabu"
+          "phase_name": "persistence"
         }
       ],
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/TX0001",
-          "external_id": "TX0001"
+          "url": "https://attack.mitre.org/techniques/T9001",
+          "external_id": "T9001"
         }
       ],
-      "x_mitre_data_sources": [],
+      "x_mitre_is_subtechnique": false,
       "x_mitre_version": "1.0",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
@@ -118,17 +118,17 @@
       "kill_chain_phases": [
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "nabu"
+          "phase_name": "persistence"
         }
       ],
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/TX0002",
-          "external_id": "TX0002"
+          "url": "https://attack.mitre.org/techniques/T9002",
+          "external_id": "T9002"
         }
       ],
-      "x_mitre_data_sources": [],
+      "x_mitre_is_subtechnique": false,
       "x_mitre_version": "1.0",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
@@ -148,17 +148,17 @@
       "kill_chain_phases": [
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "enki"
+          "phase_name": "defense-evasion"
         }
       ],
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/TX0003",
-          "external_id": "TX0003"
+          "url": "https://attack.mitre.org/techniques/T9003",
+          "external_id": "T9003"
         }
       ],
-      "x_mitre_data_sources": [],
+      "x_mitre_is_subtechnique": false,
       "x_mitre_version": "1.0",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
@@ -178,21 +178,21 @@
       "kill_chain_phases": [
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "enlil"
+          "phase_name": "execution"
         },
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "enki"
+          "phase_name": "defense-evasion"
         }
       ],
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/TX0004",
-          "external_id": "TX0004"
+          "url": "https://attack.mitre.org/techniques/T9004",
+          "external_id": "T9004"
         }
       ],
-      "x_mitre_data_sources": [],
+      "x_mitre_is_subtechnique": false,
       "x_mitre_version": "1.0",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
@@ -212,21 +212,21 @@
       "kill_chain_phases": [
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "nanna-suen"
+          "phase_name": "collection"
         },
         {
           "kill_chain_name": "mitre-attack",
-          "phase_name": "nabu"
+          "phase_name": "persistence"
         }
       ],
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "url": "https://attack.mitre.org/techniques/TX0005",
-          "external_id": "TX0005"
+          "url": "https://attack.mitre.org/techniques/T9005",
+          "external_id": "T9005"
         }
       ],
-      "x_mitre_data_sources": [],
+      "x_mitre_is_subtechnique": false,
       "x_mitre_version": "1.0",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
@@ -241,15 +241,15 @@
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "external_id": "TAX0001",
-          "url": "https://attack.mitre.org/tactics/TAX0001"
+          "external_id": "TA9001",
+          "url": "https://attack.mitre.org/tactics/TA9001"
         }
       ],
       "id": "x-mitre-tactic--d932e995-5207-4347-88ec-b52b32762357",
       "modified": "2022-04-01T06:07:08.000Z",
       "name": "Enlil",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "enlil",
+      "x_mitre_shortname": "execution",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -264,15 +264,15 @@
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "external_id": "TAX0002",
-          "url": "https://attack.mitre.org/tactics/TAX0002"
+          "external_id": "TA9002",
+          "url": "https://attack.mitre.org/tactics/TA9002"
         }
       ],
       "id": "x-mitre-tactic--953fd636-2af2-4cad-adc8-5d7903295dba",
       "modified": "2022-04-01T06:07:08.000Z",
       "name": "Enki",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "enki",
+      "x_mitre_shortname": "defense-evasion",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -287,15 +287,15 @@
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "external_id": "TAX0003",
-          "url": "https://attack.mitre.org/tactics/TAX0003"
+          "external_id": "TA9003",
+          "url": "https://attack.mitre.org/tactics/TA9003"
         }
       ],
       "id": "x-mitre-tactic--c1768fcd-abe2-462f-95cc-bfedbc8c64c6",
       "modified": "2022-03-01T06:07:08.000Z",
       "name": "Ianna",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "inanna",
+      "x_mitre_shortname": "discovery",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -310,15 +310,15 @@
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "external_id": "TAX0004",
-          "url": "https://attack.mitre.org/tactics/TAX0004"
+          "external_id": "TA9004",
+          "url": "https://attack.mitre.org/tactics/TA9004"
         }
       ],
       "id": "x-mitre-tactic--60cf8617-223d-47db-b15e-0cdf3c1d6f52",
       "modified": "2022-02-01T06:07:08.000Z",
       "name": "Nabu",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "nabu",
+      "x_mitre_shortname": "persistence",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -333,15 +333,15 @@
       "external_references": [
         {
           "source_name": "mitre-attack",
-          "external_id": "TAX0005",
-          "url": "https://attack.mitre.org/tactics/TAX0005"
+          "external_id": "TA9005",
+          "url": "https://attack.mitre.org/tactics/TA9005"
         }
       ],
       "id": "x-mitre-tactic--0b518521-aae3-4169-9f7a-cdf8455a2d14",
       "modified": "2022-01-01T06:07:08.000Z",
       "name": "Nanna-Suen",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "nanna-suen",
+      "x_mitre_shortname": "collection",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -356,15 +356,15 @@
       "external_references": [
         {
           "source_name": "mitre-mobile-attack",
-          "external_id": "TAX0006",
-          "url": "https://attack.mitre.org/tactics/TAX0006"
+          "external_id": "TA9006",
+          "url": "https://attack.mitre.org/tactics/TA9006"
         }
       ],
       "id": "x-mitre-tactic--f5a8c28b-3002-4d5b-9571-3f68b2b57e29",
       "modified": "2022-09-09T01:02:03.000Z",
       "name": "Nabu",
       "type": "x-mitre-tactic",
-      "x_mitre_shortname": "nabu",
+      "x_mitre_shortname": "persistence",
       "x_mitre_attack_spec_version": "2.1.0",
       "x_mitre_modified_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "x_mitre_version": "1.0",
@@ -390,8 +390,7 @@
       "created": "2020-01-01T00:00:00.000Z",
       "created_by_ref": "identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5",
       "definition_type": "statement",
-      "spec_version": "2.1",
-      "x_mitre_domains": ["ics-attack"]
+      "spec_version": "2.1"
     }
   ]
 }

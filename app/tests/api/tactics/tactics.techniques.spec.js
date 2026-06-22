@@ -30,8 +30,8 @@ describe('Tactics with Techniques API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the imported bundle fixture is ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
@@ -64,8 +64,12 @@ describe('Tactics with Techniques API', function () {
     expect(Array.isArray(tactics)).toBe(true);
     expect(tactics.length).toBe(6);
 
-    tactic1 = tactics.find((t) => t.stix.x_mitre_shortname === 'enlil');
-    tactic2 = tactics.find((t) => t.stix.x_mitre_shortname === 'nabu');
+    tactic1 = tactics.find(
+      (t) => t.stix.id === 'x-mitre-tactic--d932e995-5207-4347-88ec-b52b32762357',
+    );
+    tactic2 = tactics.find(
+      (t) => t.stix.id === 'x-mitre-tactic--60cf8617-223d-47db-b15e-0cdf3c1d6f52',
+    );
   });
 
   it('GET /api/techniques should return the preloaded techniques', async function () {
