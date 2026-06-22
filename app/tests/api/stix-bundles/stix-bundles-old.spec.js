@@ -1,6 +1,7 @@
 const request = require('supertest');
 const { expect } = require('expect');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -629,6 +630,121 @@ const initialObjectData = {
   ],
 };
 
+function normalizeLegacyBundleFixtureForAdmImport(bundle) {
+  const counters = {
+    'attack-pattern': 9000,
+    'course-of-action': 9000,
+    malware: 9000,
+    'intrusion-set': 9000,
+    'x-mitre-data-source': 9000,
+  };
+
+  for (const stixObject of bundle.objects) {
+    if (
+      Array.isArray(stixObject.external_references) &&
+      stixObject.external_references.length === 0 &&
+      stixObject.type !== 'intrusion-set'
+    ) {
+      delete stixObject.external_references;
+    }
+
+    if (stixObject.type !== 'marking-definition' && stixObject.type !== 'note') {
+      stixObject.x_mitre_attack_spec_version = config.app.attackSpecVersion;
+    }
+
+    switch (stixObject.type) {
+      case 'x-mitre-collection':
+        stixObject.x_mitre_version = '1.0';
+        break;
+
+      case 'identity':
+        break;
+
+      case 'attack-pattern':
+        counters[stixObject.type] += 1;
+        stixObject.external_references[0].external_id = `T${counters[stixObject.type]}`;
+        stixObject.kill_chain_phases = stixObject.kill_chain_phases.map((phase) => ({
+          ...phase,
+          kill_chain_name: stixObject.x_mitre_domains.includes(mobileDomain)
+            ? 'mitre-mobile-attack'
+            : stixObject.x_mitre_domains.includes(icsDomain)
+              ? 'mitre-ics-attack'
+              : 'mitre-attack',
+          phase_name: 'execution',
+        }));
+        stixObject.x_mitre_platforms = ['Windows', 'Linux'];
+        delete stixObject.x_mitre_impact_type;
+        break;
+
+      case 'course-of-action':
+        counters[stixObject.type] += 1;
+        stixObject.external_references[0].external_id = `M${counters[stixObject.type]}`;
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        break;
+
+      case 'malware':
+        counters[stixObject.type] += 1;
+        stixObject.external_references[0].external_id = `S${counters[stixObject.type]}`;
+        stixObject.is_family = false;
+        stixObject.x_mitre_aliases = [stixObject.name, ...stixObject.x_mitre_aliases];
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        stixObject.x_mitre_platforms = ['Windows'];
+        break;
+
+      case 'intrusion-set':
+        counters[stixObject.type] += 1;
+        if (
+          !Array.isArray(stixObject.external_references) ||
+          stixObject.external_references.length === 0
+        ) {
+          stixObject.external_references = [
+            { source_name: 'mitre-attack', external_id: `G${counters[stixObject.type]}` },
+          ];
+        }
+        stixObject.aliases = [stixObject.name, ...stixObject.aliases];
+        stixObject.x_mitre_domains = [enterpriseDomain];
+        break;
+
+      case 'campaign':
+        stixObject.aliases = [stixObject.name, ...stixObject.aliases];
+        stixObject.external_references.push(
+          { source_name: 'Article 1', description: 'First seen citation.' },
+          { source_name: 'Article 2', description: 'Last seen citation.' },
+        );
+        stixObject.revoked = false;
+        stixObject.x_mitre_domains = [enterpriseDomain];
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        break;
+
+      case 'relationship':
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        break;
+
+      case 'x-mitre-data-source':
+        counters[stixObject.type] += 1;
+        stixObject.external_references[0].external_id = `DS${counters[stixObject.type]}`;
+        stixObject.description = `${stixObject.name} data source.`;
+        stixObject.x_mitre_collection_layers = ['Host'];
+        stixObject.x_mitre_domains = [enterpriseDomain];
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        stixObject.x_mitre_version = '1.0';
+        break;
+
+      case 'x-mitre-data-component':
+        stixObject.description = `${stixObject.name} data component.`;
+        stixObject.x_mitre_domains = [enterpriseDomain];
+        stixObject.x_mitre_modified_by_ref = mitreIdentityId;
+        stixObject.x_mitre_version = '1.0';
+        break;
+
+      default:
+        break;
+    }
+  }
+}
+
+normalizeLegacyBundleFixtureForAdmImport(initialObjectData);
+
 // function printBundleCount(bundle) {
 //     const count = {
 //         techniques: 0,
@@ -669,6 +785,10 @@ describe('STIX Bundles Basic API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation for the legacy bundle import path
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
