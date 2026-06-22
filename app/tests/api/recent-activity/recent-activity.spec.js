@@ -30,8 +30,8 @@ describe('Recent Activity API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; this suite seeds existing STIX bundle fixtures
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
