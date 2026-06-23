@@ -1,5 +1,7 @@
 'use strict';
 
+const mongoose = require('mongoose');
+
 const ValidationBypassRule = require('../models/validation-bypass-rule-model');
 const { DuplicateIdError, DatabaseError } = require('../exceptions');
 
@@ -50,6 +52,10 @@ class ValidationBypassesRepository {
   }
 
   async retrieveById(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+
     try {
       return await this.model.findById(id).lean().exec();
     } catch (err) {
@@ -57,7 +63,37 @@ class ValidationBypassesRepository {
     }
   }
 
+  async updateById(id, data) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+
+    const updateData = { ...data };
+    delete updateData._id;
+    delete updateData.__v;
+
+    try {
+      return await this.model
+        .findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true })
+        .lean()
+        .exec();
+    } catch (err) {
+      if (err.name === 'MongoServerError' && err.code === 11000) {
+        throw new DuplicateIdError({
+          details:
+            'A validation bypass rule with this fieldPath, errorCode, and stixType already exists.',
+        });
+      } else {
+        throw new DatabaseError(err);
+      }
+    }
+  }
+
   async deleteById(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+
     try {
       return await this.model.findByIdAndDelete(id).exec();
     } catch (err) {

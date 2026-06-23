@@ -171,3 +171,147 @@ paths:
           description: 'The organization namespace has been successfully set.'
         '400':
           description: 'Missing or invalid parameters were provided. The organization namespace was not set.'
+
+  /api/config/validation-bypasses:
+    get:
+      summary: 'Get validation bypass rules'
+      operationId: 'config-get-validation-bypasses'
+      description: |
+        This endpoint gets the validation bypass rules used to suppress or warn on ADM validation errors.
+      tags:
+        - 'Validation Bypasses'
+      parameters:
+        - name: limit
+          in: query
+          description: |
+            The number of validation bypass rules to retrieve.
+            The default (0) will retrieve all rules.
+          schema:
+            type: number
+            default: 0
+        - name: offset
+          in: query
+          description: |
+            The number of validation bypass rules to skip.
+            The default (0) will start with the first rule.
+          schema:
+            type: number
+            default: 0
+        - name: includePagination
+          in: query
+          description: |
+            Whether to include pagination data in the returned value.
+            Wraps returned objects in a larger object.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 'A list of validation bypass rules.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+    post:
+      summary: 'Create a validation bypass rule'
+      operationId: 'config-create-validation-bypass'
+      description: |
+        This endpoint creates a validation bypass rule used to suppress or warn on an ADM validation error.
+      tags:
+        - 'Validation Bypasses'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+      responses:
+        '201':
+          description: 'The validation bypass rule was created.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+        '400':
+          description: 'Missing or invalid parameters were provided. The validation bypass rule was not created.'
+        '409':
+          description: 'A matching validation bypass rule already exists.'
+
+  /api/config/validation-bypasses/{id}:
+    get:
+      summary: 'Get a validation bypass rule'
+      operationId: 'config-get-validation-bypass'
+      description: |
+        This endpoint gets a validation bypass rule by its database id.
+      tags:
+        - 'Validation Bypasses'
+      parameters:
+        - name: id
+          in: path
+          description: 'Database id of the validation bypass rule.'
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'A validation bypass rule.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+        '404':
+          description: 'A validation bypass rule with the requested id was not found.'
+    put:
+      summary: 'Update a validation bypass rule'
+      operationId: 'config-update-validation-bypass'
+      description: |
+        This endpoint updates a validation bypass rule by its database id.
+      tags:
+        - 'Validation Bypasses'
+      parameters:
+        - name: id
+          in: path
+          description: 'Database id of the validation bypass rule.'
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+      responses:
+        '200':
+          description: 'The validation bypass rule was updated.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/validation-bypass-rule'
+        '400':
+          description: 'Missing or invalid parameters were provided. The validation bypass rule was not updated.'
+        '404':
+          description: 'A validation bypass rule with the requested id was not found.'
+        '409':
+          description: 'A matching validation bypass rule already exists.'
+    delete:
+      summary: 'Delete a validation bypass rule'
+      operationId: 'config-delete-validation-bypass'
+      description: |
+        This endpoint deletes a validation bypass rule by its database id.
+      tags:
+        - 'Validation Bypasses'
+      parameters:
+        - name: id
+          in: path
+          description: 'Database id of the validation bypass rule.'
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 'The validation bypass rule was deleted.'
+        '404':
+          description: 'A validation bypass rule with the requested id was not found.'

@@ -73,3 +73,49 @@ components:
         prefix:
           type: string
           example: 'MYORG'
+
+    validation-bypass-rule:
+      type: object
+      required:
+        - fieldPath
+        - errorCode
+        - stixType
+      properties:
+        _id:
+          type: string
+          description: Database id of the validation bypass rule
+        fieldPath:
+          type: array
+          description: Zod issue path to match. Path segments are compared as strings.
+          items:
+            type: string
+          example: ['x_mitre_modified_by_ref']
+        errorCode:
+          type: string
+          description: Zod issue code to match.
+          example: 'invalid_value'
+        stixType:
+          type: string
+          description: STIX type to match, or `all` to match any STIX type.
+          example: 'attack-pattern'
+        suppressError:
+          type: boolean
+          description: Whether matching validation errors should be suppressed.
+          default: true
+        autoCreated:
+          type: boolean
+          description: Whether this rule was created automatically by system configuration.
+          default: false
+        autoCreatedReason:
+          type: string
+          nullable: true
+          description: System reason for an automatically-created rule.
+          example: 'static'
+        triggerEvent:
+          type: string
+          nullable: true
+          description: Event that created this rule, when applicable.
+        warningMessage:
+          type: string
+          nullable: true
+          description: Warning emitted when a matching validation error is bypassed.
