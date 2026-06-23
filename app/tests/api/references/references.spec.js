@@ -45,8 +45,8 @@ describe('References API', function () {
     // Wait until the Reference indexes are created
     await Reference.init();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation for consistency with STIX-object API suites
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app

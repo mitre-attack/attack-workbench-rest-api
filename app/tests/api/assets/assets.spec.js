@@ -24,16 +24,16 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'x-mitre-asset',
     description: 'This is an asset.',
-    x_mitre_sectors: ['sector placeholder 1'],
+    x_mitre_sectors: ['Electric'],
     x_mitre_related_assets: [
       {
         name: 'related asset 1',
-        related_asset_sectors: ['related asset sector placeholder 1'],
+        related_asset_sectors: ['Water and Wastewater'],
         description: 'This is a related asset',
       },
       {
         name: 'related asset 2',
-        related_asset_sectors: ['related asset sector placeholder 2'],
+        related_asset_sectors: ['Manufacturing'],
         description: 'This is another related asset',
       },
     ],
@@ -49,8 +49,8 @@ describe('Assets API', function () {
   let passportCookie;
 
   before(async function () {
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Establish the database connection

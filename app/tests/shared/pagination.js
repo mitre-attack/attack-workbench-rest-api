@@ -2,6 +2,7 @@ const request = require('supertest');
 const { expect } = require('expect');
 const _ = require('lodash');
 
+const config = require('../../config/config');
 const logger = require('../../lib/logger');
 logger.level = 'debug';
 
@@ -19,6 +20,9 @@ function PaginationTests(service, initialObjectAData, options) {
     prefix: options.prefix ?? 'test-object',
     baseUrl: options.baseUrl,
     label: options.label ?? 'TestObjects',
+    // Optional: pin ADM request validation for this suite. Left undefined, the
+    // suite inherits whatever the shared config singleton currently holds.
+    validateWithAdm: options.validateWithAdm,
   };
 
   this.options.stateQuery = options.state ? `&state=${options.state}` : '';
@@ -51,6 +55,13 @@ PaginationTests.prototype.executeTests = function () {
     let passportCookie;
 
     before(async function () {
+      // Pin ADM validation state (when the caller specified one) so the suite
+      // does not depend on whichever spec ran last leaving the shared config
+      // singleton in a particular state.
+      if (self.options.validateWithAdm !== undefined) {
+        config.validateRequests.withAttackDataModel = self.options.validateWithAdm;
+      }
+
       // Establish the database connection
       // Use an in-memory database that we spin up for the test
       await database.initializeConnection();

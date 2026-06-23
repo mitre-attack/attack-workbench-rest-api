@@ -1,5 +1,8 @@
 const relationshipsService = require('../../../services/stix/relationships-service');
 const PaginationTests = require('../../shared/pagination');
+const config = require('../../../config/config');
+
+config.validateRequests.withOpenApi = true;
 
 // modified and created properties will be set before calling REST API
 // stix.id property will be created by REST API
@@ -28,6 +31,17 @@ const options = {
   prefix: 'relationship',
   baseUrl: '/api/relationships',
   label: 'Relationships',
+  validateWithAdm: true,
 };
-const paginationTests = new PaginationTests(relationshipsService, initialObjectData, options);
+const relationshipsPaginationService = {
+  async create(data, options) {
+    delete data.stix.name;
+    return relationshipsService.create(data, options);
+  },
+};
+const paginationTests = new PaginationTests(
+  relationshipsPaginationService,
+  initialObjectData,
+  options,
+);
 paginationTests.executeTests();

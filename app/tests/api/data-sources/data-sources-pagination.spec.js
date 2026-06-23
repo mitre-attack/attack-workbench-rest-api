@@ -23,6 +23,9 @@ const options = {
   prefix: 'x-mitre-data-source',
   baseUrl: '/api/data-sources',
   label: 'Data Sources',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(dataSourcesService, initialObjectData, options);
 paginationTests.executeTests();

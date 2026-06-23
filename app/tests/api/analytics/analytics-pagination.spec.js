@@ -17,7 +17,7 @@ const initialObjectData = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
-    x_mitre_platforms: ['windows'],
+    x_mitre_platforms: ['Windows'],
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_mutable_elements: [
       {
@@ -36,6 +36,9 @@ const options = {
   prefix: 'x-mitre-analytic',
   baseUrl: '/api/analytics',
   label: 'Analytics',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(analyticsService, initialObjectData, options);
 paginationTests.executeTests();

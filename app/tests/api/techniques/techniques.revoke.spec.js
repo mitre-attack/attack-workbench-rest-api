@@ -24,9 +24,9 @@ const initialObjectData = {
     description: 'This technique will be revoked.',
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
-    kill_chain_phases: [{ kill_chain_name: 'kill-chain-name-1', phase_name: 'phase-1' }],
+    kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }],
     x_mitre_is_subtechnique: false,
-    x_mitre_platforms: ['platform-1'],
+    x_mitre_platforms: ['Linux'],
   },
 };
 
@@ -38,7 +38,7 @@ describe('Techniques Revoke API', function () {
     await database.initializeConnection();
     await databaseConfiguration.checkSystemConfiguration();
 
-    config.validateRequests.withAttackDataModel = false;
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     app = await require('../../../index').initializeApp();

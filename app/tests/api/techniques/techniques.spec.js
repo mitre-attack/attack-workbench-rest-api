@@ -24,16 +24,19 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'attack-pattern',
     description: 'This is a technique. Orange.',
-    // external_references: [
+    // external_references and stix.id are populated by the REST API
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
-    kill_chain_phases: [{ kill_chain_name: 'kill-chain-name-1', phase_name: 'phase-1' }],
-    x_mitre_modified_by_ref: 'identity--d6424da5-85a0-496e-ae17-494499271108',
+    // ADM requires a kill_chain_name from the ATT&CK enum. The `impact` tactic is
+    // required for x_mitre_impact_type to be permitted.
+    kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'impact' }],
+    // ADM requires x_mitre_modified_by_ref to be the MITRE ATT&CK identity
+    x_mitre_modified_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     // x_mitre_data_sources: ['data-source-1', 'data-source-2'], // TODO field is deprecated
     x_mitre_detection: 'detection text',
     x_mitre_is_subtechnique: false,
-    x_mitre_impact_type: ['impact-1'],
-    x_mitre_platforms: ['platform-1', 'platform-2'],
+    x_mitre_impact_type: ['Availability'],
+    x_mitre_platforms: ['Linux'],
     x_mitre_network_requirements: true,
   },
 };
@@ -50,8 +53,8 @@ describe('Techniques Basic API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
