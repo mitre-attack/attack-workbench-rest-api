@@ -24,6 +24,8 @@ const {
   SystemConfigurationNotFound,
   OrganizationIdentityNotSetError,
   OrganizationIdentityNotFoundError,
+  ActiveOrganizationIdentityDeleteError,
+  MitreIdentityWriteError,
   AnonymousUserAccountNotSetError,
   AnonymousUserAccountNotFoundError,
   InvalidTypeError,
@@ -98,6 +100,7 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof SelfRevocationError ||
     err instanceof BadRequestError ||
     err instanceof ValidationError ||
+    err instanceof MitreIdentityWriteError ||
     err instanceof InvalidVersionError ||
     err instanceof NoTaggedSnapshotsError ||
     err instanceof InvalidComponentTypeError
@@ -127,7 +130,8 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof AlreadyRevokedError ||
     err instanceof AlreadyReleasedError ||
     err instanceof ReleaseConflictError ||
-    err instanceof ObjectHasValidationIssuesError
+    err instanceof ObjectHasValidationIssuesError ||
+    err instanceof ActiveOrganizationIdentityDeleteError
   ) {
     logger.warn('Conflict: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(409).send(buildErrorResponse(err));

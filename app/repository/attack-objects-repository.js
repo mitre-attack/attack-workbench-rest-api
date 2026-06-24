@@ -160,6 +160,36 @@ class AttackObjectsRepository extends BaseRepository {
     }
   }
 
+  /**
+   * Retrieve latest, active objects whose created_by_ref or x_mitre_modified_by_ref matches
+   * the provided identity ref.
+   * @param {string} identityRef - Identity STIX ID
+   * @returns {Promise<Object[]>} Array of matching latest active objects
+   */
+  async retrieveAllLatestActiveByIdentityRef(identityRef) {
+    try {
+      const aggregation = [
+        { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+        { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$document' } },
+        {
+          $match: {
+            'stix.revoked': { $in: [null, false] },
+            'stix.x_mitre_deprecated': { $in: [null, false] },
+            $or: [
+              { 'stix.created_by_ref': identityRef },
+              { 'stix.x_mitre_modified_by_ref': identityRef },
+            ],
+          },
+        },
+        { $project: { _id: 0, __v: 0, __t: 0 } },
+      ];
+      return await this.model.aggregate(aggregation).exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async findByIdAndDelete(documentId) {
     try {
       return await this.model.findByIdAndDelete(documentId).exec();

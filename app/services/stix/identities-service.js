@@ -1,13 +1,50 @@
 'use strict';
 
 const uuid = require('uuid');
+const { xMitreIdentity } = require('@mitre-attack/attack-data-model');
 const config = require('../../config/config');
+const attackObjectsRepository = require('../../repository/attack-objects-repository');
 const identitiesRepository = require('../../repository/identities-repository');
+const systemConfigurationsRepository = require('../../repository/system-configurations-repository');
 const { BaseService } = require('../meta-classes');
-const { InvalidTypeError } = require('../../exceptions');
+const {
+  ActiveOrganizationIdentityDeleteError,
+  InvalidTypeError,
+  MitreIdentityWriteError,
+} = require('../../exceptions');
 const { Identity: IdentityType } = require('../../lib/types');
 
 class IdentitiesService extends BaseService {
+  async assertMitreIdentityWritable(stixId, options = {}) {
+    if (options.import || stixId !== xMitreIdentity) {
+      return;
+    }
+
+    const systemConfig = await systemConfigurationsRepository.retrieveOne({ lean: true });
+    const mitreIdentityWritesEnabled =
+      systemConfig?.mitre_identity_writes_enabled ?? config.app.allowMitreIdentityWrites;
+
+    if (mitreIdentityWritesEnabled) {
+      return;
+    }
+
+    throw new MitreIdentityWriteError(stixId);
+  }
+
+  async assertIdentityCanBeDeleted(stixId) {
+    const systemConfig = await systemConfigurationsRepository.retrieveOne({ lean: true });
+    if (systemConfig?.organization_identity_ref !== stixId) {
+      return;
+    }
+
+    const referencedObjects =
+      await attackObjectsRepository.retrieveAllLatestActiveByIdentityRef(stixId);
+    throw new ActiveOrganizationIdentityDeleteError(stixId, {
+      referencedObjectCount: referencedObjects.length,
+      referencedObjectIds: referencedObjects.map((object) => object.stix.id),
+    });
+  }
+
   /**
    * @public
    * CRUD Operation: Create
@@ -24,6 +61,8 @@ class IdentitiesService extends BaseService {
     }
 
     options = options || {};
+    await this.assertMitreIdentityWritable(data.stix.id, options);
+
     if (!options.import) {
       // Set the ATT&CK Spec Version
       data.stix.x_mitre_attack_spec_version =
@@ -43,6 +82,23 @@ class IdentitiesService extends BaseService {
 
     // Save the document in the database
     return await this.repository.save(data);
+  }
+
+  async updateFull(stixId, stixModified, data, options) {
+    options = options || {};
+    await this.assertMitreIdentityWritable(stixId, options);
+
+    return await super.updateFull(stixId, stixModified, data, options);
+  }
+
+  async deleteVersionById(stixId, stixModified) {
+    await this.assertIdentityCanBeDeleted(stixId);
+    return await super.deleteVersionById(stixId, stixModified);
+  }
+
+  async deleteById(stixId) {
+    await this.assertIdentityCanBeDeleted(stixId);
+    return await super.deleteById(stixId);
   }
 }
 

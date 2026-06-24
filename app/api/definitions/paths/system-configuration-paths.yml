@@ -172,6 +172,40 @@ paths:
         '400':
           description: 'Missing or invalid parameters were provided. The organization namespace was not set.'
 
+  /api/config/mitre-identity-writes:
+    get:
+      summary: 'Get the MITRE identity write protection setting'
+      operationId: 'config-get-mitre-identity-writes'
+      description: |
+        This endpoint gets whether create and update requests for the protected MITRE identity are enabled.
+      tags:
+        - 'System Configuration'
+      responses:
+        '200':
+          description: 'The MITRE identity write protection setting.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/mitre-identity-writes'
+    post:
+      summary: 'Set the MITRE identity write protection setting'
+      operationId: 'config-set-mitre-identity-writes'
+      description: |
+        This endpoint sets whether create and update requests for the protected MITRE identity are enabled.
+      tags:
+        - 'System Configuration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/mitre-identity-writes'
+      responses:
+        '204':
+          description: 'The MITRE identity write protection setting has been successfully set.'
+        '400':
+          description: 'Missing or invalid parameters were provided. The MITRE identity write protection setting was not set.'
+
   /api/config/validation-bypasses:
     get:
       summary: 'Get validation bypass rules'

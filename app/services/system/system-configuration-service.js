@@ -144,6 +144,7 @@ class SystemConfigurationService extends BaseService {
       // First-time setup: create initial config document
       const newConfig = this.repository.createNewDocument({
         organization_identity_ref: stixId,
+        mitre_identity_writes_enabled: config.app.allowMitreIdentityWrites,
       });
       await this.repository.constructor.saveDocument(newConfig);
 
@@ -296,6 +297,40 @@ class SystemConfigurationService extends BaseService {
   /**
    * @public
    * CRUD Operation: Read
+   * Returns whether protected MITRE identity writes are enabled.
+   */
+  async retrieveMitreIdentityWrites() {
+    const systemConfig = await this.repository.retrieveOne({ lean: true });
+
+    if (!systemConfig) {
+      throw new SystemConfigurationNotFound();
+    }
+
+    return {
+      enabled: systemConfig.mitre_identity_writes_enabled ?? config.app.allowMitreIdentityWrites,
+    };
+  }
+
+  /**
+   * @public
+   * CRUD Operation: Update
+   * Sets whether protected MITRE identity writes are enabled.
+   */
+  async setMitreIdentityWrites(enabled) {
+    const currentConfig = await this.repository.retrieveOne({ lean: true });
+
+    if (!currentConfig) {
+      throw new SystemConfigurationNotFound();
+    }
+
+    await this._createNewConfigVersion(currentConfig, {
+      mitre_identity_writes_enabled: enabled,
+    });
+  }
+
+  /**
+   * @public
+   * CRUD Operation: Read
    * Returns all distinct organization identity refs from all config documents.
    * This represents the full provenance chain of organization identities.
    * @returns {Promise<string[]>}
@@ -319,6 +354,8 @@ class SystemConfigurationService extends BaseService {
       anonymous_user_account_id: currentConfig.anonymous_user_account_id,
       default_marking_definitions: currentConfig.default_marking_definitions,
       organization_namespace: currentConfig.organization_namespace,
+      mitre_identity_writes_enabled:
+        currentConfig.mitre_identity_writes_enabled ?? config.app.allowMitreIdentityWrites,
       ...overrides,
     };
     const newConfig = this.repository.createNewDocument(configData);

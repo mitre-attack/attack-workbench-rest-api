@@ -11,6 +11,7 @@ const systemConfigurationDefinition = {
     range_start: { type: Number, default: null },
     prefix: { type: String, default: null },
   },
+  mitre_identity_writes_enabled: { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
 };
 

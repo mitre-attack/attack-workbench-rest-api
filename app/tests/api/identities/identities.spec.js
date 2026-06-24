@@ -1,8 +1,10 @@
 const request = require('supertest');
 const { expect } = require('expect');
+const { xMitreIdentity } = require('@mitre-attack/attack-data-model');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
+const identitiesService = require('../../../services/stix/identities-service');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
@@ -30,6 +32,53 @@ const initialObjectData = {
   },
 };
 
+function createMitigationData() {
+  const timestamp = new Date().toISOString();
+  return {
+    workspace: {
+      workflow: {
+        state: 'work-in-progress',
+      },
+    },
+    stix: {
+      created: timestamp,
+      modified: timestamp,
+      name: 'course-of-action-1',
+      spec_version: '2.1',
+      type: 'course-of-action',
+      description: 'This is a mitigation.',
+      external_references: [{ source_name: 'source-1', external_id: 's1' }],
+      object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+      created_by_ref: xMitreIdentity,
+      labels: ['label1', 'label2'],
+      x_mitre_version: '1.1',
+    },
+  };
+}
+
+function createMitreIdentityData() {
+  const timestamp = new Date().toISOString();
+  return {
+    workspace: {
+      workflow: {
+        state: 'work-in-progress',
+      },
+    },
+    stix: {
+      id: xMitreIdentity,
+      created: timestamp,
+      modified: timestamp,
+      name: 'The MITRE Corporation',
+      identity_class: 'organization',
+      spec_version: '2.1',
+      type: 'identity',
+      description: 'The MITRE Corporation identity.',
+      external_references: [{ source_name: 'source-1', external_id: 's1' }],
+      object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+    },
+  };
+}
+
 describe('Identity API', function () {
   let app;
   let passportCookie;
@@ -45,6 +94,7 @@ describe('Identity API', function () {
     // Enable ADM validation; the request payloads in this spec are ADM-compliant
     config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
+    config.app.allowMitreIdentityWrites = false;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -66,6 +116,91 @@ describe('Identity API', function () {
     expect(identities).toBeDefined();
     expect(Array.isArray(identities)).toBe(true);
     expect(identities.length).toBe(1);
+  });
+
+  it('DELETE /api/identities/:id rejects active organization identity deletion when active objects reference it', async function () {
+    const orgIdentityRes = await request(app)
+      .get('/api/config/organization-identity')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    await request(app)
+      .post('/api/mitigations')
+      .send(createMitigationData())
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    const res = await request(app)
+      .delete('/api/identities/' + orgIdentityRes.body.stix.id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(409)
+      .expect('Content-Type', /json/);
+
+    expect(res.body.message).toContain('Cannot delete active organization identity');
+    expect(res.body.referencedObjectCount).toBeGreaterThan(0);
+  });
+
+  it('POST /api/identities rejects protected MITRE identity writes', async function () {
+    const res = await request(app)
+      .post('/api/identities')
+      .send(createMitreIdentityData())
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(400);
+
+    expect(res.text).toContain('Cannot create or update protected MITRE identity');
+  });
+
+  it('POST /api/identities allows protected MITRE identity writes when system configuration enables them', async function () {
+    await request(app)
+      .post('/api/config/mitre-identity-writes')
+      .send({ enabled: true })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+
+    const res = await request(app)
+      .post('/api/identities')
+      .send(createMitreIdentityData())
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    expect(res.body.stix.id).toBe(xMitreIdentity);
+
+    await identitiesService.deleteById(xMitreIdentity);
+
+    await request(app)
+      .post('/api/config/mitre-identity-writes')
+      .send({ enabled: false })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('PUT /api/identities rejects protected MITRE identity updates', async function () {
+    const mitreIdentity = await identitiesService.create(createMitreIdentityData(), {
+      import: true,
+    });
+    const modified = new Date(mitreIdentity.stix.modified).toISOString();
+    const body = mitreIdentity.toObject();
+    body.stix.description = 'Updated MITRE identity description.';
+    body.stix.modified = new Date(Date.now() + 1000).toISOString();
+
+    const res = await request(app)
+      .put('/api/identities/' + xMitreIdentity + '/modified/' + modified)
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(400);
+
+    expect(res.text).toContain('Cannot create or update protected MITRE identity');
+    await identitiesService.deleteById(xMitreIdentity);
   });
 
   it('POST /api/identities does not create an empty identity', async function () {

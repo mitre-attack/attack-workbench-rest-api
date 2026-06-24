@@ -173,6 +173,12 @@ function loadConfig() {
       attackSpecVersion: {
         default: packageJson.attackSpecVersion,
       },
+      allowMitreIdentityWrites: {
+        doc: 'Allow create and update requests for the protected MITRE Corporation identity object',
+        format: Boolean,
+        default: false,
+        env: 'WB_REST_ALLOW_MITRE_IDENTITY_WRITES',
+      },
     },
     database: {
       url: {

@@ -68,4 +68,17 @@ router
     systemConfigurationController.setOrganizationNamespace,
   );
 
+router
+  .route('/config/mitre-identity-writes')
+  .get(
+    authn.authenticate,
+    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
+    systemConfigurationController.retrieveMitreIdentityWrites,
+  )
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.admin),
+    systemConfigurationController.setMitreIdentityWrites,
+  );
+
 module.exports = router;
