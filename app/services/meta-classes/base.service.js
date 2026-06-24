@@ -81,6 +81,18 @@ class BaseService extends ServiceWithHooks {
     }
   }
 
+  /**
+   * Whether create() should stamp created_by_ref and x_mitre_modified_by_ref
+   * with the active organization identity.
+   *
+   * Most ATT&CK objects are attributed to an organization identity. Identity
+   * objects themselves opt out so first-time setup can create the placeholder
+   * organization identity before a system configuration exists.
+   */
+  shouldSetOrganizationIdentityRefs() {
+    return true;
+  }
+
   async setDefaultMarkingDefinitionsForObject(attackObject) {
     const systemConfig = await systemConfigurationRepository.retrieveOne({ lean: true });
     if (!systemConfig) return;
@@ -604,7 +616,9 @@ class BaseService extends ServiceWithHooks {
     data.stix.x_mitre_attack_spec_version = config.app.attackSpecVersion;
     // TODO: data.stix.modified = new Date().toISOString() (when server controls timestamps)
 
-    const organizationIdentityRef = await this.retrieveOrganizationIdentityRef();
+    const organizationIdentityRef = this.shouldSetOrganizationIdentityRefs()
+      ? await this.retrieveOrganizationIdentityRef()
+      : null;
 
     // Check for an existing object (may differ from existingVersion if stix.id was just generated)
     let existingObject;
@@ -615,7 +629,9 @@ class BaseService extends ServiceWithHooks {
     if (existingObject) {
       // New version of an existing object — carry forward revoked status, set modified_by
       data.stix.revoked = existingObject.stix.revoked ?? false;
-      data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+      if (organizationIdentityRef) {
+        data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+      }
     } else {
       // Brand-new object — set ID, created_by, modified_by, revoked
       if (!data.stix.id) {
@@ -625,8 +641,10 @@ class BaseService extends ServiceWithHooks {
         data.stix.created = new Date().toISOString();
       }
       data.stix.revoked = false;
-      data.stix.created_by_ref = organizationIdentityRef;
-      data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+      if (organizationIdentityRef) {
+        data.stix.created_by_ref = organizationIdentityRef;
+        data.stix.x_mitre_modified_by_ref = organizationIdentityRef;
+      }
     }
 
     // Set modified timestamp if not set by client — set for both new and existing objects
@@ -958,12 +976,15 @@ class BaseService extends ServiceWithHooks {
       throw new MissingParameterError('modified');
     }
 
+    await this.beforeDeleteVersionById(stixId, stixModified);
+
     const document = await this.repository.findOneAndDelete(stixId, stixModified);
 
     if (!document) {
       //Note: document is null if not found
       return null;
     }
+    await this.afterDeleteVersionById(document);
     return document;
   }
 
@@ -1248,7 +1269,12 @@ class BaseService extends ServiceWithHooks {
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }
-    return await this.repository.deleteMany(stixId);
+    await this.beforeDeleteById(stixId);
+    const result = await this.repository.deleteMany(stixId);
+    if (result.deletedCount > 0) {
+      await this.afterDeleteById(stixId, result);
+    }
+    return result;
   }
 }
 

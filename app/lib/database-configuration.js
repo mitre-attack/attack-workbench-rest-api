@@ -18,6 +18,8 @@ const {
   AnonymousUserAccountNotSetError,
 } = require('../exceptions');
 
+const TLP_WHITE_MARKING_DEFINITION = 'marking-definition--613f2e26-407d-48c7-9eca-b8e91df99dc9';
+
 // Ensure event listeners are registered before checkSystemConfiguration() emits events.
 // ValidationBypassesService registers its listeners at module load time, so requiring it
 // here guarantees they are in place before the SYSTEM_CONFIGURATION_IDENTITY_CHANGED event fires.
@@ -41,6 +43,7 @@ async function createPlaceholderOrganizationIdentity() {
       type: 'identity',
       description:
         'This is a placeholder organization identity. Please edit it or replace it with another identity.',
+      object_marking_refs: [TLP_WHITE_MARKING_DEFINITION],
     },
   };
 

@@ -79,6 +79,10 @@ function createMitreIdentityData() {
   };
 }
 
+async function deleteMitreIdentityForTest() {
+  await identitiesService.repository.deleteMany(xMitreIdentity);
+}
+
 describe('Identity API', function () {
   let app;
   let passportCookie;
@@ -152,7 +156,7 @@ describe('Identity API', function () {
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
-    expect(res.text).toContain('Cannot create or update protected MITRE identity');
+    expect(res.text).toContain('Cannot create, update, or delete protected MITRE identity');
   });
 
   it('POST /api/identities allows protected MITRE identity writes when system configuration enables them', async function () {
@@ -188,7 +192,8 @@ describe('Identity API', function () {
       import: true,
     });
     const modified = new Date(mitreIdentity.stix.modified).toISOString();
-    const body = mitreIdentity.toObject();
+    const body = JSON.parse(JSON.stringify(mitreIdentity));
+    delete body.warnings;
     body.stix.description = 'Updated MITRE identity description.';
     body.stix.modified = new Date(Date.now() + 1000).toISOString();
 
@@ -199,8 +204,37 @@ describe('Identity API', function () {
       .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
-    expect(res.text).toContain('Cannot create or update protected MITRE identity');
-    await identitiesService.deleteById(xMitreIdentity);
+    expect(res.text).toContain('Cannot create, update, or delete protected MITRE identity');
+    await deleteMitreIdentityForTest();
+  });
+
+  it('DELETE /api/identities/:id rejects protected MITRE identity deletes', async function () {
+    await identitiesService.create(createMitreIdentityData(), {
+      import: true,
+    });
+
+    const res = await request(app)
+      .delete('/api/identities/' + xMitreIdentity)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(400);
+
+    expect(res.text).toContain('Cannot create, update, or delete protected MITRE identity');
+    await deleteMitreIdentityForTest();
+  });
+
+  it('DELETE /api/identities/:id/modified/:modified rejects protected MITRE identity version deletes', async function () {
+    const mitreIdentity = await identitiesService.create(createMitreIdentityData(), {
+      import: true,
+    });
+    const modified = new Date(mitreIdentity.stix.modified).toISOString();
+
+    const res = await request(app)
+      .delete('/api/identities/' + xMitreIdentity + '/modified/' + modified)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(400);
+
+    expect(res.text).toContain('Cannot create, update, or delete protected MITRE identity');
+    await deleteMitreIdentityForTest();
   });
 
   it('POST /api/identities does not create an empty identity', async function () {

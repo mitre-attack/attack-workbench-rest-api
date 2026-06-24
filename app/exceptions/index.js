@@ -213,7 +213,7 @@ class ActiveOrganizationIdentityDeleteError extends CustomError {
 class MitreIdentityWriteError extends CustomError {
   constructor(identityRef, options) {
     super(
-      `Cannot create or update protected MITRE identity ${identityRef}. Enable MITRE identity writes to modify this identity.`,
+      `Cannot create, update, or delete protected MITRE identity ${identityRef}. Enable MITRE identity writes to modify this identity.`,
       options,
     );
   }
