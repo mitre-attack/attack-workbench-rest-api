@@ -24,7 +24,7 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'x-mitre-tactic',
     description: 'This is a tactic. yellow.',
-    external_references: [{ source_name: 'source-1', external_id: 's1' }],
+    external_references: [{ source_name: 'mitre-attack', external_id: 'TA9001' }],
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
   },
 };
@@ -41,8 +41,8 @@ describe('Tactics API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app

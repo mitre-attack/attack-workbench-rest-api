@@ -1,5 +1,3 @@
-const fs = require('fs').promises;
-
 const request = require('supertest');
 const { expect } = require('expect');
 const _ = require('lodash');
@@ -17,13 +15,26 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 const userAccountsService = require('../../../services/system/user-accounts-service');
 const groupsService = require('../../../services/stix/groups-service');
 
+// Base group used to derive all of the seeded query fixtures. Each created group
+// deep-clones this and overrides only the fields a given test cares about.
+const baseGroup = {
+  workspace: {
+    workflow: {},
+  },
+  stix: {
+    spec_version: '2.1',
+    type: 'intrusion-set',
+    description: 'This is a group.',
+    external_references: [],
+    object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+    created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
+    x_mitre_version: '1.0',
+    x_mitre_domains: ['enterprise-attack'],
+  },
+};
+
 function asyncWait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function readJson(path) {
-  const data = await fs.readFile(require.resolve(path));
-  return JSON.parse(data);
 }
 
 async function configureAndLoadGroups(baseGroup, userAccountId1, userAccountId2) {
@@ -144,8 +155,8 @@ describe('Groups API Queries', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
@@ -157,7 +168,6 @@ describe('Groups API Queries', function () {
     userAccount1 = await userAccountsService.create(userAccountData1);
     userAccount2 = await userAccountsService.create(userAccountData2);
 
-    const baseGroup = await readJson('./groups.query.json');
     await configureAndLoadGroups(baseGroup, userAccount1.id, userAccount2.id);
   });
 

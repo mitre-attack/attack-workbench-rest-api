@@ -31,7 +31,7 @@ const initialObjectData = {
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.1',
     x_mitre_aliases: ['software-1'],
-    x_mitre_platforms: ['platform-1'],
+    x_mitre_platforms: ['Android'],
     x_mitre_contributors: ['contributor-1', 'contributor-2'],
     x_mitre_domains: ['mobile-attack'],
   },
@@ -61,8 +61,8 @@ describe('Software API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app

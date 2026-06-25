@@ -30,8 +30,8 @@ const initialPostContentForDetectionStrategy = {
     x_mitre_version: '1.0',
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_analytic_refs: [
-      'x-mitre-analytic--12345678-1234-1234-1234-123456789000', // must match!
-      'x-mitre-analytic--12345678-1234-1234-1234-123456789012', // must match!
+      'x-mitre-analytic--12345678-1234-4234-8234-123456789000', // must match!
+      'x-mitre-analytic--12345678-1234-4234-8234-123456789012', // must match!
     ],
   },
 };
@@ -43,7 +43,7 @@ const initialPostContentForAnalytic1 = {
     },
   },
   stix: {
-    id: 'x-mitre-analytic--12345678-1234-1234-1234-123456789000', // must match the analytic's embedded ref!
+    id: 'x-mitre-analytic--12345678-1234-4234-8234-123456789000', // must match the analytic's embedded ref!
     name: 'analytic-1',
     spec_version: '2.1',
     type: 'x-mitre-analytic',
@@ -52,7 +52,7 @@ const initialPostContentForAnalytic1 = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
-    x_mitre_platforms: ['windows'],
+    x_mitre_platforms: ['Windows'],
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_mutable_elements: [
       {
@@ -74,7 +74,7 @@ const initialPostContentForAnalytic2 = {
     },
   },
   stix: {
-    id: 'x-mitre-analytic--12345678-1234-1234-1234-123456789012', // must match the analytic's embedded ref!
+    id: 'x-mitre-analytic--12345678-1234-4234-8234-123456789012', // must match the analytic's embedded ref!
     name: 'analytic-2',
     spec_version: '2.1',
     type: 'x-mitre-analytic',
@@ -83,7 +83,7 @@ const initialPostContentForAnalytic2 = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
-    x_mitre_platforms: ['windows'],
+    x_mitre_platforms: ['Windows'],
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_mutable_elements: [
       {
@@ -110,8 +110,8 @@ describe('Detection Strategies API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app

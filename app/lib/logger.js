@@ -12,17 +12,21 @@ const logLevels = {
   debug: 5,
 };
 
+// Shared formats applied in every mode. `splat()` enables printf-style
+// interpolation (e.g. logger.warn('Bad request: %s', body)); without it winston
+// leaves the `%s` token uninterpolated and drops the extra argument.
+const baseFormats = [
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.splat(),
+];
+
 // Use detailed format for debug/verbose levels, cleaner one-liner format otherwise
 const consoleFormat =
   config.logging.logLevel === 'debug' || config.logging.logLevel === 'verbose'
-    ? winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.errors({ stack: true }),
-        winston.format.prettyPrint(),
-      )
+    ? winston.format.combine(...baseFormats, winston.format.prettyPrint())
     : winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.errors({ stack: true }),
+        ...baseFormats,
         winston.format.printf(
           (info) => `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`,
         ),

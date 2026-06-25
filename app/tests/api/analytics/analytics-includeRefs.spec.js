@@ -25,11 +25,11 @@ const analyticData = {
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
     created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.0',
-    x_mitre_platforms: ['windows'],
+    x_mitre_platforms: ['Windows'],
     x_mitre_domains: ['enterprise-attack'],
     x_mitre_log_source_references: [
       {
-        x_mitre_data_component_ref: 'x-mitre-data-component--test-data-component-1',
+        x_mitre_data_component_ref: 'x-mitre-data-component--3d6c9f1b-7f8a-4f2e-9b1a-2c3d4e5f6a7b',
         name: 'perm-1',
         channel: 'perm-1',
       },
@@ -65,7 +65,7 @@ const dataComponentData = {
     },
   },
   stix: {
-    id: 'x-mitre-data-component--test-data-component-1',
+    id: 'x-mitre-data-component--3d6c9f1b-7f8a-4f2e-9b1a-2c3d4e5f6a7b',
     name: 'test-data-component',
     spec_version: '2.1',
     type: 'x-mitre-data-component',
@@ -89,8 +89,8 @@ describe('Analytics API - includeRefs Parameter', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
@@ -115,7 +115,9 @@ describe('Analytics API - includeRefs Parameter', function () {
 
     createdDataComponent = res.body;
     expect(createdDataComponent).toBeDefined();
-    expect(createdDataComponent.stix.id).toBe('x-mitre-data-component--test-data-component-1');
+    expect(createdDataComponent.stix.id).toBe(
+      'x-mitre-data-component--3d6c9f1b-7f8a-4f2e-9b1a-2c3d4e5f6a7b',
+    );
   });
 
   it('Setup: Create analytic for testing', async function () {
@@ -318,7 +320,9 @@ describe('Analytics API - includeRefs Parameter', function () {
         stix: {
           ...analyticData.stix,
           name: 'analytic-without-refs',
-          x_mitre_log_source_references: [],
+          // Omit log source references entirely; the ADM schema requires the
+          // array to be non-empty when present.
+          x_mitre_log_source_references: undefined,
           created: new Date().toISOString(),
           modified: new Date().toISOString(),
         },
@@ -359,7 +363,9 @@ describe('Analytics API - includeRefs Parameter', function () {
           name: 'analytic-with-bad-ref',
           x_mitre_log_source_references: [
             {
-              x_mitre_data_component_ref: 'x-mitre-data-component--non-existent',
+              // Valid STIX id format, but no such data component exists -> 404 in beforeCreate
+              x_mitre_data_component_ref:
+                'x-mitre-data-component--ffffffff-ffff-4fff-8fff-ffffffffffff',
               name: 'perm-1',
               channel: 'perm-1',
             },
@@ -384,7 +390,7 @@ describe('Analytics API - includeRefs Parameter', function () {
         ...dataComponentData,
         stix: {
           ...dataComponentData.stix,
-          id: 'x-mitre-data-component--no-ext-refs',
+          id: 'x-mitre-data-component--a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
           name: 'data-component-no-ext-refs',
           external_references: [],
           created: new Date().toISOString(),
@@ -406,7 +412,8 @@ describe('Analytics API - includeRefs Parameter', function () {
           name: 'analytic-with-no-ext-ref-data-component',
           x_mitre_log_source_references: [
             {
-              x_mitre_data_component_ref: 'x-mitre-data-component--no-ext-refs',
+              x_mitre_data_component_ref:
+                'x-mitre-data-component--a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
               name: 'perm-1',
               channel: 'perm-1',
             },
@@ -435,7 +442,8 @@ describe('Analytics API - includeRefs Parameter', function () {
       const analytic = analytics[0];
       const dataComponentRef = analytic.workspace.embedded_relationships.find(
         (rel) =>
-          rel.stix_id === 'x-mitre-data-component--no-ext-refs' && rel.direction === 'outbound',
+          rel.stix_id === 'x-mitre-data-component--a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d' &&
+          rel.direction === 'outbound',
       );
       expect(dataComponentRef).toBeDefined();
       // Even without external_references, the system assigns an attack_id

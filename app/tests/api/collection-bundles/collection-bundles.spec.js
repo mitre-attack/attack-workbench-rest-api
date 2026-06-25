@@ -430,6 +430,108 @@ const collectionData6 = {
   },
 };
 
+const attackIdsByObjectId = new Map([
+  ['attack-pattern--2204c371-6100-4ae0-82f3-25c07c29772a', 'T9001'],
+  ['attack-pattern--82f04b1e-5371-4a6f-be06-411f0f43b483', 'T9002'],
+  ['attack-pattern--14fbfb6a-c4d9-4c3b-a7ef-f8df23e3b22b', 'T9003'],
+  ['attack-pattern--fb4f094c-ad39-4dba-b459-5e314f6d6c8d', 'T9004'],
+  ['attack-pattern--44fc382e-0b71-4f5d-9110-fb2e35452d98', 'T9005'],
+  ['course-of-action--25dc1ce8-eb55-4333-ae30-a7cb4f5894a1', 'M9001'],
+  ['course-of-action--e944670c-d03a-4e93-a21c-b3d4c53ec4c9', 'M9002'],
+  ['malware--04227b24-7817-4de1-9050-b7b1b57f5866', 'S9001'],
+  ['intrusion-set--d69e568e-9ac8-4c08-b32c-d93b43ba9172', 'G9001'],
+]);
+
+function setAttackExternalReference(stixObject, sourceName, externalId, urlSegment) {
+  const existingReferences = Array.isArray(stixObject.external_references)
+    ? stixObject.external_references.slice(1)
+    : [];
+
+  stixObject.external_references = [
+    {
+      source_name: sourceName,
+      external_id: externalId,
+      url: `https://attack.mitre.org/${urlSegment}/${externalId}`,
+    },
+    ...existingReferences,
+  ];
+}
+
+function normalizeBundleObjectForAdm(stixObject) {
+  if (stixObject.type === 'x-mitre-collection') {
+    stixObject.x_mitre_version = stixObject.x_mitre_version || '1.0';
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    return;
+  }
+
+  if (stixObject.type === 'attack-pattern') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'techniques');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    stixObject.kill_chain_phases = [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }];
+    stixObject.x_mitre_data_sources = ['Process: Process Creation'];
+    stixObject.x_mitre_platforms = ['Linux'];
+    delete stixObject.x_mitre_impact_type;
+    return;
+  }
+
+  if (stixObject.type === 'course-of-action') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'mitigations');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    return;
+  }
+
+  if (stixObject.type === 'malware') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'software');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['mobile-attack'];
+    stixObject.x_mitre_platforms = ['Android'];
+    stixObject.is_family = false;
+    return;
+  }
+
+  if (stixObject.type === 'intrusion-set') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'groups');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    stixObject.aliases = [
+      stixObject.name,
+      ...(stixObject.aliases || []).filter((alias) => alias !== stixObject.name),
+    ];
+  }
+}
+
+function normalizeBundleForAdm(bundle) {
+  for (const stixObject of bundle.objects) {
+    normalizeBundleObjectForAdm(stixObject);
+  }
+}
+
+normalizeBundleForAdm(collectionBundleData);
+normalizeBundleForAdm(collectionBundleData2);
+normalizeBundleForAdm(collectionBundleData4);
+normalizeBundleForAdm(collectionBundleData5);
+collectionData6.stix.x_mitre_version = '1.0';
+collectionData6.stix.x_mitre_attack_spec_version = currentAttackSpecVersion;
+
 describe('Collection Bundles Basic API', function () {
   let app;
   let passportCookie;
@@ -442,8 +544,8 @@ describe('Collection Bundles Basic API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
-    // Disable ADM validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; reusable valid fixture objects are normalized for ADM below
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
@@ -572,7 +674,7 @@ describe('Collection Bundles Basic API', function () {
     collection1 = response.body;
     expect(collection1).toBeDefined();
     expect(collection1.workspace.import_categories.additions.length).toBe(8);
-    expect(collection1.workspace.import_categories.errors.length).toBe(4);
+    expect(collection1.workspace.import_categories.errors.length).toBe(5);
   });
 
   it('POST /api/collection-bundles does not show a successful preview with a duplicate collection bundle', async function () {
@@ -625,7 +727,7 @@ describe('Collection Bundles Basic API', function () {
     expect(collection2).toBeDefined();
     expect(collection2.workspace.import_categories.changes.length).toBe(1);
     expect(collection2.workspace.import_categories.duplicates.length).toBe(6);
-    expect(collection2.workspace.import_categories.errors.length).toBe(4);
+    expect(collection2.workspace.import_categories.errors.length).toBe(5);
   });
 
   it('GET /api/references returns the malware added reference', async function () {
@@ -823,6 +925,10 @@ describe('Collection Bundles Streaming API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; reusable valid fixture objects are normalized for ADM below
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();

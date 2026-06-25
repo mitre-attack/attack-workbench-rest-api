@@ -23,6 +23,9 @@ const options = {
   prefix: 'intrustion-set',
   baseUrl: '/api/groups',
   label: 'Groups',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(groupsService, initialObjectData, options);
 paginationTests.executeTests();

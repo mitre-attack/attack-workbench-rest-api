@@ -30,6 +30,9 @@ const options = {
   prefix: 'x-mitre-detection-strategy',
   baseUrl: '/api/detection-strategies',
   label: 'Detection Strategies',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(detectionStrategiesService, initialObjectData, options);
 paginationTests.executeTests();

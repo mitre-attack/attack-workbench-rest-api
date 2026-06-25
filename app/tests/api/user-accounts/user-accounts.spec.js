@@ -38,8 +38,8 @@ describe('User Accounts API', function () {
     await UserAccount.init();
     await Team.init();
 
-    // Disable validation for tests
-    config.validateRequests.withAttackDataModel = false;
+    // Enable ADM validation; this non-STIX payload spec should not inherit a disabled flag
+    config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
