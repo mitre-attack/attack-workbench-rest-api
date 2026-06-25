@@ -1037,9 +1037,10 @@ class BaseService extends ServiceWithHooks {
         details: `Object B with stixId ${data.revoking.stixId} and modified ${data.revoking.modified} not found`,
       });
     }
-    if (objectB.stix.type !== this.type) {
+    const expectedRevokingType = this.type === 'software' ? objectA.stix.type : this.type;
+    if (objectB.stix.type !== expectedRevokingType) {
       throw new BadRequestError({
-        details: `Revoking object must be of the same type (${this.type}), got ${objectB.stix.type}`,
+        details: `Revoking object must be of the same type (${expectedRevokingType}), got ${objectB.stix.type}`,
       });
     }
 
