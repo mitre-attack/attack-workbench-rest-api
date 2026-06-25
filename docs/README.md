@@ -26,6 +26,6 @@ Interactive API documentation is available when running the application in devel
 
 ## Additional Resources
 
-- [GitHub Repository](https://github.com/center-for-threat-informed-defense/attack-workbench-rest-api)
-- [Frontend Repository](https://github.com/center-for-threat-informed-defense/attack-workbench-frontend)
-- [Issue Tracker](https://github.com/center-for-threat-informed-defense/attack-workbench-rest-api/issues)
+- [GitHub Repository](https://github.com/mitre-attack/attack-workbench-rest-api)
+- [Frontend Repository](https://github.com/mitre-attack/attack-workbench-frontend)
+- [Issue Tracker](https://github.com/mitre-attack/attack-workbench-rest-api/issues)

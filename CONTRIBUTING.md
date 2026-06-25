@@ -54,7 +54,7 @@ The project follows these general steps for development:
 5. **Run Tests Locally**: Make sure all tests pass before submitting changes.
 6. **Submit a Pull Request**: Create a pull request against the `develop` branch.
 
-If your changes are related to or dependent on changes in [attack-workbench-frontend](https://github.com/center-for-threat-informed-defense/attack-workbench-frontend), please link to the corresponding frontend pull request in your PR description.
+If your changes are related to or dependent on changes in [attack-workbench-frontend](https://github.com/mitre-attack/attack-workbench-frontend), please link to the corresponding frontend pull request in your PR description.
 
 ## Branching Strategy
 

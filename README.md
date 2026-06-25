@@ -47,7 +47,7 @@ The REST API provides:
 
 ## Related Repositories
 
-- [ATT&CK Workbench Frontend](https://github.com/center-for-threat-informed-defense/attack-workbench-frontend): The user interface for the ATT&CK Workbench
+- [ATT&CK Workbench Frontend](https://github.com/mitre-attack/attack-workbench-frontend): The user interface for the ATT&CK Workbench
 - [ATT&CK Workbench TAXII 2.1 Server](https://github.com/mitre-attack/attack-workbench-taxii-server): An *optional* Workbench service for sharing STIX content through a TAXII 2.1-compliant interface
 - [ATT&CK Workbench Deployment Guide](https://github.com/mitre-attack/attack-workbench-deployment): The official instructions and configuration templates for deploying Workbench in Docker
 
