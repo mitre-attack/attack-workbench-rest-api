@@ -73,7 +73,7 @@ To run only the REST API in a Docker container:
      --name attack-workbench-rest-api \
      --env DATABASE_URL=mongodb://attack-workbench-mongodb/attack-workspace \
      --network attack-workbench-network \
-     ghcr.io/center-for-threat-informed-defense/attack-workbench-rest-api:latest
+     ghcr.io/mitre-attack/attack-workbench-rest-api:latest
    ```
 
 For more advanced configurations, you can use a configuration file:
@@ -84,7 +84,7 @@ docker run -p 3000:3000 -d \
   --env JSON_CONFIG_PATH=/usr/src/app/settings/config.json \
   --volume /path/to/your/config:/usr/src/app/settings \
   --network attack-workbench-network \
-  ghcr.io/center-for-threat-informed-defense/attack-workbench-rest-api:latest
+  ghcr.io/mitre-attack/attack-workbench-rest-api:latest
 ```
 
 More infomation about configuration options is in the [configuration file documentation](./docs/admin/configuration.md).
