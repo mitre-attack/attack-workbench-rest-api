@@ -89,6 +89,28 @@ Logs the user out of the REST API.
 
 OIDC authentication is intended for use in an organizational setting and can be tied into the organization's single-sign on configuration.
 
+##### Configuring OIDC for Multiple Environments
+
+When deploying multiple instances of the REST API (e.g., local development, staging, and production), each instance requires its own `AUTHN_OIDC_REDIRECT_ORIGIN` configured to match the URL where that instance is accessible.
+
+For example:
+
+- **Local instance**: `AUTHN_OIDC_REDIRECT_ORIGIN=http://localhost:3000`
+- **Production instance**: `AUTHN_OIDC_REDIRECT_ORIGIN=https://workbench.example.com`
+
+All instances can share the same OIDC Client ID and Client Secret, but you must configure **all redirect URIs** in your OIDC Identity Provider:
+
+- `http://localhost:3000/api/authn/oidc/callback`
+- `https://workbench.example.com/api/authn/oidc/callback`
+
+**Example with Authentik:**
+
+1. In Authentik, navigate to **Applications** → **Providers** → your provider
+2. Edit the **Redirect URIs/Origins** field
+3. Add each environment's callback URI on a separate line
+
+This allows the same OIDC provider configuration to work with multiple deployed instances.
+
 ##### Log In
 
 ```

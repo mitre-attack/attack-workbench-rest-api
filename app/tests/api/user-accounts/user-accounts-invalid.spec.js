@@ -1,14 +1,32 @@
 const request = require('supertest');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const userAccounts = require('./user-accounts.invalid.json');
-
 const login = require('../../shared/login');
+
+// Invalid user account payloads — each violates a required-field, enum, type, or
+// business rule. Used to assert the API rejects malformed input with a 400.
+const userAccounts = [
+  { email: 'user1@test.com', username: 'user missing status and role' },
+  { email: 'user1@test.com', displayName: 'user missing username', status: 'pending' },
+  { email: 'user2@test.com', username: 'user invalid status', status: 'abcde', role: 'editor' },
+  { email: 'user3@test.com', username: 'user invalid role', status: 'active', role: 'xyzzy' },
+  {
+    email: 'user4@test.com',
+    username: 'user inactive cannot have role',
+    status: 'inactive',
+    role: 'admin',
+  },
+  { email: 5, username: 'user has number for email', status: 'active', role: 'editor' },
+  { email: 'user6@test.com', username: 6, status: 'active', role: 'editor' },
+  { email: 'user7@test.com', username: 'user has number for status', status: 7, role: 'editor' },
+  { email: 'user8@test.com', username: 'user has number for role', status: 'active', role: 8 },
+];
 
 describe('User Accounts API Test Invalid Data', function () {
   let app;
@@ -21,6 +39,10 @@ describe('User Accounts API Test Invalid Data', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; this non-STIX payload spec should not inherit a disabled flag
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -36,7 +58,7 @@ describe('User Accounts API Test Invalid Data', function () {
         .post('/api/user-accounts')
         .send(body)
         .set('Accept', 'application/json')
-        .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
         .expect(400);
     });
   }

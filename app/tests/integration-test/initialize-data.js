@@ -5,19 +5,18 @@
 const superagent = require('superagent');
 const setCookieParser = require('set-cookie-parser');
 
-const passportCookieName = 'connect.sid';
-
 let passportCookie;
 async function login(url) {
   const res = await superagent.get(url);
   const cookies = setCookieParser(res);
-  passportCookie = cookies.find((c) => c.name === passportCookieName);
+  // The cookie name may be 'connect.sid' or 'connect.XXXXXXXX.sid' depending on hostname
+  passportCookie = cookies.find((c) => c.name.startsWith('connect.') && c.name.endsWith('.sid'));
 }
 
 function post(url, data) {
   return superagent
     .post(url)
-    .set('Cookie', `${passportCookieName}=${passportCookie.value}`)
+    .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
     .send(data);
 }
 
@@ -40,7 +39,7 @@ async function initializeData() {
   };
 
   // Log into the Workbench REST API
-  const loginUrl = 'http://localhost:3000/api/authn/anonymous/login';
+  const loginUrl = 'http://localhost:8080/api/authn/anonymous/login';
   await login(loginUrl);
 
   // Import the collection index v1 into the database

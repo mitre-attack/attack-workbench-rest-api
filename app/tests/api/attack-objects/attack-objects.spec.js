@@ -6,10 +6,11 @@ const { expect } = require('expect');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const AttackObject = require('../../../models/attack-object-model');
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 logger.level = 'debug';
 
 // test malware object
@@ -24,10 +25,15 @@ const malwareObject = {
     name: 'software-2',
     spec_version: '2.1',
     type: 'malware',
-    description: 'This is a malware type of software.',
+    description:
+      'This is a malware type of software, with a URL that it should not have (https://attack.mitre.org/software/SW0001)',
     is_family: false,
+    external_references: [{ source_name: 'source-1', external_id: 's1' }],
     object_marking_refs: ['marking-definition--c2a0b8f8-51d4-4702-8e42-ce7a65235bce'],
+    created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
     x_mitre_version: '1.1',
+    x_mitre_aliases: ['software-2'],
+    x_mitre_platforms: ['Android'],
     x_mitre_contributors: ['contributor-mk', 'contributor-cm'],
     x_mitre_domains: ['mobile-attack'],
     created: '2023-03-01T00:00:00.000Z',
@@ -54,6 +60,10 @@ describe('ATT&CK Objects API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -89,7 +99,7 @@ describe('ATT&CK Objects API', function () {
     const res = await request(app)
       .get('/api/attack-objects')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -114,7 +124,7 @@ describe('ATT&CK Objects API', function () {
     const res = await request(app)
       .get('/api/attack-objects?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -139,7 +149,7 @@ describe('ATT&CK Objects API', function () {
     const res = await request(app)
       .get('/api/attack-objects?attackId=T1234')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -150,11 +160,11 @@ describe('ATT&CK Objects API', function () {
     expect(attackObjects.length).toBe(0);
   });
 
-  it('GET /api/attack-objects returns the group with ATT&CK ID GX1111', async function () {
+  it('GET /api/attack-objects returns the group with ATT&CK ID G9001', async function () {
     const res = await request(app)
-      .get('/api/attack-objects?attackId=GX1111')
+      .get('/api/attack-objects?attackId=G9001')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -165,11 +175,11 @@ describe('ATT&CK Objects API', function () {
     expect(attackObjects.length).toBe(1);
   });
 
-  it('GET /api/attack-objects returns the software with ATT&CK ID SX3333', async function () {
+  it('GET /api/attack-objects returns the software with ATT&CK ID S9001', async function () {
     const res = await request(app)
-      .get('/api/attack-objects?attackId=SX3333')
+      .get('/api/attack-objects?attackId=S9001')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -180,11 +190,11 @@ describe('ATT&CK Objects API', function () {
     expect(attackObjects.length).toBe(1);
   });
 
-  it('GET /api/attack-objects returns the technique with ATT&CK ID TX0001', async function () {
+  it('GET /api/attack-objects returns the technique with ATT&CK ID T9001', async function () {
     const res = await request(app)
-      .get('/api/attack-objects?attackId=TX0001')
+      .get('/api/attack-objects?attackId=T9001')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -197,9 +207,9 @@ describe('ATT&CK Objects API', function () {
 
   it('GET /api/attack-objects returns the objects with the requested ATT&CK IDs', async function () {
     const res = await request(app)
-      .get('/api/attack-objects?attackId=GX1111&attackId=SX3333&attackId=TX0001')
+      .get('/api/attack-objects?attackId=G9001&attackId=S9001&attackId=T9001')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -214,7 +224,7 @@ describe('ATT&CK Objects API', function () {
     const res = await request(app)
       .get('/api/attack-objects?search=nabu')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -235,7 +245,7 @@ describe('ATT&CK Objects API', function () {
       .post('/api/software')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -253,7 +263,7 @@ describe('ATT&CK Objects API', function () {
         `/api/attack-objects?lastUpdatedBy=${software1.workspace.workflow.created_by_user_account}`,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

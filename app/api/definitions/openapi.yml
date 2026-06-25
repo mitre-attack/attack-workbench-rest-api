@@ -66,11 +66,24 @@ tags:
     description: 'Operations on user accounts'
   - name: 'Health Check'
     description: 'Operations on system status'
+  - name: 'Reports'
+    description: 'Operations for generating analytical reports on ATT&CK data'
+  - name: 'Release Tracks'
+    description: 'Operations on release tracks (versioned STIX object releases with workflow management)'
+
+components:
+  parameters:
+    dryRun:
+      $ref: 'components/query-parameters.yml#/components/parameters/dryRun'
 
 paths:
   # ATT&CK Objects
   /api/attack-objects:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects'
+
+  # Generate next available ATT&CK ID
+  /api/attack-objects/attack-id/next:
+    $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1attack-id~1next'
 
   # Techniques
   /api/techniques:
@@ -81,6 +94,15 @@ paths:
 
   /api/techniques/{stixId}/modified/{modified}:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1modified~1{modified}'
+
+  /api/techniques/{stixId}/convert-to-subtechnique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-subtechnique'
+
+  /api/techniques/{stixId}/convert-to-technique:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1convert-to-technique'
+
+  /api/techniques/{stixId}/revoke:
+    $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1revoke'
 
   /api/techniques/{stixId}/modified/{modified}/tactics:
     $ref: 'paths/techniques-paths.yml#/paths/~1api~1techniques~1{stixId}~1modified~1{modified}~1tactics'
@@ -98,6 +120,9 @@ paths:
   /api/tactics/{stixId}/modified/{modified}/techniques:
     $ref: 'paths/tactics-paths.yml#/paths/~1api~1tactics~1{stixId}~1modified~1{modified}~1techniques'
 
+  /api/tactics/{stixId}/revoke:
+    $ref: 'paths/tactics-paths.yml#/paths/~1api~1tactics~1{stixId}~1revoke'
+
   # Groups
   /api/groups:
     $ref: 'paths/groups-paths.yml#/paths/~1api~1groups'
@@ -108,6 +133,9 @@ paths:
   /api/groups/{stixId}/modified/{modified}:
     $ref: 'paths/groups-paths.yml#/paths/~1api~1groups~1{stixId}~1modified~1{modified}'
 
+  /api/groups/{stixId}/revoke:
+    $ref: 'paths/groups-paths.yml#/paths/~1api~1groups~1{stixId}~1revoke'
+
   # Campaigns
   /api/campaigns:
     $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns'
@@ -117,6 +145,9 @@ paths:
 
   /api/campaigns/{stixId}/modified/{modified}:
     $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns~1{stixId}~1modified~1{modified}'
+
+  /api/campaigns/{stixId}/revoke:
+    $ref: 'paths/campaigns-paths.yml#/paths/~1api~1campaigns~1{stixId}~1revoke'
 
   # Matrices
   /api/matrices:
@@ -130,6 +161,9 @@ paths:
 
   /api/matrices/{stixId}/modified/{modified}/techniques:
     $ref: 'paths/matrices-paths.yml#/paths/~1api~1matrices~1{stixId}~1modified~1{modified}~1techniques'
+
+  /api/matrices/{stixId}/revoke:
+    $ref: 'paths/matrices-paths.yml#/paths/~1api~1matrices~1{stixId}~1revoke'
 
   # Identities
   /api/identities:
@@ -158,6 +192,9 @@ paths:
   /api/software/{stixId}/modified/{modified}:
     $ref: 'paths/software-paths.yml#/paths/~1api~1software~1{stixId}~1modified~1{modified}'
 
+  /api/software/{stixId}/revoke:
+    $ref: 'paths/software-paths.yml#/paths/~1api~1software~1{stixId}~1revoke'
+
   # Mitigations
   /api/mitigations:
     $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations'
@@ -168,6 +205,9 @@ paths:
   /api/mitigations/{stixId}/modified/{modified}:
     $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations~1{stixId}~1modified~1{modified}'
 
+  /api/mitigations/{stixId}/revoke:
+    $ref: 'paths/mitigations-paths.yml#/paths/~1api~1mitigations~1{stixId}~1revoke'
+
   # Data Sources
   /api/data-sources:
     $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources'
@@ -177,6 +217,9 @@ paths:
 
   /api/data-sources/{stixId}/modified/{modified}:
     $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources~1{stixId}~1modified~1{modified}'
+
+  /api/data-sources/{stixId}/revoke:
+    $ref: 'paths/data-sources-paths.yml#/paths/~1api~1data-sources~1{stixId}~1revoke'
 
   # Analytics
   /api/analytics:
@@ -214,6 +257,9 @@ paths:
   /api/data-components/{stixId}/modified/{modified}:
     $ref: 'paths/data-components-paths.yml#/paths/~1api~1data-components~1{stixId}~1modified~1{modified}'
 
+  /api/data-components/{stixId}/revoke:
+    $ref: 'paths/data-components-paths.yml#/paths/~1api~1data-components~1{stixId}~1revoke'
+
   # Assets
   /api/assets:
     $ref: 'paths/assets-paths.yml#/paths/~1api~1assets'
@@ -223,6 +269,9 @@ paths:
 
   /api/assets/{stixId}/modified/{modified}:
     $ref: 'paths/assets-paths.yml#/paths/~1api~1assets~1{stixId}~1modified~1{modified}'
+
+  /api/assets/{stixId}/revoke:
+    $ref: 'paths/assets-paths.yml#/paths/~1api~1assets~1{stixId}~1revoke'
 
   # Relationships
   /api/relationships:
@@ -275,6 +324,91 @@ paths:
   # STIX Bundles
   /api/stix-bundles:
     $ref: 'paths/stix-bundles-paths.yml#/paths/~1api~1stix-bundles'
+
+  # Release Tracks
+  /api/release-tracks/ephemeral/{domain}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1ephemeral~1{domain}'
+
+  /api/release-tracks:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks'
+
+  /api/release-tracks/new:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1new'
+
+  /api/release-tracks/new-from-bundle:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1new-from-bundle'
+
+  /api/release-tracks/import:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1import'
+
+  /api/release-tracks/{id}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}'
+
+  /api/release-tracks/{id}/meta:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1meta'
+
+  /api/release-tracks/{id}/contents:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1contents'
+
+  /api/release-tracks/{id}/clone:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1clone'
+
+  /api/release-tracks/{id}/bump:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1bump'
+
+  /api/release-tracks/{id}/bump/preview:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1bump~1preview'
+
+  /api/release-tracks/{id}/candidates:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates'
+
+  /api/release-tracks/{id}/candidates/review:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1review'
+
+  /api/release-tracks/{id}/candidates/promote:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1promote'
+
+  /api/release-tracks/{id}/candidates/{objectRef}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1{objectRef}'
+
+  /api/release-tracks/{id}/candidates/{objectRef}/update-version:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1candidates~1{objectRef}~1update-version'
+
+  /api/release-tracks/{id}/staged:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1staged'
+
+  /api/release-tracks/{id}/staged/demote:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1staged~1demote'
+
+  /api/release-tracks/{id}/config:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1config'
+
+  /api/release-tracks/{id}/objects/{objectRef}/versions:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1objects~1{objectRef}~1versions'
+
+  /api/release-tracks/{id}/composition:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1composition'
+
+  /api/release-tracks/{id}/snapshots/create:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1create'
+
+  /api/release-tracks/{id}/snapshots/preview:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1preview'
+
+  /api/release-tracks/{id}/snapshots/{modified}:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}'
+
+  /api/release-tracks/{id}/snapshots/{modified}/meta:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1meta'
+
+  /api/release-tracks/{id}/snapshots/{modified}/contents:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1contents'
+
+  /api/release-tracks/{id}/snapshots/{modified}/clone:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1clone'
+
+  /api/release-tracks/{id}/snapshots/{modified}/bump:
+    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1snapshots~1{modified}~1bump'
 
   # System Configuration
   /api/config/system-version:
@@ -347,6 +481,13 @@ paths:
   # Recent Activity
   /api/recent-activity:
     $ref: 'paths/recent-activity-paths.yml#/paths/~1api~1recent-activity'
+
+  # Reports
+  /api/reports/link-by-id/missing:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1link-by-id~1missing'
+
+  /api/reports/parallel-relationships:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1parallel-relationships'
 
   # Health Checks
   /api/health/ping:

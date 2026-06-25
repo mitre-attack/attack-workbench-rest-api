@@ -1,10 +1,10 @@
 'use strict';
 
-const systemConfigurationService = require('../services/system-configuration-service');
-const { SystemConfigurationService } = require('../services/system-configuration-service');
+const systemConfigurationService = require('../services/system/system-configuration-service');
+const { SystemConfigurationService } = require('../services/system/system-configuration-service');
 const logger = require('../lib/logger');
 
-exports.retrieveSystemVersion = function (req, res) {
+exports.retrieveSystemVersion = function (req, res, next) {
   try {
     const systemVersionInfo = SystemConfigurationService.retrieveSystemVersion();
     logger.debug(
@@ -12,34 +12,31 @@ exports.retrieveSystemVersion = function (req, res) {
     );
     return res.status(200).send(systemVersionInfo);
   } catch (err) {
-    logger.error('Unable to retrieve system version, failed with error: ' + err);
-    return res.status(500).send('Unable to retrieve system version. Server error.');
+    return next(err);
   }
 };
 
-exports.retrieveAllowedValues = async function (req, res) {
+exports.retrieveAllowedValues = async function (req, res, next) {
   try {
     const allowedValues = await systemConfigurationService.retrieveAllowedValues();
     logger.debug('Success: Retrieved allowed values.');
     return res.status(200).send(allowedValues);
   } catch (err) {
-    logger.error('Unable to retrieve allowed values, failed with error: ' + err);
-    return res.status(500).send('Unable to retrieve allowed values. Server error.');
+    return next(err);
   }
 };
 
-exports.retrieveOrganizationIdentity = async function (req, res) {
+exports.retrieveOrganizationIdentity = async function (req, res, next) {
   try {
     const identity = await systemConfigurationService.retrieveOrganizationIdentity();
     logger.debug('Success: Retrieved organization identity.');
     return res.status(200).send(identity);
   } catch (err) {
-    logger.error('Unable to retrieve organization identity, failed with error: ' + err);
-    return res.status(500).send('Unable to retrieve organization identity. Server error.');
+    return next(err);
   }
 };
 
-exports.setOrganizationIdentity = async function (req, res) {
+exports.setOrganizationIdentity = async function (req, res, next) {
   const organizationIdentity = req.body;
   if (!organizationIdentity.id) {
     logger.warn('Missing organization identity id');
@@ -51,23 +48,21 @@ exports.setOrganizationIdentity = async function (req, res) {
     logger.debug(`Success: Set organization identity to: ${organizationIdentity.id}`);
     return res.status(204).send();
   } catch (err) {
-    logger.error('Unable to set organization identity, failed with error: ' + err);
-    return res.status(500).send('Unable to set organization identity. Server error.');
+    return next(err);
   }
 };
 
-exports.retrieveAuthenticationConfig = function (req, res) {
+exports.retrieveAuthenticationConfig = function (req, res, next) {
   try {
     const authenticationConfig = SystemConfigurationService.retrieveAuthenticationConfig();
     logger.debug('Success: Retrieved authentication configuration.');
     return res.status(200).send(authenticationConfig);
   } catch (err) {
-    logger.error('Unable to retrieve authentication configuration, failed with error: ' + err);
-    return res.status(500).send('Unable to retrieve authentication configuration. Server error.');
+    return next(err);
   }
 };
 
-exports.retrieveDefaultMarkingDefinitions = async function (req, res) {
+exports.retrieveDefaultMarkingDefinitions = async function (req, res, next) {
   try {
     const options = { refOnly: req.query.refOnly };
     const defaultMarkingDefinitions =
@@ -75,14 +70,11 @@ exports.retrieveDefaultMarkingDefinitions = async function (req, res) {
     logger.debug('Success: Retrieved default marking definitions.');
     return res.status(200).send(defaultMarkingDefinitions);
   } catch (err) {
-    logger.error(
-      `Unable to retrieve default marking definitions, failed with error: ${err} (${err.markingDefinitionRef})`,
-    );
-    return res.status(500).send('Unable to retrieve default marking definitions. Server error.');
+    return next(err);
   }
 };
 
-exports.setDefaultMarkingDefinitions = async function (req, res) {
+exports.setDefaultMarkingDefinitions = async function (req, res, next) {
   const defaultMarkingDefinitionIds = req.body;
   if (!defaultMarkingDefinitionIds) {
     logger.warn('Missing default marking definition ids');
@@ -97,23 +89,21 @@ exports.setDefaultMarkingDefinitions = async function (req, res) {
     logger.debug(`Success: Set default marking definitions`);
     return res.status(204).send();
   } catch (err) {
-    logger.error('Unable to set default marking definitions, failed with error: ' + err);
-    return res.status(500).send('Unable to default marking definitions. Server error.');
+    return next(err);
   }
 };
 
-exports.retrieveOrganizationNamespace = async function (req, res) {
+exports.retrieveOrganizationNamespace = async function (req, res, next) {
   try {
     const namespace = await systemConfigurationService.retrieveOrganizationNamespace();
     logger.debug('Success: Retrieved organization namespace.');
     return res.status(200).send(namespace);
   } catch (err) {
-    logger.error('Unable to retrieve organization namespace, failed with error: ' + err);
-    return res.status(500).send('Unable to retrieve organization namespace. Server error.');
+    return next(err);
   }
 };
 
-exports.setOrganizationNamespace = async function (req, res) {
+exports.setOrganizationNamespace = async function (req, res, next) {
   const organizationNamespace = req.body;
 
   try {
@@ -121,7 +111,6 @@ exports.setOrganizationNamespace = async function (req, res) {
     logger.debug(`Success: Set organization namespace to: ${organizationNamespace.prefix}`);
     return res.status(204).send();
   } catch (err) {
-    logger.error('Unable to set organization namespace, failed with error: ' + err);
-    return res.status(500).send('Unable to set organization namespace. Server error.');
+    return next(err);
   }
 };

@@ -70,6 +70,14 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: stream
+          in: query
+          description: |
+            Stream import progress updates using Server-Sent Events (SSE).
+            When enabled, the endpoint will stream progress events and the final result.
+          schema:
+            type: boolean
+            default: false
         - name: forceImport
           in: query
           description: |
@@ -93,6 +101,14 @@ paths:
                     - duplicate-collection
                     - all
           example: 'attack-spec-version-violations'
+        - name: validateContents
+          in: query
+          description: |
+            If false, bypasses ATT&CK Data Model validation. Note that this may result in unexpected issues.
+            If true, validates the contents of the given STIX bundle using the ATT&CK Data Model.
+          schema:
+            type: boolean
+            default: true
       requestBody:
         required: true
         content:

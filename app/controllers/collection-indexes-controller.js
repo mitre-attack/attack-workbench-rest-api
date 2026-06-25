@@ -1,6 +1,6 @@
 'use strict';
 
-const collectionIndexService = require('../services/collection-indexes-service');
+const collectionIndexService = require('../services/stix/collection-indexes-service');
 const logger = require('../lib/logger');
 const { DuplicateIdError, BadlyFormattedParameterError } = require('../exceptions');
 

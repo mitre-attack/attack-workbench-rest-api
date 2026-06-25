@@ -17,13 +17,15 @@ router.use('/api', bodyParser.json({ limit: '50mb' }));
 router.use('/api', bodyParser.urlencoded({ limit: '1mb', extended: true }));
 
 // Setup request validation
-router.use(
-  OpenApiValidator.middleware({
-    apiSpec: config.openApi.specPath,
-    validateRequests: true,
-    validateResponses: false,
-  }),
-);
+if (config.validateRequests.withOpenApi) {
+  router.use(
+    OpenApiValidator.middleware({
+      apiSpec: config.openApi.specPath,
+      validateRequests: true,
+      validateResponses: false,
+    }),
+  );
+}
 
 // Setup passport middleware
 router.use('/api', authnConfiguration.passportMiddleware());
@@ -41,6 +43,7 @@ fs.readdirSync(path.join(__dirname, '.')).forEach(function (filename) {
 // Handle errors that haven't otherwise been caught
 router.use(errorHandler.bodyParser);
 router.use(errorHandler.requestValidation);
+router.use(errorHandler.serviceExceptions);
 router.use(errorHandler.catchAll);
 
 module.exports = router;

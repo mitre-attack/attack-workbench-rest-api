@@ -5,19 +5,18 @@
 const superagent = require('superagent');
 const setCookieParser = require('set-cookie-parser');
 
-const passportCookieName = 'connect.sid';
-
 let passportCookie;
 async function login(url) {
   const res = await superagent.get(url);
   const cookies = setCookieParser(res);
-  passportCookie = cookies.find((c) => c.name === passportCookieName);
+  // The cookie name may be 'connect.sid' or 'connect.XXXXXXXX.sid' depending on hostname
+  passportCookie = cookies.find((c) => c.name.startsWith('connect.') && c.name.endsWith('.sid'));
 }
 
 async function get(url) {
   const res = await superagent
     .get(url)
-    .set('Cookie', `${passportCookieName}=${passportCookie.value}`);
+    .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
 
   return res.body;
 }
@@ -25,7 +24,7 @@ async function get(url) {
 function put(url, data) {
   return superagent
     .put(url)
-    .set('Cookie', `${passportCookieName}=${passportCookie.value}`)
+    .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
     .send(data);
 }
 

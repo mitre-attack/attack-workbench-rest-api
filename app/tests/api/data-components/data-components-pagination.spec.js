@@ -1,4 +1,4 @@
-const dataComponentsService = require('../../../services/data-components-service');
+const dataComponentsService = require('../../../services/stix/data-components-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API
@@ -33,6 +33,9 @@ const options = {
   prefix: 'x-mitre-data-component',
   baseUrl: '/api/data-components',
   label: 'Data Components',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(dataComponentsService, initialObjectData, options);
 paginationTests.executeTests();

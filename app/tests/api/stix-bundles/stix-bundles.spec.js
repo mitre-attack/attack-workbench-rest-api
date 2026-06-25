@@ -58,6 +58,7 @@ const request = require('supertest');
 const { expect } = require('expect');
 // const fs = require('fs');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -68,7 +69,7 @@ const login = require('../../shared/login');
 const enterpriseDomain = 'enterprise-attack';
 const icsDomain = 'ics-attack';
 
-const collectionId = 'x-mitre-collection--b0b12345-aaaa-bbbb-cccc-dddddddddddd';
+const collectionId = 'x-mitre-collection--b0b12345-aaaa-4bbb-8ccc-dddddddddddd';
 const collectionTimestamp = new Date().toISOString();
 
 const markingDefinitionId = 'marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168';
@@ -103,65 +104,75 @@ const newSpecBundleData = {
       spec_version: '2.1',
       type: 'x-mitre-collection',
       description: 'Test collection for new ATT&CK specification features',
-      external_references: [],
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_version: '1.0',
       x_mitre_contents: [
         // Techniques
-        { object_ref: 'attack-pattern--new-ent-001', object_modified: '2024-01-15T10:00:00.000Z' },
-        { object_ref: 'attack-pattern--new-ent-002', object_modified: '2024-01-15T10:00:00.000Z' },
-        { object_ref: 'attack-pattern--new-ics-001', object_modified: '2024-01-15T10:00:00.000Z' },
-        // Analytics
         {
-          object_ref: 'x-mitre-analytic--new-ana-001',
+          object_ref: 'attack-pattern--11111111-1111-4111-8111-111111111111',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'x-mitre-analytic--new-ana-002',
+          object_ref: 'attack-pattern--22222222-2222-4222-8222-222222222222',
+          object_modified: '2024-01-15T10:00:00.000Z',
+        },
+        {
+          object_ref: 'attack-pattern--33333333-3333-4333-8333-333333333333',
+          object_modified: '2024-01-15T10:00:00.000Z',
+        },
+        // Analytics
+        {
+          object_ref: 'x-mitre-analytic--44444444-4444-4444-8444-444444444444',
+          object_modified: '2024-01-15T10:00:00.000Z',
+        },
+        {
+          object_ref: 'x-mitre-analytic--55555555-5555-4555-8555-555555555555',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         // Detection Strategies
         {
-          object_ref: 'x-mitre-detection-strategy--new-ds-001',
+          object_ref: 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'x-mitre-detection-strategy--new-ds-002',
+          object_ref: 'x-mitre-detection-strategy--77777777-7777-4777-8777-777777777777',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'x-mitre-detection-strategy--new-ds-003',
+          object_ref: 'x-mitre-detection-strategy--88888888-8888-4888-8888-888888888888',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         // Data Components
         {
-          object_ref: 'x-mitre-data-component--new-dc-001',
+          object_ref: 'x-mitre-data-component--99999999-9999-4999-8999-999999999999',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'x-mitre-data-component--new-dc-002',
+          object_ref: 'x-mitre-data-component--aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         // Data Sources
         {
-          object_ref: 'x-mitre-data-source--new-ds-src-001',
+          object_ref: 'x-mitre-data-source--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'x-mitre-data-source--new-ds-src-002',
+          object_ref: 'x-mitre-data-source--cccccccc-cccc-4ccc-8ccc-cccccccccccc',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         // Relationships
         {
-          object_ref: 'relationship--new-ds-detects-tech-001',
+          object_ref: 'relationship--dddddddd-dddd-4ddd-8ddd-dddddddddddd',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'relationship--new-ds-detects-tech-002',
+          object_ref: 'relationship--eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         {
-          object_ref: 'relationship--new-dc-detects-tech-dep',
+          object_ref: 'relationship--ffffffff-ffff-4fff-8fff-ffffffffffff',
           object_modified: '2024-01-15T10:00:00.000Z',
         },
         // Supporting objects (identity and marking-definition should also be in x_mitre_contents)
@@ -175,7 +186,7 @@ const newSpecBundleData = {
     // ========================================
     {
       type: 'attack-pattern',
-      id: 'attack-pattern--new-ent-001',
+      id: 'attack-pattern--11111111-1111-4111-8111-111111111111',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Enterprise Technique 1',
@@ -185,13 +196,14 @@ const newSpecBundleData = {
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'T9001' }],
       kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain],
       x_mitre_version: '1.0',
       x_mitre_is_subtechnique: false,
     },
     {
       type: 'attack-pattern',
-      id: 'attack-pattern--new-ent-002',
+      id: 'attack-pattern--22222222-2222-4222-8222-222222222222',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Enterprise Technique 2',
@@ -201,13 +213,14 @@ const newSpecBundleData = {
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'T9002' }],
       kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain],
       x_mitre_version: '1.0',
       x_mitre_is_subtechnique: false,
     },
     {
       type: 'attack-pattern',
-      id: 'attack-pattern--new-ics-001',
+      id: 'attack-pattern--33333333-3333-4333-8333-333333333333',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'ICS Technique 1',
@@ -217,6 +230,7 @@ const newSpecBundleData = {
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'T9003' }],
       kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain, icsDomain],
       x_mitre_version: '1.0',
       x_mitre_is_subtechnique: false,
@@ -227,7 +241,7 @@ const newSpecBundleData = {
     // ========================================
     {
       type: 'x-mitre-analytic',
-      id: 'x-mitre-analytic--new-ana-001',
+      id: 'x-mitre-analytic--44444444-4444-4444-8444-444444444444',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Process Execution Analytic',
@@ -238,16 +252,18 @@ const newSpecBundleData = {
       external_references: [
         {
           source_name: 'mitre-attack',
-          external_id: 'ANA-001',
-          url: 'https://attack.mitre.org/detectionstrategies/DS-002#ANA-001',
+          external_id: 'AN0001',
+          url: 'https://attack.mitre.org/detectionstrategies/DET0002#AN0001',
         },
       ],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain],
+      x_mitre_platforms: ['Windows'],
       x_mitre_version: '1.0',
     },
     {
       type: 'x-mitre-analytic',
-      id: 'x-mitre-analytic--new-ana-002',
+      id: 'x-mitre-analytic--55555555-5555-4555-8555-555555555555',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Persistence Mechanism Analytic',
@@ -255,9 +271,11 @@ const newSpecBundleData = {
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [{ source_name: 'mitre-attack', external_id: 'ANA-002' }],
+      external_references: [{ source_name: 'mitre-attack', external_id: 'AN0002' }],
       // Note: No URL, meaning it's not attached to a detection strategy, meaning we don't want it in the bundle
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain],
+      x_mitre_platforms: ['Windows'],
       x_mitre_version: '1.0',
     },
 
@@ -266,46 +284,52 @@ const newSpecBundleData = {
     // ========================================
     {
       type: 'x-mitre-detection-strategy',
-      id: 'x-mitre-detection-strategy--new-ds-001',
+      id: 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Detection Strategy 1 - Detects Technique via Relationship',
-      description: 'This detection strategy detects attack-pattern--new-ent-001',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [{ source_name: 'mitre-attack', external_id: 'DS-001' }],
+      external_references: [{ source_name: 'mitre-attack', external_id: 'DET0001' }],
+      x_mitre_analytic_refs: ['x-mitre-analytic--44444444-4444-4444-8444-444444444444'],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_domains: [enterpriseDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
-      // Note: No x_mitre_domains - this is inferred from relationships
     },
     {
       type: 'x-mitre-detection-strategy',
-      id: 'x-mitre-detection-strategy--new-ds-002',
+      id: 'x-mitre-detection-strategy--77777777-7777-4777-8777-777777777777',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Detection Strategy 2 - References Analytic',
-      description: 'This detection strategy references x-mitre-analytic--new-ana-001',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [{ source_name: 'mitre-attack', external_id: 'DS-002' }],
+      external_references: [{ source_name: 'mitre-attack', external_id: 'DET0002' }],
+      x_mitre_analytic_refs: ['x-mitre-analytic--44444444-4444-4444-8444-444444444444'],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_domains: [enterpriseDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
-      x_mitre_analytic_refs: ['x-mitre-analytic--new-ana-001'],
-      // Note: No x_mitre_domains - this is inferred from analytic refs
     },
     {
       type: 'x-mitre-detection-strategy',
-      id: 'x-mitre-detection-strategy--new-ds-003',
+      id: 'x-mitre-detection-strategy--88888888-8888-4888-8888-888888888888',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Detection Strategy 3 - Not Included (orphaned)',
-      description: 'This detection strategy should NOT be included - no technique or analytic',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [{ source_name: 'mitre-attack', external_id: 'DS-003' }],
+      external_references: [{ source_name: 'mitre-attack', external_id: 'DET0003' }],
+      x_mitre_analytic_refs: ['x-mitre-analytic--55555555-5555-4555-8555-555555555555'],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_domains: [enterpriseDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
-      // Note: No detects relationship, no analytic refs, so this should NOT appear in bundle
+      // Note: No detects relationship, and its analytic lacks a URL, so this should NOT appear in bundle
     },
 
     // ========================================
@@ -313,7 +337,7 @@ const newSpecBundleData = {
     // ========================================
     {
       type: 'x-mitre-data-component',
-      id: 'x-mitre-data-component--new-dc-001',
+      id: 'x-mitre-data-component--99999999-9999-4999-8999-999999999999',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Enterprise Data Component',
@@ -322,13 +346,15 @@ const newSpecBundleData = {
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'DC9001' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [enterpriseDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
-      x_mitre_data_source_ref: 'x-mitre-data-source--new-ds-src-001',
+      x_mitre_data_source_ref: 'x-mitre-data-source--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     },
     {
       type: 'x-mitre-data-component',
-      id: 'x-mitre-data-component--new-dc-002',
+      id: 'x-mitre-data-component--aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'ICS Data Component',
@@ -337,9 +363,11 @@ const newSpecBundleData = {
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'DC9002' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
       x_mitre_domains: [icsDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
-      x_mitre_data_source_ref: 'x-mitre-data-source--new-ds-src-002',
+      x_mitre_data_source_ref: 'x-mitre-data-source--cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     },
 
     // ========================================
@@ -347,7 +375,7 @@ const newSpecBundleData = {
     // ========================================
     {
       type: 'x-mitre-data-source',
-      id: 'x-mitre-data-source--new-ds-src-001',
+      id: 'x-mitre-data-source--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'Enterprise Data Source',
@@ -356,12 +384,15 @@ const newSpecBundleData = {
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'DS9001' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_collection_layers: ['Host'],
       x_mitre_domains: [enterpriseDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
     },
     {
       type: 'x-mitre-data-source',
-      id: 'x-mitre-data-source--new-ds-src-002',
+      id: 'x-mitre-data-source--cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       name: 'ICS Data Source',
@@ -370,7 +401,10 @@ const newSpecBundleData = {
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
       external_references: [{ source_name: 'mitre-attack', external_id: 'DS9002' }],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_collection_layers: ['Host'],
       x_mitre_domains: [icsDomain],
+      x_mitre_modified_by_ref: mitreIdentityId,
       x_mitre_version: '1.0',
     },
 
@@ -381,49 +415,52 @@ const newSpecBundleData = {
     // Valid 'detects' relationship: Detection Strategy → Technique
     {
       type: 'relationship',
-      id: 'relationship--new-ds-detects-tech-001',
+      id: 'relationship--dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       relationship_type: 'detects',
-      source_ref: 'x-mitre-detection-strategy--new-ds-001',
-      target_ref: 'attack-pattern--new-ent-001',
+      source_ref: 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
+      target_ref: 'attack-pattern--11111111-1111-4111-8111-111111111111',
       description: 'Detection strategy detects enterprise technique 1',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_modified_by_ref: mitreIdentityId,
     },
 
     // Valid 'detects' relationship: Detection Strategy → Technique (different technique)
     {
       type: 'relationship',
-      id: 'relationship--new-ds-detects-tech-002',
+      id: 'relationship--eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       relationship_type: 'detects',
-      source_ref: 'x-mitre-detection-strategy--new-ds-001',
-      target_ref: 'attack-pattern--new-ent-002',
+      source_ref: 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
+      target_ref: 'attack-pattern--22222222-2222-4222-8222-222222222222',
       description: 'Detection strategy detects enterprise technique 2',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_modified_by_ref: mitreIdentityId,
     },
 
     // DEPRECATED 'detects' relationship: Data Component → Technique (should be IGNORED)
     {
       type: 'relationship',
-      id: 'relationship--new-dc-detects-tech-dep',
+      id: 'relationship--ffffffff-ffff-4fff-8fff-ffffffffffff',
       created: '2024-01-15T10:00:00.000Z',
       modified: '2024-01-15T10:00:00.000Z',
       relationship_type: 'detects',
-      source_ref: 'x-mitre-data-component--new-dc-001',
-      target_ref: 'attack-pattern--new-ent-001',
+      source_ref: 'x-mitre-data-component--99999999-9999-4999-8999-999999999999',
+      target_ref: 'attack-pattern--11111111-1111-4111-8111-111111111111',
       description: 'DEPRECATED: Data component detects technique (should be ignored)',
       spec_version: '2.1',
       object_marking_refs: [markingDefinitionId],
       created_by_ref: mitreIdentityId,
-      external_references: [],
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
+      x_mitre_modified_by_ref: mitreIdentityId,
     },
 
     // ========================================
@@ -436,11 +473,14 @@ const newSpecBundleData = {
       modified: '2017-06-01T00:00:00.000Z',
       name: 'The MITRE Corporation',
       identity_class: 'organization',
+      object_marking_refs: [markingDefinitionId],
       spec_version: '2.1',
+      x_mitre_attack_spec_version: config.app.attackSpecVersion,
     },
     {
       type: 'marking-definition',
       id: markingDefinitionId,
+      created_by_ref: mitreIdentityId,
       created: '2017-06-01T00:00:00.000Z',
       definition_type: 'statement',
       definition: {
@@ -464,6 +504,10 @@ describe('STIX Bundles New Specification API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the imported bundle fixture is ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -477,7 +521,7 @@ describe('STIX Bundles New Specification API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -493,7 +537,7 @@ describe('STIX Bundles New Specification API', function () {
     request(app)
       .get('/api/stix-bundles?domain=not-a-domain')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .end(function (err, res) {
         if (err) {
@@ -515,7 +559,7 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -555,7 +599,7 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -565,7 +609,7 @@ describe('STIX Bundles New Specification API', function () {
     // The new spec maintains a clean separation: deprecated patterns are excluded
     // even if both endpoints exist in the bundle as primary objects
     const deprecatedRelationship = stixBundle.objects.find(
-      (o) => o.id === 'relationship--new-dc-detects-tech-dep',
+      (o) => o.id === 'relationship--ffffffff-ffff-4fff-8fff-ffffffffffff',
     );
     expect(deprecatedRelationship).toBeUndefined();
 
@@ -573,7 +617,7 @@ describe('STIX Bundles New Specification API', function () {
     const validDetectsRels = stixBundle.objects.filter(
       (o) => o.type === 'relationship' && o.relationship_type === 'detects',
     );
-    expect(validDetectsRels.length).toBe(2); // Only DS-001 detects relationships
+    expect(validDetectsRels.length).toBe(2); // Only DET0001 detects relationships
     validDetectsRels.forEach((rel) => {
       expect(rel.source_ref).toMatch(/^x-mitre-detection-strategy--/);
     });
@@ -585,14 +629,16 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
     const stixBundle = res.body;
 
-    // Verify DS-001 is included because it has 'detects' relationships to in-scope techniques
-    const ds001 = stixBundle.objects.find((o) => o.id === 'x-mitre-detection-strategy--new-ds-001');
+    // Verify DET0001 is included because it has 'detects' relationships to in-scope techniques
+    const ds001 = stixBundle.objects.find(
+      (o) => o.id === 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
+    );
     expect(ds001).toBeDefined();
     expect(ds001.name).toBe('Detection Strategy 1 - Detects Technique via Relationship');
     expect(ds001.x_mitre_domains).toEqual([enterpriseDomain]);
@@ -602,7 +648,7 @@ describe('STIX Bundles New Specification API', function () {
       (o) =>
         o.type === 'relationship' &&
         o.relationship_type === 'detects' &&
-        o.source_ref === 'x-mitre-detection-strategy--new-ds-001',
+        o.source_ref === 'x-mitre-detection-strategy--66666666-6666-4666-8666-666666666666',
     );
     expect(ds001DetectsRels.length).toBe(2); // Detects two techniques
   });
@@ -613,21 +659,27 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
     const stixBundle = res.body;
 
-    // Verify DS-002 is included because it references an in-scope analytic via x_mitre_analytic_refs
-    const ds002 = stixBundle.objects.find((o) => o.id === 'x-mitre-detection-strategy--new-ds-002');
+    // Verify DET0002 is included because it references an in-scope analytic via x_mitre_analytic_refs
+    const ds002 = stixBundle.objects.find(
+      (o) => o.id === 'x-mitre-detection-strategy--77777777-7777-4777-8777-777777777777',
+    );
     expect(ds002).toBeDefined();
     expect(ds002.name).toBe('Detection Strategy 2 - References Analytic');
-    expect(ds002.x_mitre_analytic_refs).toContain('x-mitre-analytic--new-ana-001');
+    expect(ds002.x_mitre_analytic_refs).toContain(
+      'x-mitre-analytic--44444444-4444-4444-8444-444444444444',
+    );
     expect(ds002.x_mitre_domains).toEqual([enterpriseDomain]);
 
     // Verify the referenced analytic is in the bundle
-    const analytic = stixBundle.objects.find((o) => o.id === 'x-mitre-analytic--new-ana-001');
+    const analytic = stixBundle.objects.find(
+      (o) => o.id === 'x-mitre-analytic--44444444-4444-4444-8444-444444444444',
+    );
     expect(analytic).toBeDefined();
   });
 
@@ -637,14 +689,16 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
     const stixBundle = res.body;
 
-    // Verify DS-003 is NOT included (orphaned - no technique or analytic reference)
-    const ds003 = stixBundle.objects.find((o) => o.id === 'x-mitre-detection-strategy--new-ds-003');
+    // Verify DET0003 is NOT included (orphaned - no technique or analytic reference)
+    const ds003 = stixBundle.objects.find(
+      (o) => o.id === 'x-mitre-detection-strategy--88888888-8888-4888-8888-888888888888',
+    );
     expect(ds003).toBeUndefined();
   });
 
@@ -655,7 +709,7 @@ describe('STIX Bundles New Specification API', function () {
       .query({ includeDataSources: true })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -663,7 +717,7 @@ describe('STIX Bundles New Specification API', function () {
 
     const dataSources = stixBundle.objects.filter((o) => o.type === 'x-mitre-data-source');
     expect(dataSources.length).toBe(1); // Only new-ds-src-001 (enterprise)
-    expect(dataSources[0].id).toBe('x-mitre-data-source--new-ds-src-001');
+    expect(dataSources[0].id).toBe('x-mitre-data-source--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
   });
 
   it('GET /api/stix-bundles without includeDataSources excludes data sources', async function () {
@@ -672,7 +726,7 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: enterpriseDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -688,7 +742,7 @@ describe('STIX Bundles New Specification API', function () {
       .query({ domain: icsDomain })
       .query({ stixVersion: '2.1' })
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -706,7 +760,7 @@ describe('STIX Bundles New Specification API', function () {
     // Only 1 technique should be in ICS (new-ics-001)
     const techniques = stixBundle.objects.filter((o) => o.type === 'attack-pattern');
     expect(techniques.length).toBe(1);
-    expect(techniques[0].id).toBe('attack-pattern--new-ics-001');
+    expect(techniques[0].id).toBe('attack-pattern--33333333-3333-4333-8333-333333333333');
 
     // No analytics in ICS domain
     const analytics = stixBundle.objects.filter((o) => o.type === 'x-mitre-analytic');
@@ -715,7 +769,9 @@ describe('STIX Bundles New Specification API', function () {
     // Only ICS data component (new-dc-002)
     const dataComponents = stixBundle.objects.filter((o) => o.type === 'x-mitre-data-component');
     expect(dataComponents.length).toBe(1);
-    expect(dataComponents[0].id).toBe('x-mitre-data-component--new-dc-002');
+    expect(dataComponents[0].id).toBe(
+      'x-mitre-data-component--aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    );
 
     // No detection strategies (none detect ICS techniques or reference ICS analytics)
     const detectionStrategies = stixBundle.objects.filter(

@@ -31,8 +31,8 @@ const stixAnalytic = {
   x_mitre_attack_spec_version: String,
   x_mitre_domains: { type: [String], default: undefined },
   x_mitre_platforms: { type: [String], default: undefined },
-  x_mitre_log_source_references: [logSourceReferenceSchema],
-  x_mitre_mutable_elements: [mutableElementSchema],
+  x_mitre_log_source_references: { type: [logSourceReferenceSchema], default: undefined },
+  x_mitre_mutable_elements: { type: [mutableElementSchema], default: undefined },
 };
 
 // Create the definition

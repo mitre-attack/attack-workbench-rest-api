@@ -4,7 +4,7 @@ const openIdClient = require('openid-client');
 const retry = require('async-await-retry');
 
 const config = require('../config/config');
-const userAccountsService = require('../services/user-accounts-service');
+const userAccountsService = require('../services/system/user-accounts-service');
 
 let strategyName;
 exports.strategyName = function () {

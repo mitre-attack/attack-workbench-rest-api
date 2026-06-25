@@ -4,7 +4,7 @@ const { expect } = require('expect');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
-
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
@@ -45,6 +45,10 @@ describe('References API', function () {
     // Wait until the Reference indexes are created
     await Reference.init();
 
+    // Enable ADM validation for consistency with STIX-object API suites
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -56,7 +60,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -73,7 +77,7 @@ describe('References API', function () {
       .post('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -84,7 +88,7 @@ describe('References API', function () {
       .post('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -100,7 +104,7 @@ describe('References API', function () {
       .post('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -116,7 +120,7 @@ describe('References API', function () {
       .post('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -129,7 +133,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -144,7 +148,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references?sourceName=notasourcename')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
 
     // We expect to get an empty array
@@ -158,7 +162,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references?sourceName=' + encodeURIComponent(reference1.source_name))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -179,7 +183,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references?search=' + encodeURIComponent('#3'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -200,7 +204,7 @@ describe('References API', function () {
     const res = await request(app)
       .get('/api/references?search=' + encodeURIComponent('unique'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -223,7 +227,7 @@ describe('References API', function () {
       .put('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -237,7 +241,7 @@ describe('References API', function () {
       .put('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -248,7 +252,7 @@ describe('References API', function () {
       .put('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -265,7 +269,7 @@ describe('References API', function () {
       .post('/api/references')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(409);
   });
 
@@ -273,7 +277,7 @@ describe('References API', function () {
     await request(app)
       .delete('/api/references')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -281,7 +285,7 @@ describe('References API', function () {
     await request(app)
       .delete('/api/references?sourceName=not-a-reference')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -289,7 +293,7 @@ describe('References API', function () {
     await request(app)
       .delete(`/api/references?sourceName=${reference1.source_name}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const collectionBundlesService = require('../services/collection-bundles-service');
+const collectionBundlesService = require('../services/stix/collection-bundles-service');
 const logger = require('../lib/logger');
 
 const availableForceImportParameters = [
@@ -25,13 +25,8 @@ function extractForceImportParameters(req) {
   return params;
 }
 
-exports.importBundle = async function (req, res) {
-  // Get the data from the request
-  const collectionBundleData = req.body;
-
-  const forceImportParameters = extractForceImportParameters(req);
-
-  const errorResult = {
+function createErrorResult() {
+  return {
     bundleErrors: {
       noCollection: false,
       moreThanOneCollection: false,
@@ -46,6 +41,15 @@ exports.importBundle = async function (req, res) {
       errors: [],
     },
   };
+}
+
+/**
+ * Validates the structure of a collection bundle
+ * @param {Object} collectionBundleData - The bundle data to validate
+ * @returns {Object} Validation result with { errorResult, errorFound, collections }
+ */
+function validateCollectionBundle(collectionBundleData) {
+  const errorResult = createErrorResult();
   let errorFound = false;
 
   // Find the x-mitre-collection objects
@@ -64,13 +68,14 @@ exports.importBundle = async function (req, res) {
     errorFound = true;
   }
 
-  // The collection must have an id.
+  // The collection must have an id
   if (collections.length > 0 && !collections[0].id) {
     logger.warn('Badly formatted collection in bundle, x-mitre-collection missing id.');
     errorResult.bundleErrors.badlyFormattedCollection = true;
     errorFound = true;
   }
 
+  // Validate bundle content
   const validationResult = collectionBundlesService.validateBundle(collectionBundleData);
   if (validationResult.errors.length > 0) {
     errorFound = true;
@@ -81,46 +86,165 @@ exports.importBundle = async function (req, res) {
       errorResult.objectErrors.summary.duplicateObjectInBundleCount =
         validationResult.duplicateObjectInBundleCount;
     }
-
     if (validationResult.invalidAttackSpecVersionCount > 0) {
       logger.warn(
-        `Collection bundle has ${validationResult.invalidAttackSpecVersionCount} objects with invalid ATT&CK Spec Versions.`,
+        `Collection bundle has ${validationResult.invalidAttackSpecVersionCount} objects with invalid ATT&CK Spec version.`,
       );
       errorResult.objectErrors.summary.invalidAttackSpecVersionCount =
         validationResult.invalidAttackSpecVersionCount;
     }
-
     errorResult.objectErrors.errors.push(...validationResult.errors);
   }
 
-  if (errorFound) {
-    // Determine if any of the errors are overridden by the forceImport flag
+  return { errorResult, errorFound, collections };
+}
 
-    // These errors do not have forceImport flags yet
-    if (
-      errorResult.bundleErrors.noCollection ||
-      errorResult.bundleErrors.moreThanOneCollection ||
-      errorResult.bundleErrors.badlyFormattedCollection ||
-      errorResult.objectErrors.summary.duplicateObjectInBundleCount > 0
-    ) {
+/**
+ * Checks if validation errors should prevent import
+ * @param {Object} errorResult - The error result from validation
+ * @param {boolean} errorFound - Whether any errors were found
+ * @param {Array} forceImportParameters - Parameters to override validation errors
+ * @returns {boolean} True if import should be blocked
+ */
+function shouldBlockImport(errorResult, errorFound, forceImportParameters) {
+  if (!errorFound) {
+    return false;
+  }
+
+  // These errors do not have forceImport flags yet
+  if (
+    errorResult.bundleErrors.noCollection ||
+    errorResult.bundleErrors.moreThanOneCollection ||
+    errorResult.bundleErrors.badlyFormattedCollection ||
+    errorResult.objectErrors.summary.duplicateObjectInBundleCount > 0
+  ) {
+    return true;
+  }
+
+  // Check the forceImport flag for overriding ATT&CK Spec version violations
+  if (
+    errorResult.objectErrors.summary.invalidAttackSpecVersionCount > 0 &&
+    !forceImportParameters.find(
+      (e) => e === collectionBundlesService.forceImportParameters.attackSpecVersionViolations,
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Stream import progress using Server-Sent Events (SSE)
+ */
+exports.streamImportBundle = async function (req, res) {
+  let heartbeatInterval;
+
+  try {
+    const collectionBundleData = req.body;
+    const forceImportParameters = extractForceImportParameters(req);
+
+    // Set up SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    // Heartbeat to prevent connection timeout
+    heartbeatInterval = setInterval(() => {
+      if (!res.destroyed) {
+        res.write(': heartbeat\n\n');
+      }
+    }, 30000);
+
+    // Handle client disconnect
+    req.on('close', () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    });
+
+    // Validate bundle using shared validation logic
+    const { errorResult, errorFound, collections } = validateCollectionBundle(collectionBundleData);
+
+    // Check if import should be blocked
+    if (shouldBlockImport(errorResult, errorFound, forceImportParameters)) {
       logger.error('Unable to import collection bundle due to an error in the bundle.');
-      return res.status(400).send(errorResult);
+      const event = `event: error\ndata: ${JSON.stringify(errorResult)}\n\n`;
+      res.write(event);
+      res.end();
+      return;
     }
 
-    // Check the forceImport flag for overriding ATT&CK Spec version violations
-    if (
-      errorResult.objectErrors.summary.invalidAttackSpecVersionCount > 0 &&
-      !forceImportParameters.find(
-        (e) => e === collectionBundlesService.forceImportParameters.attackSpecVersionViolations,
-      )
-    ) {
-      logger.error('Unable to import collection bundle due to an error in the bundle.');
-      return res.status(400).send(errorResult);
+    // Progress callback to send SSE events
+    const onProgress = (progress) => {
+      if (!res.destroyed) {
+        const event = `event: progress\ndata: ${JSON.stringify(progress)}\n\n`;
+        res.write(event);
+        // Flush immediately to ensure event is sent to client
+        if (res.flush && typeof res.flush === 'function') {
+          res.flush();
+        }
+      }
+    };
+
+    const options = {
+      previewOnly: req.query.previewOnly || req.query.checkOnly,
+      forceImportParameters,
+      onProgress,
+    };
+
+    // Import the collection bundle
+    const importedCollection = await collectionBundlesService.importBundle(
+      collections[0],
+      collectionBundleData,
+      options,
+    );
+
+    // Send final result
+    if (!res.destroyed) {
+      const event = `event: complete\ndata: ${JSON.stringify(importedCollection)}\n\n`;
+      res.write(event);
+      res.end();
     }
+
+    logger.debug('Success: Imported collection with id ' + importedCollection.stix.id);
+  } catch (err) {
+    logger.error('Import failed with error: ' + err);
+
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+    if (!res.destroyed) {
+      const errorData = {
+        message: err.message || 'Unknown error',
+        error: err.toString(),
+      };
+      const event = `event: error\ndata: ${JSON.stringify(errorData)}\n\n`;
+      res.write(event);
+      res.end();
+    }
+  } finally {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+  }
+};
+
+exports.importBundle = async function (req, res) {
+  // Get the data from the request
+  const collectionBundleData = req.body;
+  const forceImportParameters = extractForceImportParameters(req);
+
+  // Validate bundle using shared validation logic
+  const { errorResult, errorFound, collections } = validateCollectionBundle(collectionBundleData);
+
+  // Check if import should be blocked
+  if (shouldBlockImport(errorResult, errorFound, forceImportParameters)) {
+    logger.error('Unable to import collection bundle due to an error in the bundle.');
+    return res.status(400).send(errorResult);
   }
 
   const options = {
     previewOnly: req.query.previewOnly || req.query.checkOnly,
+    validateContents: req.query.validateContents === 'true',
     forceImportParameters,
   };
 

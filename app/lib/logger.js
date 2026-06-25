@@ -3,33 +3,6 @@
 const winston = require('winston');
 const config = require('../config/config');
 
-// function formatId(info) {
-//     if (info.level.toUpperCase() === 'HTTP') {
-//         return '';
-//     }
-//     else if (info.id) {
-//         return `[${ info.id }] `;
-//     }
-//     else {
-//         return '[ 000000000000 ] ';
-//     }
-// }
-
-// NOTE if you want to enable one-liner logs, use this instead:
-// const consoleFormat = winston.format.combine(
-//   winston.format.timestamp(),
-//   winston.format.printf(
-//     (info) => `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`,
-//   ),
-//   // winston.format.printf(info => `${ info.timestamp } [${ info.level.toUpperCase() }] ${ formatId(info) }${ info.message }`)
-// );
-
-const consoleFormat = winston.format.combine(
-  winston.format.timestamp(),
-  winston.format.errors({ stack: true }),
-  winston.format.prettyPrint(),
-);
-
 const logLevels = {
   error: 0,
   warn: 1,
@@ -38,6 +11,26 @@ const logLevels = {
   verbose: 4,
   debug: 5,
 };
+
+// Shared formats applied in every mode. `splat()` enables printf-style
+// interpolation (e.g. logger.warn('Bad request: %s', body)); without it winston
+// leaves the `%s` token uninterpolated and drops the extra argument.
+const baseFormats = [
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.splat(),
+];
+
+// Use detailed format for debug/verbose levels, cleaner one-liner format otherwise
+const consoleFormat =
+  config.logging.logLevel === 'debug' || config.logging.logLevel === 'verbose'
+    ? winston.format.combine(...baseFormats, winston.format.prettyPrint())
+    : winston.format.combine(
+        ...baseFormats,
+        winston.format.printf(
+          (info) => `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`,
+        ),
+      );
 
 const logger = winston.createLogger({
   format: consoleFormat,

@@ -33,7 +33,7 @@ For a full ATT&CK Workbench deployment, including the frontend application, see 
 
 - [Usage Guide](USAGE.md): Comprehensive instructions for installing, configuring, and administering the REST API
 - [Contributing Guide](CONTRIBUTING.md): Information for developers about contributing to the project
-- [Data Model](docs/data-model.md): Technical details about the data models used in the application
+- [Data Model](docs/developer/data-model.md): Technical details about the data models used in the application
 
 ## Technical Information
 
@@ -57,7 +57,7 @@ Copyright 2020-2025 MITRE Engenuity. Approved for public release. Document numbe
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+<http://www.apache.org/licenses/LICENSE-2.0>
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 

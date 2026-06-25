@@ -66,7 +66,7 @@ describe('Collection Bundles API Full-Size Test', function () {
           .post('/api/collection-bundles?checkOnly=true')
           .send(body)
           .set('Accept', 'application/json')
-          .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+          .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
           .expect(201)
           .expect('Content-Type', /json/);
 
@@ -85,7 +85,7 @@ describe('Collection Bundles API Full-Size Test', function () {
           .post('/api/collection-bundles?previewOnly=true')
           .send(body)
           .set('Accept', 'application/json')
-          .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+          .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
           .expect(201)
           .expect('Content-Type', /json/);
 
@@ -104,7 +104,7 @@ describe('Collection Bundles API Full-Size Test', function () {
           .post('/api/collection-bundles')
           .send(body)
           .set('Accept', 'application/json')
-          .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+          .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
           .expect(201)
           .expect('Content-Type', /json/);
 
@@ -121,7 +121,7 @@ describe('Collection Bundles API Full-Size Test', function () {
         const res = await request(app)
           .get(`/api/stix-bundles?domain=${domain}`)
           .set('Accept', 'application/json')
-          .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+          .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
           .expect(200)
           .expect('Content-Type', /json/);
 

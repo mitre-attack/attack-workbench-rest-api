@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -24,16 +24,16 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'x-mitre-asset',
     description: 'This is an asset.',
-    x_mitre_sectors: ['sector placeholder 1'],
+    x_mitre_sectors: ['Electric'],
     x_mitre_related_assets: [
       {
         name: 'related asset 1',
-        related_asset_sectors: ['related asset sector placeholder 1'],
+        related_asset_sectors: ['Water and Wastewater'],
         description: 'This is a related asset',
       },
       {
         name: 'related asset 2',
-        related_asset_sectors: ['related asset sector placeholder 2'],
+        related_asset_sectors: ['Manufacturing'],
         description: 'This is another related asset',
       },
     ],
@@ -49,6 +49,10 @@ describe('Assets API', function () {
   let passportCookie;
 
   before(async function () {
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Establish the database connection
     // Use an in-memory database that we spin up for the test
     await database.initializeConnection();
@@ -67,7 +71,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -84,7 +88,7 @@ describe('Assets API', function () {
       .post('/api/assets')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -98,7 +102,7 @@ describe('Assets API', function () {
       .post('/api/assets')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -124,7 +128,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -139,7 +143,7 @@ describe('Assets API', function () {
     await request(app)
       .get('/api/assets/not-an-id')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -147,7 +151,7 @@ describe('Assets API', function () {
     await request(app)
       .get('/api/assets/not-an-id?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -155,7 +159,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets/' + asset1.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -199,7 +203,7 @@ describe('Assets API', function () {
       .put('/api/assets/' + asset1.stix.id + '/modified/' + originalModified)
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -211,21 +215,20 @@ describe('Assets API', function () {
   });
 
   it('POST /api/assets does not create an asset with the same id and modified date', async function () {
-    const body = asset1;
+    const body = cloneForCreate(asset1);
+    // Keep the same modified date to trigger duplicate detection
+    body.stix.modified = asset1.stix.modified;
     await request(app)
       .post('/api/assets')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(409);
   });
 
   let asset2;
   it('POST /api/assets should create a new version of an asset with a duplicate stix.id but different stix.modified date', async function () {
-    asset2 = _.cloneDeep(asset1);
-    asset2._id = undefined;
-    asset2.__t = undefined;
-    asset2.__v = undefined;
+    asset2 = cloneForCreate(asset1);
     const timestamp = new Date().toISOString();
     asset2.stix.modified = timestamp;
     const body = asset2;
@@ -233,7 +236,7 @@ describe('Assets API', function () {
       .post('/api/assets')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -244,10 +247,7 @@ describe('Assets API', function () {
 
   let asset3;
   it('POST /api/assets should create a new version of an asset with a duplicate stix.id but different stix.modified date', async function () {
-    asset3 = _.cloneDeep(asset1);
-    asset3._id = undefined;
-    asset3.__t = undefined;
-    asset3.__v = undefined;
+    asset3 = cloneForCreate(asset1);
     const timestamp = new Date().toISOString();
     asset3.stix.modified = timestamp;
     const body = asset3;
@@ -255,7 +255,7 @@ describe('Assets API', function () {
       .post('/api/assets')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -268,7 +268,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets/' + asset3.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -286,7 +286,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets/' + asset1.stix.id + '?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -301,7 +301,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets/' + asset1.stix.id + '/modified/' + asset1.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -317,7 +317,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets/' + asset2.stix.id + '/modified/' + asset2.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -332,21 +332,21 @@ describe('Assets API', function () {
   it('DELETE /api/assets/:id should not delete an asset when the id cannot be found', async function () {
     await request(app)
       .delete('/api/assets/not-an-id')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
   it('DELETE /api/assets/:id/modified/:modified deletes an asset', async function () {
     await request(app)
       .delete('/api/assets/' + asset1.stix.id + '/modified/' + asset1.stix.modified)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
   it('DELETE /api/assets/:id should delete all the assets with the same stix id', async function () {
     await request(app)
       .delete('/api/assets/' + asset2.stix.id)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
@@ -354,7 +354,7 @@ describe('Assets API', function () {
     const res = await request(app)
       .get('/api/assets')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

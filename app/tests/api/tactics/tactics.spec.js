@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -24,7 +24,7 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'x-mitre-tactic',
     description: 'This is a tactic. yellow.',
-    external_references: [{ source_name: 'source-1', external_id: 's1' }],
+    external_references: [{ source_name: 'mitre-attack', external_id: 'TA9001' }],
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
   },
 };
@@ -41,6 +41,10 @@ describe('Tactics API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -52,7 +56,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -69,7 +73,7 @@ describe('Tactics API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -83,7 +87,7 @@ describe('Tactics API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -104,7 +108,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -119,7 +123,7 @@ describe('Tactics API', function () {
     await request(app)
       .get('/api/tactics/not-an-id')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -127,7 +131,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics/' + tactic1.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -165,7 +169,7 @@ describe('Tactics API', function () {
       .put('/api/tactics/' + tactic1.stix.id + '/modified/' + originalModified)
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -177,22 +181,21 @@ describe('Tactics API', function () {
   });
 
   it('POST /api/tactics does not create a tactic with the same id and modified date', async function () {
-    const body = tactic1;
-    // We expect to get the created tactic
+    // Clone the tactic to remove backend-controlled fields, but keep the same modified date
+    const body = cloneForCreate(tactic1);
+    body.stix.modified = tactic1.stix.modified; // Keep the same modified date to trigger duplicate check
+    // We expect to get a 409 Conflict error
     await request(app)
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(409);
   });
 
   let tactic2;
   it('POST /api/tactics should create a new version of a tactic with a duplicate stix.id but different stix.modified date', async function () {
-    tactic2 = _.cloneDeep(tactic1);
-    tactic2._id = undefined;
-    tactic2.__t = undefined;
-    tactic2.__v = undefined;
+    tactic2 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic2.stix.description = 'Still a tactic. Red.';
     tactic2.stix.modified = timestamp;
@@ -201,7 +204,7 @@ describe('Tactics API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -212,10 +215,7 @@ describe('Tactics API', function () {
 
   let tactic3;
   it('POST /api/tactics should create a new version of a tactic with a duplicate stix.id but different stix.modified date', async function () {
-    tactic3 = _.cloneDeep(tactic1);
-    tactic3._id = undefined;
-    tactic3.__t = undefined;
-    tactic3.__v = undefined;
+    tactic3 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic3.stix.description = 'Still a tactic. Violet.';
     tactic3.stix.modified = timestamp;
@@ -224,7 +224,7 @@ describe('Tactics API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -237,7 +237,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics/' + tactic3.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -255,7 +255,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics/' + tactic1.stix.id + '?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -270,7 +270,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics/' + tactic1.stix.id + '/modified/' + tactic1.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -286,7 +286,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics/' + tactic2.stix.id + '/modified/' + tactic2.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -302,7 +302,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics?search=violet')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -324,7 +324,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics?search=yellow')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -338,21 +338,21 @@ describe('Tactics API', function () {
   it('DELETE /api/tactics/:id should not delete a tactic when the id cannot be found', async function () {
     await request(app)
       .delete('/api/tactics/not-an-id')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
   it('DELETE /api/tactics/:id/modified/:modified deletes a tactic', async function () {
     await request(app)
       .delete('/api/tactics/' + tactic1.stix.id + '/modified/' + tactic1.stix.modified)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
   it('DELETE /api/tactics/:id should delete all the tactics with the same stix id', async function () {
     await request(app)
       .delete('/api/tactics/' + tactic2.stix.id)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
@@ -360,7 +360,7 @@ describe('Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

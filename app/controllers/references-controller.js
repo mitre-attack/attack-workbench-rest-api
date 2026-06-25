@@ -1,6 +1,6 @@
 'use strict';
 
-const referencesService = require('../services/references-service');
+const referencesService = require('../services/system/references-service');
 const logger = require('../lib/logger');
 const { DuplicateIdError } = require('../exceptions');
 

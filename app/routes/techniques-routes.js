@@ -41,6 +41,26 @@ router
   );
 
 router
+  .route('/techniques/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), techniquesController.revoke);
+
+router
+  .route('/techniques/:stixId/convert-to-subtechnique')
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    techniquesController.convertToSubtechnique,
+  );
+
+router
+  .route('/techniques/:stixId/convert-to-technique')
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.editorOrHigher),
+    techniquesController.convertToTechnique,
+  );
+
+router
   .route('/techniques/:stixId/modified/:modified/tactics')
   .get(
     authn.authenticate,

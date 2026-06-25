@@ -4,14 +4,14 @@ const request = require('supertest');
 const { expect } = require('expect');
 
 const login = require('../../shared/login');
-
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const collectionBundlesService = require('../../../services/collection-bundles-service');
+const collectionBundlesService = require('../../../services/stix/collection-bundles-service');
 
 async function readJson(path) {
   const data = await fs.readFile(require.resolve(path));
@@ -29,6 +29,14 @@ describe('Techniques with Tactics API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation. NOTE: this suite seeds via the collection-bundle
+    // import path, which records per-object ADM issues (import-fidelity contract)
+    // rather than rejecting them — so the bundle below is imported even though it
+    // is not fully ADM-compliant. This suite exercises the technique<->tactic
+    // relationship endpoints, not request-level ADM enforcement.
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -54,7 +62,7 @@ describe('Techniques with Tactics API', function () {
     const res = await request(app)
       .get('/api/techniques')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -71,7 +79,7 @@ describe('Techniques with Tactics API', function () {
     const res = await request(app)
       .get('/api/tactics')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -85,7 +93,7 @@ describe('Techniques with Tactics API', function () {
     await request(app)
       .get(`/api/techniques/not-an-id/modified/2022-01-01T00:00:00.000Z/tactics`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -93,7 +101,7 @@ describe('Techniques with Tactics API', function () {
     const res = await request(app)
       .get(`/api/techniques/${technique1.stix.id}/modified/${technique1.stix.modified}/tactics`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -107,7 +115,7 @@ describe('Techniques with Tactics API', function () {
     const res = await request(app)
       .get(`/api/techniques/${technique2.stix.id}/modified/${technique2.stix.modified}/tactics`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -123,7 +131,7 @@ describe('Techniques with Tactics API', function () {
         `/api/techniques/${technique2.stix.id}/modified/${technique2.stix.modified}/tactics?offset=0&limit=2&includePagination=true`,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

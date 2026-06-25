@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -55,6 +55,10 @@ describe('Data Components API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -66,7 +70,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -83,7 +87,7 @@ describe('Data Components API', function () {
       .post('/api/data-components')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -97,7 +101,7 @@ describe('Data Components API', function () {
       .post('/api/data-components')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -119,7 +123,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -130,11 +134,55 @@ describe('Data Components API', function () {
     expect(dataComponent.length).toBe(1);
   });
 
+  it('GET /api/data-components should return data components containing the domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=enterprise-attack')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(1);
+    expect(dataComponents[0].stix.x_mitre_domains).toContain('enterprise-attack');
+  });
+
+  it('GET /api/data-components should return data components containing any provided domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=enterprise-attack&domain=mobile-attack')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(1);
+    expect(dataComponents[0].stix.x_mitre_domains).toContain('enterprise-attack');
+  });
+
+  it('GET /api/data-components should not return any data components when searching for a non-existent domain', async function () {
+    const res = await request(app)
+      .get('/api/data-components?domain=not-a-domain')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const dataComponents = res.body;
+    expect(dataComponents).toBeDefined();
+    expect(Array.isArray(dataComponents)).toBe(true);
+    expect(dataComponents.length).toBe(0);
+  });
+
   it('GET /api/data-components/:id/channels returns the log source channels of the added data component', async function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent1.stix.id + '/channels')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -151,7 +199,7 @@ describe('Data Components API', function () {
     await request(app)
       .get('/api/data-components/not-a-real-dc-id/channels')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -159,7 +207,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent1.stix.id + '/log-sources')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -178,7 +226,7 @@ describe('Data Components API', function () {
     await request(app)
       .get('/api/data-components/not-a-real-dc-id/log-sources')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -186,7 +234,7 @@ describe('Data Components API', function () {
     await request(app)
       .get('/api/data-components/not-an-id')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -194,7 +242,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent1.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -238,7 +286,7 @@ describe('Data Components API', function () {
       .put('/api/data-components/' + dataComponent1.stix.id + '/modified/' + originalModified)
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -250,21 +298,18 @@ describe('Data Components API', function () {
   });
 
   it('POST /api/data-components does not create a data component with the same id and modified date', async function () {
-    const body = dataComponent1;
+    const body = cloneForCreate(dataComponent1);
     await request(app)
       .post('/api/data-components')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(409);
   });
 
   let dataComponent2;
   it('POST /api/data-components should create a new version of a data component with a duplicate stix.id but different stix.modified date', async function () {
-    dataComponent2 = _.cloneDeep(dataComponent1);
-    dataComponent2._id = undefined;
-    dataComponent2.__t = undefined;
-    dataComponent2.__v = undefined;
+    dataComponent2 = cloneForCreate(dataComponent1);
     const timestamp = new Date().toISOString();
     dataComponent2.stix.modified = timestamp;
     const body = dataComponent2;
@@ -272,7 +317,7 @@ describe('Data Components API', function () {
       .post('/api/data-components')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -285,7 +330,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent2.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -303,7 +348,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components/' + dataComponent1.stix.id + '?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -323,7 +368,7 @@ describe('Data Components API', function () {
           dataComponent1.stix.modified,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -344,7 +389,7 @@ describe('Data Components API', function () {
           dataComponent2.stix.modified,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -358,10 +403,7 @@ describe('Data Components API', function () {
 
   let dataComponent3;
   it('POST /api/data-components should create a new version of a data component with a duplicate stix.id but different stix.modified date', async function () {
-    dataComponent3 = _.cloneDeep(dataComponent1);
-    dataComponent3._id = undefined;
-    dataComponent3.__t = undefined;
-    dataComponent3.__v = undefined;
+    dataComponent3 = cloneForCreate(dataComponent1);
     const timestamp = new Date().toISOString();
     dataComponent3.stix.modified = timestamp;
     const body = dataComponent3;
@@ -369,7 +411,7 @@ describe('Data Components API', function () {
       .post('/api/data-components')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -381,7 +423,7 @@ describe('Data Components API', function () {
   it('DELETE /api/data-components/:id should not delete a data component when the id cannot be found', async function () {
     await request(app)
       .delete('/api/data-components/not-an-id')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -393,14 +435,14 @@ describe('Data Components API', function () {
           '/modified/' +
           dataComponent1.stix.modified,
       )
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
   it('DELETE /api/data-components/:id should delete all the data components with the same stix id', async function () {
     await request(app)
       .delete('/api/data-components/' + dataComponent2.stix.id)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
@@ -408,7 +450,7 @@ describe('Data Components API', function () {
     const res = await request(app)
       .get('/api/data-components')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

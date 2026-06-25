@@ -430,6 +430,108 @@ const collectionData6 = {
   },
 };
 
+const attackIdsByObjectId = new Map([
+  ['attack-pattern--2204c371-6100-4ae0-82f3-25c07c29772a', 'T9001'],
+  ['attack-pattern--82f04b1e-5371-4a6f-be06-411f0f43b483', 'T9002'],
+  ['attack-pattern--14fbfb6a-c4d9-4c3b-a7ef-f8df23e3b22b', 'T9003'],
+  ['attack-pattern--fb4f094c-ad39-4dba-b459-5e314f6d6c8d', 'T9004'],
+  ['attack-pattern--44fc382e-0b71-4f5d-9110-fb2e35452d98', 'T9005'],
+  ['course-of-action--25dc1ce8-eb55-4333-ae30-a7cb4f5894a1', 'M9001'],
+  ['course-of-action--e944670c-d03a-4e93-a21c-b3d4c53ec4c9', 'M9002'],
+  ['malware--04227b24-7817-4de1-9050-b7b1b57f5866', 'S9001'],
+  ['intrusion-set--d69e568e-9ac8-4c08-b32c-d93b43ba9172', 'G9001'],
+]);
+
+function setAttackExternalReference(stixObject, sourceName, externalId, urlSegment) {
+  const existingReferences = Array.isArray(stixObject.external_references)
+    ? stixObject.external_references.slice(1)
+    : [];
+
+  stixObject.external_references = [
+    {
+      source_name: sourceName,
+      external_id: externalId,
+      url: `https://attack.mitre.org/${urlSegment}/${externalId}`,
+    },
+    ...existingReferences,
+  ];
+}
+
+function normalizeBundleObjectForAdm(stixObject) {
+  if (stixObject.type === 'x-mitre-collection') {
+    stixObject.x_mitre_version = stixObject.x_mitre_version || '1.0';
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    return;
+  }
+
+  if (stixObject.type === 'attack-pattern') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'techniques');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    stixObject.kill_chain_phases = [{ kill_chain_name: 'mitre-attack', phase_name: 'execution' }];
+    stixObject.x_mitre_data_sources = ['Process: Process Creation'];
+    stixObject.x_mitre_platforms = ['Linux'];
+    delete stixObject.x_mitre_impact_type;
+    return;
+  }
+
+  if (stixObject.type === 'course-of-action') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'mitigations');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    return;
+  }
+
+  if (stixObject.type === 'malware') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'software');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['mobile-attack'];
+    stixObject.x_mitre_platforms = ['Android'];
+    stixObject.is_family = false;
+    return;
+  }
+
+  if (stixObject.type === 'intrusion-set') {
+    const externalId = attackIdsByObjectId.get(stixObject.id);
+    if (externalId) {
+      setAttackExternalReference(stixObject, 'mitre-attack', externalId, 'groups');
+    }
+    stixObject.x_mitre_attack_spec_version =
+      stixObject.x_mitre_attack_spec_version || currentAttackSpecVersion;
+    stixObject.x_mitre_domains = ['enterprise-attack'];
+    stixObject.aliases = [
+      stixObject.name,
+      ...(stixObject.aliases || []).filter((alias) => alias !== stixObject.name),
+    ];
+  }
+}
+
+function normalizeBundleForAdm(bundle) {
+  for (const stixObject of bundle.objects) {
+    normalizeBundleObjectForAdm(stixObject);
+  }
+}
+
+normalizeBundleForAdm(collectionBundleData);
+normalizeBundleForAdm(collectionBundleData2);
+normalizeBundleForAdm(collectionBundleData4);
+normalizeBundleForAdm(collectionBundleData5);
+collectionData6.stix.x_mitre_version = '1.0';
+collectionData6.stix.x_mitre_attack_spec_version = currentAttackSpecVersion;
+
 describe('Collection Bundles Basic API', function () {
   let app;
   let passportCookie;
@@ -441,6 +543,10 @@ describe('Collection Bundles Basic API', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; reusable valid fixture objects are normalized for ADM below
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -455,7 +561,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -465,7 +571,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
     const errorResult = response.body;
@@ -478,7 +584,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
     const errorResult = response.body;
@@ -491,7 +597,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
     const errorResult = response.body;
@@ -504,7 +610,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
 
     const errorResult = response.body;
@@ -517,7 +623,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles?forceImport=attack-spec-version-violations')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201);
   });
 
@@ -527,7 +633,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles?checkOnly=true')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -545,7 +651,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles?previewOnly=true')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -561,14 +667,14 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
     collection1 = response.body;
     expect(collection1).toBeDefined();
     expect(collection1.workspace.import_categories.additions.length).toBe(8);
-    expect(collection1.workspace.import_categories.errors.length).toBe(4);
+    expect(collection1.workspace.import_categories.errors.length).toBe(5);
   });
 
   it('POST /api/collection-bundles does not show a successful preview with a duplicate collection bundle', async function () {
@@ -577,7 +683,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles?checkOnly=true')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -587,7 +693,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -597,7 +703,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles?forceImport=duplicate-collection')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201);
   });
 
@@ -613,7 +719,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(updatedCollection)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -621,14 +727,14 @@ describe('Collection Bundles Basic API', function () {
     expect(collection2).toBeDefined();
     expect(collection2.workspace.import_categories.changes.length).toBe(1);
     expect(collection2.workspace.import_categories.duplicates.length).toBe(6);
-    expect(collection2.workspace.import_categories.errors.length).toBe(4);
+    expect(collection2.workspace.import_categories.errors.length).toBe(5);
   });
 
   it('GET /api/references returns the malware added reference', async function () {
     const response = await request(app)
       .get('/api/references?sourceName=' + encodeURIComponent('malware-1 source'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -642,7 +748,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get('/api/references?sourceName=' + encodeURIComponent('xyzzy'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -657,7 +763,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get('/api/references?sourceName=' + encodeURIComponent('group source'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -672,7 +778,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get('/api/references?sourceName=' + encodeURIComponent('group-xyzzy'))
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -687,7 +793,7 @@ describe('Collection Bundles Basic API', function () {
     await request(app)
       .get('/api/collection-bundles?collectionId=not-an-id')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -697,7 +803,7 @@ describe('Collection Bundles Basic API', function () {
         `/api/collection-bundles?previewOnly=true&collectionId=x-mitre-collection--30ee11cf-0a05-4d9e-ab54-9b8563669647`,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -712,7 +818,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get(`/api/collection-bundles?collectionId=${collectionId}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -730,7 +836,7 @@ describe('Collection Bundles Basic API', function () {
         `/api/collection-bundles?collectionId=${collectionId}&collectionModified=${encodeURIComponent(collectionTimestamp)}`,
       )
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -747,7 +853,7 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collections')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201);
   });
 
@@ -755,7 +861,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get(`/api/collection-bundles?collectionId=${collectionId6}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -770,7 +876,7 @@ describe('Collection Bundles Basic API', function () {
     const res = await request(app)
       .get(`/api/collection-bundles?collectionId=${collectionId6}&includeNotes=true`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -795,13 +901,128 @@ describe('Collection Bundles Basic API', function () {
       .post('/api/collection-bundles')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
     // We expect to get the created collection object
     const collection = res.body;
     expect(collection).toBeDefined();
+  });
+
+  after(async function () {
+    await database.closeConnection();
+  });
+});
+
+describe('Collection Bundles Streaming API', function () {
+  let app;
+  let passportCookie;
+
+  before(async function () {
+    // Establish the database connection
+    await database.initializeConnection();
+
+    // Check for a valid database configuration
+    await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; reusable valid fixture objects are normalized for ADM below
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
+    // Initialize the express app
+    app = await require('../../../index').initializeApp();
+
+    // Log into the app
+    passportCookie = await login.loginAnonymous(app);
+  });
+
+  it('POST /api/collection-bundles?stream=true returns SSE headers', async function () {
+    const body = collectionBundleData;
+
+    // Just verify we get SSE headers back - don't try to parse the full stream
+    const response = await request(app)
+      .post('/api/collection-bundles?stream=true')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+    // Verify SSE headers
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('text/event-stream');
+    expect(response.headers['cache-control']).toBe('no-cache');
+    expect(response.headers.connection).toBe('keep-alive');
+  });
+
+  it('POST /api/collection-bundles?stream=true returns SSE headers for errors', async function () {
+    const body = collectionBundleData3; // Empty bundle with no collection
+
+    const response = await request(app)
+      .post('/api/collection-bundles?stream=true')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+    // Should still return SSE headers even for errors
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('text/event-stream');
+  });
+
+  it('POST /api/collection-bundles?stream=true&previewOnly=true returns SSE headers', async function () {
+    const body = collectionBundleData;
+
+    const response = await request(app)
+      .post('/api/collection-bundles?stream=true&previewOnly=true')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('text/event-stream');
+  });
+
+  it('POST /api/collection-bundles without stream parameter uses regular import (no SSE)', async function () {
+    // Delete the previously imported collection so we can reimport it
+    const timestamp = new Date().toISOString();
+    const updatedBundle = _.cloneDeep(collectionBundleData);
+    updatedBundle.objects[0].modified = timestamp;
+    updatedBundle.objects[0].id = 'x-mitre-collection--aaaaaaaa-0a05-4d9e-ab54-9b8563669647';
+
+    const body = updatedBundle;
+    const response = await request(app)
+      .post('/api/collection-bundles')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201)
+      .expect('Content-Type', /json/);
+
+    // Verify standard JSON response, not SSE
+    expect(response.headers['content-type']).toMatch(/json/);
+    expect(response.headers['content-type']).not.toBe('text/event-stream');
+
+    // Verify we got a collection object directly
+    const collection = response.body;
+    expect(collection).toBeDefined();
+    expect(collection.workspace).toBeDefined();
+    expect(collection.stix).toBeDefined();
+  });
+
+  it('POST /api/collection-bundles?stream=true with forceImport returns SSE headers', async function () {
+    const timestamp = new Date().toISOString();
+    const uniqueBundle = _.cloneDeep(collectionBundleData);
+    uniqueBundle.objects[0].modified = timestamp;
+    uniqueBundle.objects[0].id = 'x-mitre-collection--bbbbbbbb-0a05-4d9e-ab54-9b8563669647';
+
+    const body = uniqueBundle;
+    const response = await request(app)
+      .post('/api/collection-bundles?stream=true&forceImport=duplicate-collection')
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('text/event-stream');
   });
 
   after(async function () {

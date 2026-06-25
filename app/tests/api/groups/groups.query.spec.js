@@ -1,10 +1,9 @@
-const fs = require('fs').promises;
-
 const request = require('supertest');
 const { expect } = require('expect');
 const _ = require('lodash');
 const uuid = require('uuid');
 
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
@@ -13,125 +12,116 @@ logger.level = 'debug';
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const userAccountsService = require('../../../services/user-accounts-service');
-const groupsService = require('../../../services/groups-service');
+const userAccountsService = require('../../../services/system/user-accounts-service');
+const groupsService = require('../../../services/stix/groups-service');
+
+// Base group used to derive all of the seeded query fixtures. Each created group
+// deep-clones this and overrides only the fields a given test cares about.
+const baseGroup = {
+  workspace: {
+    workflow: {},
+  },
+  stix: {
+    spec_version: '2.1',
+    type: 'intrusion-set',
+    description: 'This is a group.',
+    external_references: [],
+    object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+    created_by_ref: 'identity--c78cb6e5-0c4b-4611-8297-d1b8b55e40b5',
+    x_mitre_version: '1.0',
+    x_mitre_domains: ['enterprise-attack'],
+  },
+};
 
 function asyncWait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function readJson(path) {
-  const data = await fs.readFile(require.resolve(path));
-  return JSON.parse(data);
-}
+async function configureAndLoadGroups(baseGroup, userAccountId1, userAccountId2) {
+  // Helper: create a group from config
+  async function createGroup(overrides, userAccountId) {
+    const data = _.cloneDeep(baseGroup);
+    Object.assign(data.stix, overrides.stix || {});
+    if (overrides.workspace) {
+      data.workspace = { ...data.workspace, ...overrides.workspace };
+    }
 
-function makeExternalReference(attackId) {
-  return {
-    source_name: 'mitre-attack',
-    external_id: attackId,
-    url: `https://attack.mitre.org/groups/${attackId}`,
-  };
-}
+    if (!data.stix.name) {
+      data.stix.name = `group-${data.stix.x_mitre_deprecated}-undefined`;
+    }
+    if (!data.stix.created) {
+      const timestamp = new Date().toISOString();
+      data.stix.created = timestamp;
+      data.stix.modified = timestamp;
+    }
 
-async function configureGroups(baseGroup, userAccountId1, userAccountId2) {
-  const groups = [];
-  // x_mitre_deprecated,revoked undefined (user account 1)
-  const data1a = _.cloneDeep(baseGroup);
-  data1a.stix.external_references.push(makeExternalReference('G0001'));
-  data1a.userAccountId = userAccountId1;
-  groups.push(data1a);
+    return groupsService.create(data, { import: false, userAccountId });
+  }
 
-  // x_mitre_deprecated,revoked undefined (user account 2)
-  const data1b = _.cloneDeep(baseGroup);
-  data1b.stix.external_references.push(makeExternalReference('G0010'));
-  data1b.userAccountId = userAccountId2;
-  groups.push(data1b);
+  // group 1a: x_mitre_deprecated,revoked undefined (user account 1)
+  const group1a = await createGroup({}, userAccountId1);
 
-  // x_mitre_deprecated = false, revoked = false
-  const data2 = _.cloneDeep(baseGroup);
-  data2.stix.external_references.push(makeExternalReference('G0002'));
-  data2.stix.x_mitre_deprecated = false;
-  data2.stix.revoked = false;
-  data2.workspace.workflow = { state: 'work-in-progress' };
-  data2.userAccountId = userAccountId1;
-  groups.push(data2);
+  // group 1b: x_mitre_deprecated,revoked undefined (user account 2)
+  await createGroup({}, userAccountId2);
 
-  // x_mitre_deprecated = true, revoked = false
-  const data3 = _.cloneDeep(baseGroup);
-  data3.stix.external_references.push(makeExternalReference('G0003'));
-  data3.stix.x_mitre_deprecated = true;
-  data3.stix.revoked = false;
-  data3.workspace.workflow = { state: 'awaiting-review' };
-  data3.userAccountId = userAccountId1;
-  groups.push(data3);
+  // group 2: x_mitre_deprecated = false, state = work-in-progress
+  await createGroup(
+    { stix: { x_mitre_deprecated: false }, workspace: { workflow: { state: 'work-in-progress' } } },
+    userAccountId1,
+  );
 
-  // x_mitre_deprecated = false, revoked = true
-  const data4 = _.cloneDeep(baseGroup);
-  data4.stix.external_references.push(makeExternalReference('G0004'));
-  data4.stix.x_mitre_deprecated = false;
-  data4.stix.revoked = true;
-  data4.workspace.workflow = { state: 'awaiting-review' };
-  data4.userAccountId = userAccountId1;
-  groups.push(data4);
+  // group 3: x_mitre_deprecated = true, state = awaiting-review
+  await createGroup(
+    { stix: { x_mitre_deprecated: true }, workspace: { workflow: { state: 'awaiting-review' } } },
+    userAccountId1,
+  );
 
-  // multiple versions, last version has x_mitre_deprecated = true, revoked = true
-  const data5a = _.cloneDeep(baseGroup);
+  // group 4: revoked via the revoke workflow (x_mitre_deprecated = false)
+  // Use group1a as the revoking object so we don't add extra groups to the count
+  const group4 = await createGroup(
+    { stix: { x_mitre_deprecated: false }, workspace: { workflow: { state: 'awaiting-review' } } },
+    userAccountId1,
+  );
+  await groupsService.revoke(group4.stix.id, {
+    revoking: { stixId: group1a.stix.id, modified: group1a.stix.modified },
+  });
+
+  // group 5: multiple versions, last version has x_mitre_deprecated = true and is revoked
   const id = `intrusion-set--${uuid.v4()}`;
-  data5a.stix.external_references.push(makeExternalReference('G0005'));
+  const createdTimestamp = new Date().toISOString();
+
+  const data5a = _.cloneDeep(baseGroup);
   data5a.stix.id = id;
   data5a.stix.name = 'multiple-versions';
   data5a.workspace.workflow = { state: 'awaiting-review' };
-  const createdTimestamp = new Date().toISOString();
   data5a.stix.created = createdTimestamp;
   data5a.stix.modified = createdTimestamp;
-  data5a.userAccountId = userAccountId1;
-  groups.push(data5a);
+  await groupsService.create(data5a, { import: false, userAccountId: userAccountId1 });
 
   await asyncWait(10); // wait so the modified timestamp can change
   const data5b = _.cloneDeep(baseGroup);
-  data5b.stix.external_references.push(makeExternalReference('G0005'));
   data5b.stix.id = id;
   data5b.stix.name = 'multiple-versions';
   data5b.workspace.workflow = { state: 'awaiting-review' };
   data5b.stix.created = createdTimestamp;
-  let timestamp = new Date().toISOString();
-  data5b.stix.modified = timestamp;
-  data5b.userAccountId = userAccountId1;
-  groups.push(data5b);
+  data5b.stix.modified = new Date().toISOString();
+  await groupsService.create(data5b, { import: false, userAccountId: userAccountId1 });
 
   await asyncWait(10);
+  // Create version 5c with deprecated flag
   const data5c = _.cloneDeep(baseGroup);
-  data5c.stix.external_references.push(makeExternalReference('G0005'));
   data5c.stix.id = id;
   data5c.stix.name = 'multiple-versions';
   data5c.workspace.workflow = { state: 'awaiting-review' };
   data5c.stix.x_mitre_deprecated = true;
-  data5c.stix.revoked = true;
   data5c.stix.created = createdTimestamp;
-  timestamp = new Date().toISOString();
-  data5c.stix.modified = timestamp;
-  data5c.userAccountId = userAccountId2;
-  groups.push(data5c);
+  data5c.stix.modified = new Date().toISOString();
+  await groupsService.create(data5c, { import: false, userAccountId: userAccountId2 });
 
-  //    logger.info(JSON.stringify(groups, null, 4));
-
-  return groups;
-}
-
-async function loadGroups(groups) {
-  for (const group of groups) {
-    if (!group.stix.name) {
-      group.stix.name = `group-${group.stix.x_mitre_deprecated}-${group.stix.revoked}`;
-    }
-
-    if (!group.stix.created) {
-      const timestamp = new Date().toISOString();
-      group.stix.created = timestamp;
-      group.stix.modified = timestamp;
-    }
-
-    await groupsService.create(group, { import: false, userAccountId: group.userAccountId });
-  }
+  // Revoke group5 using group1a as the revoking object
+  await groupsService.revoke(id, {
+    revoking: { stixId: group1a.stix.id, modified: group1a.stix.modified },
+  });
 }
 
 const userAccountData1 = {
@@ -165,6 +155,10 @@ describe('Groups API Queries', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -174,16 +168,14 @@ describe('Groups API Queries', function () {
     userAccount1 = await userAccountsService.create(userAccountData1);
     userAccount2 = await userAccountsService.create(userAccountData2);
 
-    const baseGroup = await readJson('./groups.query.json');
-    const groups = await configureGroups(baseGroup, userAccount1.id, userAccount2.id);
-    await loadGroups(groups);
+    await configureAndLoadGroups(baseGroup, userAccount1.id, userAccount2.id);
   });
 
   it('GET /api/groups should return 3 of the preloaded groups', async function () {
     const res = await request(app)
       .get('/api/groups')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -198,7 +190,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?includeDeprecated=false')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -213,7 +205,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?includeDeprecated=true')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -228,7 +220,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?includeRevoked=false')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -243,7 +235,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?includeRevoked=true')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -258,7 +250,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?state=work-in-progress')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -276,14 +268,13 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get('/api/groups?search=G0001')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
     // We expect to get the latest group with the correct ATT&CK ID
     const groups = res.body;
     logger.info(`Received groups: ${groups}`);
-    console.log(`Received groups: ${JSON.stringify(groups)}`);
     expect(groups).toBeDefined();
     expect(Array.isArray(groups)).toBe(true);
     expect(groups.length).toBe(1);
@@ -297,7 +288,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get(`/api/groups?lastUpdatedBy=${userAccount1.id}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -315,7 +306,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get(`/api/groups?lastUpdatedBy=${userAccount2.id}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -332,7 +323,7 @@ describe('Groups API Queries', function () {
     const res = await request(app)
       .get(`/api/groups?lastUpdatedBy=${userAccount1.id}&lastUpdatedBy=${userAccount2.id}`)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

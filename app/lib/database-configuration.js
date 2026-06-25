@@ -4,9 +4,9 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const config = require('../config/config');
-const identitiesService = require('../services/identities-service');
-const userAccountsService = require('../services/user-accounts-service');
-const systemConfigurationService = require('../services/system-configuration-service');
+const identitiesService = require('../services/stix/identities-service');
+const userAccountsService = require('../services/system/user-accounts-service');
+const systemConfigurationService = require('../services/system/system-configuration-service');
 const logger = require('../lib/logger');
 const AttackObject = require('../models/attack-object-model');
 const CollectionIndex = require('../models/collection-index-model');
@@ -17,6 +17,11 @@ const {
   AnonymousUserAccountNotFoundError,
   AnonymousUserAccountNotSetError,
 } = require('../exceptions');
+
+// Ensure event listeners are registered before checkSystemConfiguration() emits events.
+// ValidationBypassesService registers its listeners at module load time, so requiring it
+// here guarantees they are in place before the SYSTEM_CONFIGURATION_IDENTITY_CHANGED event fires.
+require('../services/system/validation-bypasses-service');
 
 async function createPlaceholderOrganizationIdentity() {
   // Create placeholder identity object
@@ -257,10 +262,16 @@ async function checkForStaticMarkingDefinitions() {
   }
 }
 
+async function checkForStaticBypassRules() {
+  const validationBypassesService = require('../services/system/validation-bypasses-service');
+  await validationBypassesService.loadStaticRules(config.configurationFiles.staticBypassRulesPath);
+}
+
 exports.checkSystemConfiguration = async function () {
   logger.info(`Performing system configuration check...`);
   await checkForOrganizationIdentity();
   await checkForAnonymousUserAccount();
   await checkForInvalidEnterpriseCollectionId();
   await checkForStaticMarkingDefinitions();
+  await checkForStaticBypassRules();
 };

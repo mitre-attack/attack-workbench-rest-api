@@ -1,0 +1,97 @@
+paths:
+  /api/reports/link-by-id/missing:
+    get:
+      summary: 'Get objects with missing LinkById references'
+      operationId: 'reports-get-missing-linkbyid'
+      description: |
+        This endpoint generates a list of ATT&CK objects and/or relationships that directly
+        mention attack.mitre.org in their descriptions, indicating that they are likely missing
+        a reference using the (LinkById: X####) pattern.
+      tags:
+        - 'Reports'
+      parameters:
+        - name: type
+          in: query
+          description: |
+            Filter results by STIX type. If not specified, returns all types including relationships.
+            Use 'relationship' to get only relationships, or use any ATT&CK object type
+            (e.g., 'attack-pattern', 'x-mitre-tactic', 'intrusion-set', etc.) to filter by that type.
+          schema:
+            type: string
+            enum:
+              - relationship
+              - attack-pattern
+              - x-mitre-tactic
+              - intrusion-set
+              - malware
+              - tool
+              - course-of-action
+              - x-mitre-data-source
+              - x-mitre-data-component
+              - x-mitre-asset
+              - campaign
+              - x-mitre-matrix
+              - x-mitre-detection-strategy
+              - x-mitre-analytic
+          example: 'attack-pattern'
+      responses:
+        '200':
+          description: 'A list of objects with missing LinkById references.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  anyOf:
+                    - $ref: '../components/relationships.yml#/components/schemas/relationship'
+                    - $ref: '../components/collections.yml#/components/schemas/collection'
+                    - $ref: '../components/groups.yml#/components/schemas/group'
+                    - $ref: '../components/identities.yml#/components/schemas/identity'
+                    - $ref: '../components/marking-definitions.yml#/components/schemas/marking-definition'
+                    - $ref: '../components/matrices.yml#/components/schemas/matrix'
+                    - $ref: '../components/mitigations.yml#/components/schemas/mitigation'
+                    - $ref: '../components/software.yml#/components/schemas/software'
+                    - $ref: '../components/tactics.yml#/components/schemas/tactic'
+                    - $ref: '../components/techniques.yml#/components/schemas/technique'
+                    - $ref: '../components/analytics.yml#/components/schemas/analytic'
+                    - $ref: '../components/detection-strategies.yml#/components/schemas/detection-strategy'
+                    - $ref: '../components/assets.yml#/components/schemas/asset'
+                    - $ref: '../components/campaigns.yml#/components/schemas/campaign'
+                    - $ref: '../components/data-components.yml#/components/schemas/data-component'
+                    - $ref: '../components/data-sources.yml#/components/schemas/data-source'
+        '500':
+          description: 'Server error'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'Unable to get objects with missing LinkById. Server error.'
+
+  /api/reports/parallel-relationships:
+    get:
+      summary: 'Get parallel relationships'
+      operationId: 'reports-get-parallel-relationships'
+      description: |
+        This endpoint generates a map of lists of parallel relationships. Within each list,
+        the members share the same source_ref, target_ref, and relationship_type values.
+        This is useful for identifying potentially duplicate relationships.
+      tags:
+        - 'Reports'
+      responses:
+        '200':
+          description: 'A map of relationship keys to arrays of parallel relationships.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: '../components/relationships.yml#/components/schemas/relationship'
+        '500':
+          description: 'Server error'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'Unable to get parallel relationships. Server error.'

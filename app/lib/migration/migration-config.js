@@ -5,10 +5,6 @@ const config = require('../../config/config');
 module.exports = {
   mongodb: {
     url: config.database.url,
-
-    options: {
-      useNewUrlParser: true,
-    },
   },
 
   // The migrations dir, can be an relative or absolute path. Only edit this when really necessary.

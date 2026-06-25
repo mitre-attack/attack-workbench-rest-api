@@ -60,20 +60,20 @@ If your changes are related to or dependent on changes in [attack-workbench-fron
 
 The project uses the following branch structure to support semantic-release:
 
-- `main` / `master`: Production-ready code
+- `main`: Production-ready code
 - `next`: Features for the next minor version
 - `next-major`: Features for the next major version
 - `beta`: Beta pre-releases
 - `alpha`: Alpha pre-releases
-- `*.*.x` or `*.x`: Maintenance branches for specific version releases
+- `*.x`: Maintenance branches for specific version releases
 
-Always target your pull requests to the `develop` branch unless specifically advised otherwise.
+Always target your pull requests to the `main` branch unless specifically advised otherwise.
 
 ## Commit Message Guidelines
 
 This project uses [conventional commits](https://www.conventionalcommits.org/) to automatically determine semantic versioning through semantic-release. Your commit messages should follow this format:
 
-```
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -101,7 +101,7 @@ Adding `BREAKING CHANGE:` in the commit message footer will trigger a MAJOR vers
 The project uses GitHub Actions for continuous integration with the following workflow:
 
 1. **Commit Linting**: Ensures all commits follow the conventional commit format
-2. **Static Checks**: 
+2. **Static Checks**:
    - Runs linting checks
    - Performs security scanning with Snyk
    - Generates code coverage reports
@@ -140,10 +140,11 @@ Pre-release branches (alpha, beta) will generate pre-release versions with appro
 
 The project publishes Docker images to the GitHub Container Registry (ghcr.io) with these tags:
 
-- `latest`: Points to the most recent release from the main branch
-- `v{major}.{minor}.{patch}`: Specific version tags (e.g., `v1.2.3`)
-- `{major}.{minor}.{patch}`: Version tags without the 'v' prefix
-- `sha-{short-commit-sha}`: Specific commit reference
+- `latest`: Points to the most recent release from the `main` branch
+- `next`: Points to the most recent release from the `next` branch
+- `beta`: Points to the most recent release from the `beta` branch
+- `alpha`: Points to the most recent release from the `alpha` branch
+- `{major}.{minor}.{patch}`: Specific version tags (e.g., `v1.2.3`)
 
 Docker images include metadata such as version, build time, and commit reference, which are accessible via both environment variables and image labels.
 

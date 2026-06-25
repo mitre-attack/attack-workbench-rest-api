@@ -1,4 +1,4 @@
-const mitigationsService = require('../../../services/mitigations-service');
+const mitigationsService = require('../../../services/stix/mitigations-service');
 const PaginationTests = require('../../shared/pagination');
 
 // modified and created properties will be set before calling REST API
@@ -24,6 +24,9 @@ const options = {
   prefix: 'course-of-action',
   baseUrl: '/api/mitigations',
   label: 'Mitigations',
+  // The seeded fixture is ADM-compliant; pin validation on so this suite does
+  // not inherit the flag from whichever spec ran before it.
+  validateWithAdm: true,
 };
 const paginationTests = new PaginationTests(mitigationsService, initialObjectData, options);
 paginationTests.executeTests();

@@ -71,9 +71,9 @@ As shown in the table, the default role for users who aren't registered and acti
 These endpoints are disabled if the app is configured to use the anonymous authentication mechanism.
 The STIX ID of the corresponding identity object is used by the user management endpoints as the unique identifier for a user.
 
-##### Get Users
+### Get Users
 
-```
+```http
 GET /api/user-accounts
 ```
 
@@ -81,25 +81,25 @@ Retrieves a list of user account documents (i.e., registered users).
 
 Query string parameters for searching are TBD.
 
-###### Authorization
+#### Authorization
 
 This endpoint will only be available to users with the `admin` role.
 
-##### Get User
+### Get User
 
-```
+```http
 GET /api/user-accounts/:id
 ```
 
 Retrieve a user account document by its id.
 
-###### Authorization
+#### Authorization
 
 This endpoint will only be available to users with the `admin` role or for a logged in user with the matching user account `id`.
 
-##### Register User
+### Register User
 
-```
+```http
 POST /api/user-accounts/register
 ```
 
@@ -108,24 +108,83 @@ This results in a registered user.
 The user document will have the `email` and `username` properties set based on the log in data.
 `status` will be set to pending and `role` will be set to null.
 
-###### Authorization
+#### Authorization
 
 This endpoint will only be available for a logged in user who is in the process of registering.
 
-##### Update User
+### Update User
 
-```
+```http
 PUT /api/user-accounts/:id
 ```
 
 Update an existing user document in the database.
 
-###### Authorization
+#### Authorization
 
 This endpoint will only be available to users with the `admin` role.
 
+## Creating User Accounts
+
+When using OIDC authentication, users who successfully authenticate through the identity provider will not have any permissions in the Workbench until a user account is created for them.
+
+### Process
+
+1. **User authenticates for the first time**:
+   - The user logs in through the OIDC provider
+   - They will see a "User not registered" message or have no permissions (effective role: `none`)
+
+2. **Administrator creates user account**:
+   - An existing admin creates the account via the REST API or frontend
+   - The email must match the email claim from the OIDC provider
+
+3. **User logs in again**:
+   - The user will now have the assigned role and permissions
+
+### Creating Accounts via REST API
+
+Use the `POST /api/user-accounts` endpoint:
+
+```bash
+curl -X POST http://localhost:3000/api/user-accounts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "username": "user@example.com",
+    "displayName": "User Display Name",
+    "status": "active",
+    "role": "editor"
+  }'
+```
+
+**Required fields:**
+
+- `email` (string): Must match the email claim from the OIDC provider
+- `username` (string): Typically the same as email or the `preferred_username` claim
+- `displayName` (string): User's full name for display
+- `status` (string): Set to `active` for immediate access
+- `role` (string): One of `admin`, `editor`, `visitor`, or `team_lead`
+
 ## Initial User Configuration
 
-Unless the app is configured to use the anonymous authentication mechanism,
-it will be necessary to have a way to provision an initial admin user that can then be used to create the other users.
-The design for provisioning the initial admin user is TBD.
+For OIDC-based authentication, you need at least one admin user to manage other users.
+
+### Bootstrapping the First Admin
+
+#### Option 1: Direct Database Insert (for initial setup only)
+
+If you have direct access to MongoDB, you can create the first admin user manually:
+
+1. Have the user authenticate once through OIDC (they'll have no permissions)
+2. Get their email from the OIDC provider
+3. Insert a user account document directly into the database with admin role
+4. User logs in again with admin permissions
+
+#### Option 2: Temporary Anonymous Access
+
+1. Temporarily switch to `AUTHN_MECHANISM=anonymous` in `.env`
+2. Restart the REST API
+3. Access the system with admin privileges
+4. Create OIDC user accounts through the API or frontend
+5. Switch back to `AUTHN_MECHANISM=oidc`
+6. Restart the REST API

@@ -10,6 +10,7 @@ const packageJson = require('../../package.json');
 //   - Restarting the server will force the users to login again
 //   - Sessions cannot be shared across server instances
 // Setting the SESSION_SECRET environment variable will override this generated value
+
 function generateSecret() {
   const stringBase = 'base64';
   const byteLength = 48;
@@ -21,6 +22,7 @@ function generateSecret() {
 
 const defaultSessionSecret = generateSecret();
 const defaultTokenSigningSecret = generateSecret();
+const defaultMongoStoreCryptoSecret = generateSecret();
 
 const userAuthnMechanismValues = ['anonymous', 'oidc'];
 convict.addFormat(enumFormat('user-authn-mechanism', userAuthnMechanismValues, true));
@@ -199,6 +201,20 @@ function loadConfig() {
         default: './app/api/definitions/openapi.yml',
       },
     },
+    validateRequests: {
+      withAttackDataModel: {
+        doc: 'Enable validation of POST and PUT request bodies using the ATT&CK Data Model',
+        format: Boolean,
+        default: true,
+        env: 'VALIDATE_WITH_ADM_SCHEMAS',
+      },
+      withOpenApi: {
+        doc: 'Enable validation of POST and PUT request bodies using the legacy OpenAPI YAML-based validation schemas',
+        format: Boolean,
+        default: true,
+        env: 'VALIDATE_WITH_LEGACY_SCHEMAS',
+      },
+    },
     collectionIndex: {
       defaultInterval: {
         doc: 'How often collection indexes should check for updates (in seconds). Only applies to new indexes added to the REST API, does not affect existing collection indexes',
@@ -222,12 +238,27 @@ function loadConfig() {
         default: './app/lib/default-static-marking-definitions/',
         env: 'WB_REST_STATIC_MARKING_DEFS_PATH',
       },
+      staticBypassRulesPath: {
+        doc: 'Location of a JSON file containing default validation bypass rules to load at startup',
+        default: './app/lib/default-bypass-rules.json',
+        env: 'WB_REST_STATIC_BYPASS_RULES_PATH',
+      },
     },
     scheduler: {
-      checkWorkbenchInterval: {
+      syncCollectionIndexesCron: {
         doc: 'Sets the interval in seconds for starting the scheduler.',
-        default: 10,
-        env: 'CHECK_WORKBENCH_INTERVAL',
+        default: '* * * * *', // every minute
+        env: 'SYNC_COLLECTION_INDEXES_CRON',
+      },
+      checkWipAttackIdsCron: {
+        doc: 'Cron pattern for checking WIP objects with ATT&CK IDs (e.g., "0 * * * *" for hourly).',
+        default: '0 * * * *', // every hour
+        env: 'CHECK_WIP_ATTACK_IDS_CRON',
+      },
+      validateObjectsCron: {
+        doc: 'Cron pattern for re-validating all STIX objects against the ADM (e.g., "0 3 * * *" for daily at 3 AM).',
+        default: '0 3 * * *', // daily at 3 AM
+        env: 'VALIDATE_OBJECTS_CRON',
       },
       enableScheduler: {
         format: Boolean,
@@ -240,6 +271,11 @@ function loadConfig() {
         doc: 'Secret used to sign the session ID cookie',
         default: defaultSessionSecret,
         env: 'SESSION_SECRET',
+      },
+      mongoStoreCryptoSecret: {
+        doc: 'Secret used to encrypt session data in MongoDB',
+        default: defaultMongoStoreCryptoSecret,
+        env: 'MONGOSTORE_CRYPTO_SECRET',
       },
     },
     userAuthn: {

@@ -37,6 +37,10 @@ router
   .delete(authn.authenticate, authz.requireRole(authz.admin), tacticsController.deleteVersionById);
 
 router
+  .route('/tactics/:stixId/revoke')
+  .post(authn.authenticate, authz.requireRole(authz.editorOrHigher), tacticsController.revoke);
+
+router
   .route('/tactics/:stixId/modified/:modified/techniques')
   .get(
     authn.authenticate,

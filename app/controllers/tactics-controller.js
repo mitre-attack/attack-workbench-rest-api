@@ -1,6 +1,6 @@
 'use strict';
 
-const tacticsService = require('../services/tactics-service');
+const tacticsService = require('../services/stix/tactics-service');
 const logger = require('../lib/logger');
 const {
   DuplicateIdError,
@@ -86,18 +86,22 @@ exports.retrieveVersionById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const tacticData = req.body;
 
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
   // Create the tactic
   try {
     const tactic = await tacticsService.create(tacticData, options);
+
+    if (options.dryRun) {
+      return res.status(200).send(tactic);
+    }
 
     logger.debug('Success: Created tactic with id ' + tactic.stix.id);
     return res.status(201).send(tactic);
@@ -108,32 +112,35 @@ exports.create = async function (req, res) {
         .status(409)
         .send('Unable to create tactic. Duplicate stix.id and stix.modified properties.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create tactic. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const tacticData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
   try {
     const tactic = await tacticsService.updateFull(
       req.params.stixId,
       req.params.modified,
       tacticData,
+      options,
     );
 
     if (!tactic) {
       return res.status(404).send('tactic not found.');
-    } else {
-      logger.debug('Success: Updated tactic with id ' + tactic.stix.id);
+    }
+
+    if (options.dryRun) {
       return res.status(200).send(tactic);
     }
+
+    logger.debug('Success: Updated tactic with id ' + tactic.stix.id);
+    return res.status(200).send(tactic);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update tactic. Server error.');
+    return next(err);
   }
 };
 
@@ -166,6 +173,20 @@ exports.deleteById = async function (req, res) {
   } catch (err) {
     logger.error('Delete tactic failed. ' + err);
     return res.status(500).send('Unable to delete tactic. Server error.');
+  }
+};
+
+exports.revoke = async function (req, res, next) {
+  try {
+    const options = {
+      preserveRelationships:
+        req.query.preserveRelationships === 'true' || req.query.preserveRelationships === true,
+      userAccountId: req.user?.userAccountId,
+    };
+    const result = await tacticsService.revoke(req.params.stixId, req.body, options);
+    return res.status(200).send(result);
+  } catch (err) {
+    return next(err);
   }
 };
 

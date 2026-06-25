@@ -1,0 +1,504 @@
+'use strict';
+
+const config = require('../../config/config');
+const { BaseService } = require('../meta-classes');
+const techniquesRepository = require('../../repository/techniques-repository');
+
+const { Technique: TechniqueType } = require('../../lib/types');
+const {
+  BadlyFormattedParameterError,
+  BadRequestError,
+  MissingParameterError,
+  NotFoundError,
+} = require('../../exceptions');
+const attackIdGenerator = require('../../lib/attack-id-generator');
+const {
+  buildAttackExternalReference,
+  removeAttackExternalReferences,
+} = require('../../lib/external-reference-builder');
+const EventBus = require('../../lib/event-bus');
+const EventConstants = require('../../lib/event-constants');
+const WorkflowResult = require('../../lib/workflow-result');
+const logger = require('../../lib/logger');
+
+/**
+ * Service for managing techniques and sub-techniques
+ *
+ * Event listeners:
+ * - x-mitre-tactic::shortname-changed - Updates kill_chain_phases.phase_name on all
+ *   technique documents when a tactic's x_mitre_shortname changes
+ */
+class TechniquesService extends BaseService {
+  /**
+   * Initialize event listeners.
+   * Called once on module load.
+   */
+  static initializeEventListeners() {
+    EventBus.on(
+      EventConstants.TACTIC_SHORTNAME_CHANGED,
+      TechniquesService.handleTacticShortnameChanged.bind(TechniquesService),
+    );
+
+    logger.info('TechniquesService: Event listeners initialized');
+  }
+
+  /**
+   * Handle a tactic x_mitre_shortname change by updating all technique documents
+   * whose kill_chain_phases contain the old phase_name.
+   *
+   * @param {Object} payload - Event payload
+   * @param {string} payload.tacticId - STIX ID of the updated tactic
+   * @param {string} payload.oldShortname - Previous x_mitre_shortname value
+   * @param {string} payload.newShortname - New x_mitre_shortname value
+   * @param {string[]} payload.domains - The tactic's x_mitre_domains (e.g. ['enterprise-attack'])
+   */
+  static async handleTacticShortnameChanged(payload) {
+    const { tacticId, oldShortname, newShortname, domains = [], createNewVersion } = payload;
+
+    // Convert the tactic's domains to kill chain names so we only update
+    // techniques whose kill_chain_phases match both the phase_name AND the
+    // kill_chain_name.  This prevents cross-domain propagation (e.g. an
+    // enterprise tactic rename bleeding into mobile techniques).
+    const killChainNames = domains
+      .map((domain) => config.domainToKillChainMap[domain])
+      .filter(Boolean);
+
+    logger.info(
+      `TechniquesService: Propagating tactic shortname change '${oldShortname}' -> '${newShortname}' via ${createNewVersion ? 'new technique versions' : 'in-place update'}`,
+      { tacticId, killChainNames },
+    );
+
+    if (createNewVersion) {
+      await TechniquesService._propagateShortnameViaNewVersions(
+        tacticId,
+        oldShortname,
+        newShortname,
+        killChainNames,
+      );
+    } else {
+      await TechniquesService._propagateShortnameInPlace(
+        tacticId,
+        oldShortname,
+        newShortname,
+        killChainNames,
+      );
+    }
+  }
+
+  /**
+   * Propagate a shortname change by creating a new version of each connected technique.
+   * Used when the tactic shortname changed via a create (POST) operation, keeping the
+   * technique history intact by appending rather than editing in-place.
+   *
+   * @param {string} tacticId - STIX ID of the updated tactic (for logging)
+   * @param {string} oldShortname - Previous x_mitre_shortname value
+   * @param {string} newShortname - New x_mitre_shortname value
+   * @param {string[]} killChainNames - Kill chain names derived from the tactic's domains
+   */
+  static async _propagateShortnameViaNewVersions(
+    tacticId,
+    oldShortname,
+    newShortname,
+    killChainNames,
+  ) {
+    const techniques = await techniquesRepository.retrieveAllLatestByPhaseName(
+      oldShortname,
+      killChainNames,
+    );
+
+    logger.info(
+      `TechniquesService: Creating new versions for ${techniques.length} technique(s) due to tactic shortname change`,
+      { tacticId, oldShortname, newShortname, killChainNames },
+    );
+
+    for (const technique of techniques) {
+      try {
+        // Clone stix shallowly — only kill_chain_phases needs to change.
+        // Only rename phases that match BOTH the old phase_name AND one of the
+        // tactic's kill chain names, so cross-domain phases are left untouched.
+        const newVersion = {
+          ...technique,
+          stix: {
+            ...technique.stix,
+            modified: new Date().toISOString(),
+            kill_chain_phases: (technique.stix.kill_chain_phases || []).map((phase) =>
+              phase.phase_name === oldShortname &&
+              (killChainNames.length === 0 || killChainNames.includes(phase.kill_chain_name))
+                ? { ...phase, phase_name: newShortname }
+                : { ...phase },
+            ),
+          },
+        };
+
+        await techniquesRepository.save(newVersion);
+
+        logger.info(
+          `TechniquesService: Created new version of technique ${technique.stix.id} with updated phase_name`,
+          { tacticId, oldShortname, newShortname },
+        );
+      } catch (error) {
+        logger.error(
+          `TechniquesService: Error creating new version of technique ${technique.stix?.id}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Propagate a shortname change by updating all technique documents in-place.
+   * Used when the tactic shortname changed via an update (PUT) operation.
+   *
+   * @param {string} tacticId - STIX ID of the updated tactic (for logging)
+   * @param {string} oldShortname - Previous x_mitre_shortname value
+   * @param {string} newShortname - New x_mitre_shortname value
+   * @param {string[]} killChainNames - Kill chain names derived from the tactic's domains
+   */
+  static async _propagateShortnameInPlace(tacticId, oldShortname, newShortname, killChainNames) {
+    try {
+      const result = await techniquesRepository.updatePhaseName(
+        oldShortname,
+        newShortname,
+        killChainNames,
+      );
+      logger.info(
+        `TechniquesService: Updated ${result.modifiedCount} technique document(s) in-place for tactic shortname change`,
+        { tacticId, oldShortname, newShortname, killChainNames },
+      );
+    } catch (error) {
+      logger.error(
+        `TechniquesService: Error updating techniques in-place for tactic shortname change '${oldShortname}' -> '${newShortname}':`,
+        error,
+      );
+    }
+  }
+
+  static tacticsService = null;
+
+  static tacticMatchesTechnique(technique) {
+    return function (tactic) {
+      // A tactic matches if the technique has a kill chain phase such that:
+      //   1. The phase's kill_chain_name matches one of the tactic's kill chain names (which are derived from the tactic's x_mitre_domains)
+      //   2. The phase's phase_name matches the tactic's x_mitre_shortname
+
+      // Convert the tactic's domain names to kill chain names
+      const tacticKillChainNames = tactic.stix.x_mitre_domains.map(
+        (domain) => config.domainToKillChainMap[domain],
+      );
+      return technique.stix.kill_chain_phases.some(
+        (phase) =>
+          phase.phase_name === tactic.stix.x_mitre_shortname &&
+          tacticKillChainNames.includes(phase.kill_chain_name),
+      );
+    };
+  }
+
+  static getPageOfData(data, options) {
+    const startPos = options.offset;
+    const endPos =
+      options.limit === 0 ? data.length : Math.min(options.offset + options.limit, data.length);
+
+    return data.slice(startPos, endPos);
+  }
+
+  // ============================
+  // Revoke Lifecycle Hooks
+  // ============================
+
+  /**
+   * Validate subtechnique/parent constraints before allowing a revoke operation.
+   *
+   * Rules:
+   * - Sub revoking parent (parent has children) → blocked (would orphan children)
+   * - All other combinations are allowed; subtechnique-of relationships are excluded
+   *   from preservation in the base revoke loop.
+   */
+  async beforeRevoke(objectA, objectB) {
+    const relationshipsRepository = require('../../repository/relationships-repository');
+
+    const aIsSub = objectA.stix.x_mitre_is_subtechnique === true;
+    const bIsSub = objectB.stix.x_mitre_is_subtechnique === true;
+
+    if (bIsSub && !aIsSub) {
+      // Sub revoking parent — verify the parent has no child subtechniques
+      const childRels = await relationshipsRepository.retrieveAll({
+        targetRef: objectA.stix.id,
+        relationshipType: 'subtechnique-of',
+        versions: 'latest',
+        includeRevoked: false,
+        includeDeprecated: false,
+      });
+
+      if (childRels.length > 0) {
+        throw new BadRequestError({
+          details:
+            `Cannot revoke parent technique ${objectA.stix.id} with subtechnique ${objectB.stix.id}: ` +
+            `the parent has ${childRels.length} subtechnique(s). ` +
+            `Convert the revoking subtechnique to a parent technique first, or rehome the subtechniques.`,
+        });
+      }
+    }
+  }
+
+  // ============================
+  // Subtechnique Conversion
+  // ============================
+
+  /**
+   * Convert a technique to a subtechnique.
+   *
+   * Generates a new subtechnique-format ATT&CK ID (e.g., T1234.001) under the
+   * specified parent, updates x_mitre_is_subtechnique, rebuilds the ATT&CK
+   * external reference, and persists the result as a new version.
+   *
+   * @param {string} stixId - STIX ID of the technique to convert
+   * @param {Object} data - Request body
+   * @param {string} data.parentTechniqueAttackId - Parent technique ATT&CK ID (e.g., T1234)
+   * @param {Object} [options] - Options
+   * @param {string} [options.userAccountId] - Authenticated user's account ID
+   * @returns {Object} The newly created subtechnique version
+   */
+  async convertToSubtechnique(stixId, data, options = {}) {
+    // Lazy-load to avoid circular dependency
+    const relationshipsRepository = require('../../repository/relationships-repository');
+
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+    if (!data?.parentTechniqueAttackId) {
+      throw new MissingParameterError('parentTechniqueAttackId');
+    }
+    if (!/^T\d{4}$/.test(data.parentTechniqueAttackId)) {
+      throw new BadRequestError({
+        details: `Invalid parent technique ATT&CK ID format: ${data.parentTechniqueAttackId}. Must be T####.`,
+      });
+    }
+
+    const technique = await this.repository.retrieveLatestByStixId(stixId);
+    if (!technique) {
+      throw new NotFoundError({ details: `Technique with stixId ${stixId} not found` });
+    }
+    if (technique.stix.x_mitre_is_subtechnique === true) {
+      throw new BadRequestError({
+        details: `Technique ${stixId} is already a subtechnique`,
+      });
+    }
+    if (technique.stix.revoked === true) {
+      throw new BadRequestError({
+        details: `Cannot convert a revoked technique`,
+      });
+    }
+
+    // Validate that the parent technique exists
+    const parentTechnique = await this.repository.retrieveLatestByAttackId(
+      data.parentTechniqueAttackId,
+    );
+    if (!parentTechnique) {
+      throw new BadRequestError({
+        details: `Parent technique with ATT&CK ID ${data.parentTechniqueAttackId} not found`,
+      });
+    }
+
+    // Check if this technique has child subtechniques (via subtechnique-of SROs).
+    // Cross-service READ is permitted per architecture guidelines.
+    // If children exist, block the conversion — the user must rehome them first.
+    const childRelationships = await relationshipsRepository.retrieveAll({
+      targetRef: stixId,
+      relationshipType: 'subtechnique-of',
+      versions: 'latest',
+      includeRevoked: false,
+      includeDeprecated: false,
+    });
+    if (childRelationships.length > 0) {
+      throw new BadRequestError({
+        details:
+          `Technique ${stixId} has ${childRelationships.length} subtechnique(s). ` +
+          `Rehome or remove the subtechnique-of relationships before converting this technique to a subtechnique.`,
+      });
+    }
+
+    // Generate new subtechnique ATT&CK ID
+    const newAttackId = await attackIdGenerator.generateAttackId(
+      'attack-pattern',
+      this.repository,
+      true,
+      data.parentTechniqueAttackId,
+    );
+
+    // Build new version
+    const newVersion = technique.toObject ? technique.toObject() : { ...technique };
+    delete newVersion._id;
+    delete newVersion.__v;
+    delete newVersion.__t;
+
+    newVersion.stix.x_mitre_is_subtechnique = true;
+    newVersion.stix.modified = new Date().toISOString();
+    newVersion.workspace = newVersion.workspace || {};
+    newVersion.workspace.attack_id = newAttackId;
+
+    // Rebuild external references: replace ATT&CK ref with the new one
+    const userRefs = removeAttackExternalReferences(newVersion.stix.external_references);
+    const newAttackRef = buildAttackExternalReference(newAttackId, 'attack-pattern', {
+      isSubtechnique: true,
+    });
+    newVersion.stix.external_references = newAttackRef ? [newAttackRef, ...userRefs] : userRefs;
+
+    if (options.userAccountId) {
+      newVersion.workspace.workflow = newVersion.workspace.workflow || {};
+      newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+
+    const savedDocument = await this.repository.save(newVersion);
+
+    logger.info(
+      `Converted technique ${stixId} to subtechnique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
+    );
+
+    const result = new WorkflowResult('convert-to-subtechnique');
+    result.setPrimary(savedDocument);
+
+    // Emit domain event — RelationshipsService listens to create the subtechnique-of SRO
+    const eventResults = await EventBus.emit(EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+      parentStixId: parentTechnique.stix.id /** STIX ID of the parent technique */,
+      userAccountId: options.userAccountId,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
+  }
+
+  /**
+   * Convert a subtechnique to a technique.
+   *
+   * Generates a new technique-format ATT&CK ID (e.g., T1235), updates
+   * x_mitre_is_subtechnique, rebuilds the ATT&CK external reference, and
+   * persists the result as a new version.
+   *
+   * @param {string} stixId - STIX ID of the subtechnique to convert
+   * @param {Object} [options] - Options
+   * @param {string} [options.userAccountId] - Authenticated user's account ID
+   * @returns {Object} The newly created technique version
+   */
+  async convertToTechnique(stixId, options = {}) {
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+
+    const technique = await this.repository.retrieveLatestByStixId(stixId);
+    if (!technique) {
+      throw new NotFoundError({ details: `Technique with stixId ${stixId} not found` });
+    }
+    if (technique.stix.x_mitre_is_subtechnique !== true) {
+      throw new BadRequestError({
+        details: `Technique ${stixId} is not a subtechnique`,
+      });
+    }
+    if (technique.stix.revoked === true) {
+      throw new BadRequestError({
+        details: `Cannot convert a revoked technique`,
+      });
+    }
+
+    // Generate new technique ATT&CK ID
+    const newAttackId = await attackIdGenerator.generateAttackId(
+      'attack-pattern',
+      this.repository,
+      false,
+    );
+
+    // Build new version
+    const newVersion = technique.toObject ? technique.toObject() : { ...technique };
+    delete newVersion._id;
+    delete newVersion.__v;
+    delete newVersion.__t;
+
+    newVersion.stix.x_mitre_is_subtechnique = false;
+    newVersion.stix.modified = new Date().toISOString();
+    newVersion.workspace = newVersion.workspace || {};
+    newVersion.workspace.attack_id = newAttackId;
+
+    // Rebuild external references: replace ATT&CK ref with the new one
+    const userRefs = removeAttackExternalReferences(newVersion.stix.external_references);
+    const newAttackRef = buildAttackExternalReference(newAttackId, 'attack-pattern', {
+      isSubtechnique: false,
+    });
+    newVersion.stix.external_references = newAttackRef ? [newAttackRef, ...userRefs] : userRefs;
+
+    if (options.userAccountId) {
+      newVersion.workspace.workflow = newVersion.workspace.workflow || {};
+      newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+
+    const savedDocument = await this.repository.save(newVersion);
+
+    logger.info(
+      `Converted subtechnique ${stixId} to technique: ${technique.workspace?.attack_id} -> ${newAttackId}`,
+    );
+
+    const result = new WorkflowResult('convert-to-technique');
+    result.setPrimary(savedDocument);
+
+    // Emit domain event — RelationshipsService listens to deprecate subtechnique-of SROs
+    const eventResults = await EventBus.emit(EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE, {
+      stixId /** STIX ID of the converted subtechnique */,
+    });
+    result.mergeEventResults(eventResults);
+
+    return result.toJSON();
+  }
+
+  async retrieveTacticsForTechnique(stixId, modified, options) {
+    // Late binding to avoid circular dependency between modules
+    if (!TechniquesService.tacticsService) {
+      TechniquesService.tacticsService = require('./tactics-service');
+    }
+
+    // Retrieve the tactics associated with the technique (the technique identified by stixId and modified date)
+    if (!stixId) {
+      throw new MissingParameterError('stixId');
+    }
+
+    if (!modified) {
+      throw new MissingParameterError('modified');
+    }
+
+    try {
+      const technique = await this.repository.retrieveOneByVersion(stixId, modified);
+      if (!technique) {
+        // Note: document is null if not found
+        return null;
+      } else {
+        const allTactics = await TechniquesService.tacticsService.retrieveAll({});
+        const filteredTactics = allTactics.filter(
+          TechniquesService.tacticMatchesTechnique(technique),
+        );
+        const pagedResults = TechniquesService.getPageOfData(filteredTactics, options);
+
+        if (options.includePagination) {
+          const returnValue = {
+            pagination: {
+              total: pagedResults.length,
+              offset: options.offset,
+              limit: options.limit,
+            },
+            data: pagedResults,
+          };
+          return returnValue;
+        } else {
+          return pagedResults;
+        }
+      }
+    } catch (err) {
+      if (err.name === 'CastError') {
+        throw new BadlyFormattedParameterError();
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+TechniquesService.initializeEventListeners();
+
+module.exports = new TechniquesService(TechniqueType, techniquesRepository);

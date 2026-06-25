@@ -18,9 +18,6 @@ This guide provides comprehensive instructions for installing, configuring, and 
     - [Environment Variables](#environment-variables)
     - [Configuration File](#configuration-file)
   - [Authentication](#authentication)
-    - [Authentication Mechanisms](#authentication-mechanisms)
-    - [OpenID Connect (OIDC) Configuration](#openid-connect-oidc-configuration)
-    - [Service Authentication](#service-authentication)
   - [User Management](#user-management)
     - [User Roles and Permissions](#user-roles-and-permissions)
     - [User Account Status](#user-account-status)
@@ -48,18 +45,21 @@ The recommended deployment method is using Docker. The REST API is published as 
 
 #### Using Docker Compose (Recommended)
 
-The simplest way to deploy the entire ATT&CK Workbench application is using Docker Compose. Instructions are available in the [Workbench Deployment Guide](https://github.com/mitre-attack/attack-workbench-deployment).
+The simplest way to deploy the entire ATT&CK Workbench application is using Docker Compose.
+Instructions are available in the [Workbench Deployment Guide](https://github.com/mitre-attack/attack-workbench-deployment).
 
 #### Standalone Docker Deployment
 
 To run only the REST API in a Docker container:
 
 1. **Create a Docker network** (if not already created):
+
    ```shell
    docker network create attack-workbench-network
    ```
 
 2. **Run MongoDB container**:
+
    ```shell
    docker run --name attack-workbench-mongodb -d \
      --network attack-workbench-network \
@@ -67,6 +67,7 @@ To run only the REST API in a Docker container:
    ```
 
 3. **Run REST API container**:
+
    ```shell
    docker run -p 3000:3000 -d \
      --name attack-workbench-rest-api \
@@ -86,6 +87,8 @@ docker run -p 3000:3000 -d \
   ghcr.io/center-for-threat-informed-defense/attack-workbench-rest-api:latest
 ```
 
+More infomation about configuration options is in the [configuration file documentation](./docs/admin/configuration.md).
+
 ### Manual Installation
 
 #### Requirements
@@ -96,12 +99,14 @@ docker run -p 3000:3000 -d \
 #### Installation Steps
 
 1. **Clone the repository**:
+
    ```shell
    git clone https://github.com/mitre-attack/attack-workbench-rest-api.git
    cd attack-workbench-rest-api
    ```
 
 2. **Install dependencies**:
+
    ```shell
    npm install
    ```
@@ -109,6 +114,7 @@ docker run -p 3000:3000 -d \
 3. **Configure the application** using environment variables or a configuration file (see [Configuration](#configuration)).
 
 4. **Start the application**:
+
    ```shell
    node ./bin/www
    ```
@@ -165,42 +171,8 @@ Example configuration file:
 
 ## Authentication
 
-The REST API supports different authentication mechanisms for both user and service authentication.
-
-### Authentication Mechanisms
-
-The application supports these user authentication mechanisms:
-
-- **Anonymous**: Default mechanism with no actual authentication (primarily for local development)
-- **OpenID Connect (OIDC)**: Integration with organizational identity providers
-
-### OpenID Connect (OIDC) Configuration
-
-To enable OIDC authentication:
-
-1. **Register with your OIDC Identity Provider** with these details:
-   - Authentication flow: Authorization Code Flow
-   - Required claims: `email` (required), `preferred_username` (optional), `name` (optional)
-   - Grant Types: Client Credentials, Authorization Code, and Refresh Token
-   - Redirect URL: `<host_url>/api/authn/oidc/callback`
-
-2. **Configure the REST API** with these environment variables:
-
-| Environment Variable | Required | Description | Configuration Property |
-|---------------------|----------|-------------|------------------------|
-| **AUTHN_MECHANISM** | Yes | Must be set to `oidc` | userAuthn.mechanism |
-| **AUTHN_OIDC_CLIENT_ID** | Yes | Client ID from your OIDC provider | userAuthn.oidc.clientId |
-| **AUTHN_OIDC_CLIENT_SECRET** | Yes | Client secret from your OIDC provider | userAuthn.oidc.clientSecret |
-| **AUTHN_OIDC_ISSUER_URL** | Yes | Issuer URL for the Identity Server | userAuthn.oidc.issuerUrl |
-| **AUTHN_OIDC_REDIRECT_ORIGIN** | Yes | URL for the Workbench host | userAuthn.oidc.redirectOrigin |
-
-### Service Authentication
-
-For service-to-service communication, the REST API supports three methods:
-
-1. **API Key Challenge Authentication**: Services obtain a JWT using a challenge-response protocol
-2. **API Key Basic Authentication**: Services authenticate using HTTP Basic Authentication
-3. **OIDC Client Credentials Flow**: Services obtain a JWT from an OIDC provider
+The REST API has several authentication options.
+Read all about them in the [authentication docs](./docs/admin/authentication/README.md).
 
 ## User Management
 
@@ -210,29 +182,29 @@ The REST API includes a user management system when using OIDC authentication.
 
 The system supports these roles:
 
-| Role | Description |
-|------|-------------|
-| `none` | No access to the system (for pending/inactive users) |
-| `visitor` | Read-only access to ATT&CK objects |
-| `editor` | Read and write access to ATT&CK objects |
-| `admin` | Full access to all system capabilities, including user management |
+| Role      | Description                                                       |
+|-----------|-------------------------------------------------------------------|
+| `none`    | No access to the system (for pending/inactive users)              |
+| `visitor` | Read-only access to ATT&CK objects                                |
+| `editor`  | Read and write access to ATT&CK objects                           |
+| `admin`   | Full access to all system capabilities, including user management |
 
 ### User Account Status
 
-| Status | Description |
-|--------|-------------|
-| `pending` | User has registered but awaits approval |
-| `active` | User is registered and approved |
-| `inactive` | User is no longer active |
+| Status     | Description                             |
+|------------|-----------------------------------------|
+| `pending`  | User has registered but awaits approval |
+| `active`   | User is registered and approved         |
+| `inactive` | User is no longer active                |
 
 ### User Management Endpoints
 
-| Endpoint | Method | Description | Authorization |
-|----------|--------|-------------|--------------|
-| `/api/user-accounts` | GET | List all users | Admin only |
-| `/api/user-accounts/:id` | GET | Get user by ID | Admin or self |
-| `/api/user-accounts/register` | POST | Register new user | Logged in, unregistered users |
-| `/api/user-accounts/:id` | PUT | Update user | Admin only |
+| Endpoint                      | Method | Description       | Authorization                 |
+|-------------------------------|--------|-------------------|-------------------------------|
+| `/api/user-accounts`          | GET    | List all users    | Admin only                    |
+| `/api/user-accounts/:id`      | GET    | Get user by ID    | Admin or self                 |
+| `/api/user-accounts/register` | POST   | Register new user | Logged in, unregistered users |
+| `/api/user-accounts/:id`      | PUT    | Update user       | Admin only                    |
 
 ## API Documentation
 

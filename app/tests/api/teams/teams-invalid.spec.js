@@ -1,14 +1,22 @@
 const request = require('supertest');
 
+const config = require('../../../config/config');
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
-const teams = require('./teams.invalid.json');
-
 const login = require('../../shared/login');
+
+// Invalid team payloads — each is missing a required field. Used to assert the
+// API rejects malformed input with a 400.
+const teams = [
+  {
+    description: 'no name',
+    userIDs: [],
+  },
+];
 
 describe('Teams API Test Invalid Data', function () {
   let app;
@@ -21,6 +29,10 @@ describe('Teams API Test Invalid Data', function () {
 
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
+
+    // Enable ADM validation; this non-STIX payload spec should not inherit a disabled flag
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
 
     // Initialize the express app
     app = await require('../../../index').initializeApp();
@@ -36,7 +48,7 @@ describe('Teams API Test Invalid Data', function () {
         .post('/api/teams')
         .send(body)
         .set('Accept', 'application/json')
-        .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
         .expect(400);
     });
   }

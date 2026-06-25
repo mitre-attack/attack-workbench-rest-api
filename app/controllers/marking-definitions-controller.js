@@ -1,12 +1,8 @@
 'use strict';
 
-const markingDefinitionsService = require('../services/marking-definitions-service');
+const markingDefinitionsService = require('../services/stix/marking-definitions-service');
 const logger = require('../lib/logger');
-const {
-  BadlyFormattedParameterError,
-  CannotUpdateStaticObjectError,
-  InvalidQueryStringParameterError,
-} = require('../exceptions');
+const { BadlyFormattedParameterError, InvalidQueryStringParameterError } = require('../exceptions');
 
 // NOTE: A marking definition does not support the modified or revoked properties!!
 
@@ -63,20 +59,22 @@ exports.retrieveById = async function (req, res) {
   }
 };
 
-exports.create = async function (req, res) {
-  // Get the data from the request
+exports.create = async function (req, res, next) {
   const markingDefinitionData = req.body;
+  const options = {
+    import: false,
+    userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
+  };
 
-  // Create the marking definition
   try {
-    const options = {
-      import: false,
-      userAccountId: req.user?.userAccountId,
-    };
     const markingDefinition = await markingDefinitionsService.create(
       markingDefinitionData,
       options,
     );
+    if (options.dryRun) {
+      return res.status(200).send(markingDefinition);
+    }
     logger.debug('Success: Created marking definition with id ' + markingDefinition.stix.id);
     return res.status(201).send(markingDefinition);
   } catch (err) {
@@ -84,36 +82,31 @@ exports.create = async function (req, res) {
       logger.warn('Unable to create marking definition: Stix id not allowed');
       return res.status(400).send('Stix id not allowed.');
     } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create marking definition. Server error.');
+      return next(err);
     }
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const markingDefinitionData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the marking definition
   try {
     const markingDefinition = await markingDefinitionsService.updateFull(
       req.params.stixId,
       markingDefinitionData,
+      options,
     );
     if (!markingDefinition) {
       return res.status(404).send('Marking definition not found.');
-    } else {
-      logger.debug('Success: Updated marking definition with id ' + markingDefinition.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(markingDefinition);
     }
+    logger.debug('Success: Updated marking definition with id ' + markingDefinition.stix.id);
+    return res.status(200).send(markingDefinition);
   } catch (err) {
-    if (err instanceof CannotUpdateStaticObjectError) {
-      logger.warn('Unable to update marking definition, cannot update static object');
-      return res.status(400).send('Cannot update static object');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to update marking definition. Server error.');
-    }
+    return next(err);
   }
 };
 

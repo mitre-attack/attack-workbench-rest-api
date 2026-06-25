@@ -43,6 +43,17 @@ async function runServer() {
     throw new Error(errors.databaseMigrationFailed);
   }
 
+  // Ensure MongoDB views are created / up to date (idempotent)
+  const { createMongoViews } = require('../app/lib/create-mongo-views');
+  try {
+    await createMongoViews();
+  } catch (err) {
+    logger.error('Failed to create/update MongoDB views');
+    logger.error(err.message);
+    // Non-fatal: views enhance query performance but the app can still function
+    logger.warn('Continuing startup despite view creation failure');
+  }
+
   // Check for valid database configuration
   const databaseConfiguration = require('../app/lib/database-configuration');
   await databaseConfiguration.checkSystemConfiguration();
@@ -51,8 +62,8 @@ async function runServer() {
   const app = await require('../app').initializeApp();
 
   // Create the scheduler
-  const scheduler = require('../app/scheduler/scheduler');
-  scheduler.initializeScheduler();
+  const taskScheduler = require('../app/scheduler');
+  taskScheduler.initializeScheduler();
 
   // Start the server
   logger.info('Starting the HTTP server...');
@@ -76,13 +87,15 @@ async function runServer() {
   // Listen for a ctrl-c
   process.on('SIGINT', () => {
     logger.info('SIGINT received, stopping HTTP server');
-    server.close();
+    taskScheduler.gracefulShutdown()
+      .then(() => server.close());
   });
 
   // Docker terminates a container with a SIGTERM
   process.on('SIGTERM', () => {
     logger.info('SIGTERM received, stopping HTTP server');
-    server.close();
+    taskScheduler.gracefulShutdown()
+      .then(() => server.close());
   });
 
   process.on('uncaughtException', (err, origin) => {
@@ -91,8 +104,8 @@ async function runServer() {
     logger.error(err.stack);
 
     logger.error('Terminating app after uncaught exception');
-
-    process.exit(1);
+    taskScheduler.gracefulShutdown()
+      .then(() => process.exit(1));
   });
 
   // Wait for the server to close

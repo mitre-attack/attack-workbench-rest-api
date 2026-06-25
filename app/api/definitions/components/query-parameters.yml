@@ -1,0 +1,14 @@
+components:
+  parameters:
+    dryRun:
+      name: dryRun
+      in: query
+      description: |
+        When set to `true`, the request runs through the full composition and validation
+        pipeline but does not persist changes. Returns the composed object that would have
+        been created or updated.
+
+        Use this to validate data before committing it. Replaces the deprecated `POST /api/validate` endpoint.
+      schema:
+        type: boolean
+        default: false

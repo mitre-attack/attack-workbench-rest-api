@@ -95,6 +95,26 @@ class AttackObjectsRepository extends BaseRepository {
     ];
   }
 
+  async retrieveAllWithAttackURLInDescription() {
+    const aggregation = [
+      { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+      { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$document' } },
+      { $sort: { 'stix.id': 1 } },
+      {
+        $match: {
+          'stix.revoked': { $in: [null, false] },
+          'stix.x_mitre_deprecated': { $in: [null, false] },
+          'stix.description': { $regex: 'attack.mitre.org', $options: 'i' },
+        },
+      },
+    ];
+
+    const documents = await this.model.aggregate(aggregation).exec();
+
+    return documents;
+  }
+
   // A lean variant of BaseService.retrieveOneByVersion
   // TODO merge the two methods by supporting method argument 'lean=false' that toggles .lean() on/off
   async retrieveOneByVersionLean(stixId, modified) {
@@ -109,6 +129,33 @@ class AttackObjectsRepository extends BaseRepository {
       } else if (err.name === 'MongoServerError' && err.code === 11000) {
         throw new DuplicateIdError();
       }
+      throw new DatabaseError(err);
+    }
+  }
+
+  /**
+   * Retrieve all latest versions of objects whose created_by_ref or x_mitre_modified_by_ref
+   * matches any of the provided identity refs. Used for organization identity propagation.
+   * @param {string[]} identityRefs - Array of identity STIX IDs (the provenance chain)
+   * @returns {Promise<Object[]>} Array of plain objects (latest version per stix.id)
+   */
+  async retrieveAllLatestByOrgIdentityRefs(identityRefs) {
+    try {
+      const aggregation = [
+        { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+        { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$document' } },
+        {
+          $match: {
+            $or: [
+              { 'stix.created_by_ref': { $in: identityRefs } },
+              { 'stix.x_mitre_modified_by_ref': { $in: identityRefs } },
+            ],
+          },
+        },
+      ];
+      return await this.model.aggregate(aggregation).exec();
+    } catch (err) {
       throw new DatabaseError(err);
     }
   }

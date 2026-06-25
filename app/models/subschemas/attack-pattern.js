@@ -7,17 +7,20 @@ module.exports.attackPattern = {
   modified: { type: Date, required: true },
   name: { type: String, required: true },
   description: String,
-  kill_chain_phases: [stixCore.killChainPhaseSchema],
+  kill_chain_phases: {
+    type: [stixCore.killChainPhaseSchema],
+    default: undefined,
+  },
 
   // ATT&CK custom STIX properties
   x_mitre_attack_spec_version: String,
-  x_mitre_contributors: [String],
+  x_mitre_contributors: { type: [String], default: undefined },
   x_mitre_deprecated: { type: Boolean, required: true, default: false },
   x_mitre_detection: String,
   x_mitre_domains: { type: [String], default: undefined },
   x_mitre_is_subtechnique: { type: Boolean, required: true, default: false },
   x_mitre_modified_by_ref: String,
-  x_mitre_platforms: [String],
+  x_mitre_platforms: { type: [String], default: undefined },
   x_mitre_version: String,
 };
 

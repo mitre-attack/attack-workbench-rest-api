@@ -1,14 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const setCookieParser = require('set-cookie-parser');
 
 const database = require('../../lib/database-in-memory');
 const databaseConfiguration = require('../../lib/database-configuration');
+const login = require('../shared/login');
 
 const logger = require('../../lib/logger');
 logger.level = 'debug';
-
-const passportCookieName = 'connect.sid';
 
 describe('Anonymous User Authentication', function () {
   let app;
@@ -34,14 +32,8 @@ describe('Anonymous User Authentication', function () {
   });
 
   it('GET /api/authn/anonymous/login successfully logs the user in', async function () {
-    const response = await request(app)
-      .get('/api/authn/anonymous/login')
-      .set('Accept', 'application/json')
-      .expect(200);
-
-    // Save the cookie for later tests
-    const cookies = setCookieParser(response);
-    passportCookie = cookies.find((c) => c.name === passportCookieName);
+    // Use the shared login helper
+    passportCookie = await login.loginAnonymous(app);
     expect(passportCookie).toBeDefined();
   });
 
@@ -49,7 +41,7 @@ describe('Anonymous User Authentication', function () {
     const response = await request(app)
       .get('/api/session')
       .set('Accept', 'application/json')
-      .set('Cookie', `${passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
 
     // We expect to get the current session
@@ -61,7 +53,7 @@ describe('Anonymous User Authentication', function () {
     await request(app)
       .get('/api/authn/anonymous/logout')
       .set('Accept', 'application/json')
-      .set('Cookie', `${passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200);
   });
 
@@ -69,7 +61,7 @@ describe('Anonymous User Authentication', function () {
     await request(app)
       .get('/api/session')
       .set('Accept', 'application/json')
-      .set('Cookie', `${passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(401);
   });
 

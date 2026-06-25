@@ -1,12 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 
 const config = require('../../../config/config');
 const login = require('../../shared/login');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -25,6 +25,7 @@ const initialObjectData = {
     spec_version: '2.1',
     type: 'identity',
     description: 'This is an identity.',
+    external_references: [{ source_name: 'source-1', external_id: 's1' }],
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
   },
 };
@@ -41,6 +42,10 @@ describe('Identity API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -52,7 +57,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -69,7 +74,7 @@ describe('Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -83,7 +88,7 @@ describe('Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -101,7 +106,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -116,7 +121,7 @@ describe('Identity API', function () {
     await request(app)
       .get('/api/identities/not-an-id')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
@@ -124,7 +129,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities/' + identity1.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -161,7 +166,7 @@ describe('Identity API', function () {
       .put('/api/identities/' + identity1.stix.id + '/modified/' + originalModified)
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -178,16 +183,13 @@ describe('Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(409);
   });
 
   let identity2;
   it('POST /api/identities should create a new version of an identity with a duplicate stix.id but different stix.modified date', async function () {
-    identity2 = _.cloneDeep(identity1);
-    identity2._id = undefined;
-    identity2.__t = undefined;
-    identity2.__v = undefined;
+    identity2 = cloneForCreate(identity1);
     const timestamp = new Date().toISOString();
     identity2.stix.modified = timestamp;
     const body = identity2;
@@ -195,7 +197,7 @@ describe('Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -208,7 +210,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities/' + identity2.stix.id)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -226,7 +228,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities/' + identity1.stix.id + '?versions=all')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -241,7 +243,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities/' + identity1.stix.id + '/modified/' + identity1.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -257,7 +259,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities/' + identity2.stix.id + '/modified/' + identity2.stix.modified)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -271,10 +273,7 @@ describe('Identity API', function () {
 
   let identity3;
   it('POST /api/identities should create a new version of an identity with a duplicate stix.id but different stix.modified date', async function () {
-    identity3 = _.cloneDeep(identity1);
-    identity3._id = undefined;
-    identity3.__t = undefined;
-    identity3.__v = undefined;
+    identity3 = cloneForCreate(identity1);
     const timestamp = new Date().toISOString();
     identity3.stix.modified = timestamp;
     const body = identity3;
@@ -282,7 +281,7 @@ describe('Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -294,21 +293,21 @@ describe('Identity API', function () {
   it('DELETE /api/identities/:id should not delete a identity when the id cannot be found', async function () {
     await request(app)
       .delete('/api/identities/not-an-id')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(404);
   });
 
   it('DELETE /api/identities/:id/modified/:modified deletes an identity', async function () {
     await request(app)
       .delete('/api/identities/' + identity1.stix.id + '/modified/' + identity1.stix.modified)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
   it('DELETE /api/identities/:id should delete all the identities with the same stix id', async function () {
     await request(app)
       .delete('/api/identities/' + identity2.stix.id)
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
@@ -316,7 +315,7 @@ describe('Identity API', function () {
     const res = await request(app)
       .get('/api/identities')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 

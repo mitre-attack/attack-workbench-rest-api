@@ -1,11 +1,12 @@
 const request = require('supertest');
 const { expect } = require('expect');
-const _ = require('lodash');
 const uuid = require('uuid');
 
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
+const config = require('../../../config/config');
+const { cloneForCreate } = require('../../shared/clone-for-create');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -21,7 +22,7 @@ const initialTacticData = {
     spec_version: '2.1',
     type: 'x-mitre-tactic',
     description: 'This is a tactic. yellow.',
-    external_references: [{ source_name: 'source-1', external_id: 's1' }],
+    external_references: [{ source_name: 'mitre-attack', external_id: 'TA9001' }],
     object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
   },
 };
@@ -54,6 +55,10 @@ describe('Create Object with Organization Identity API', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -66,7 +71,7 @@ describe('Create Object with Organization Identity API', function () {
     const res = await request(app)
       .get('/api/config/organization-identity')
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(200)
       .expect('Content-Type', /json/);
 
@@ -86,7 +91,7 @@ describe('Create Object with Organization Identity API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -113,7 +118,7 @@ describe('Create Object with Organization Identity API', function () {
       .post('/api/identities')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 
@@ -135,15 +140,12 @@ describe('Create Object with Organization Identity API', function () {
       .post('/api/config/organization-identity')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(204);
   });
 
   it('POST /api/tactics creates a new version of the tactic', async function () {
-    const tactic2 = _.cloneDeep(tactic1);
-    tactic2._id = undefined;
-    tactic2.__t = undefined;
-    tactic2.__v = undefined;
+    const tactic2 = cloneForCreate(tactic1);
     const timestamp = new Date().toISOString();
     tactic2.stix.modified = timestamp;
     const body = tactic2;
@@ -151,7 +153,7 @@ describe('Create Object with Organization Identity API', function () {
       .post('/api/tactics')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(201)
       .expect('Content-Type', /json/);
 

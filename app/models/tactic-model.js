@@ -17,7 +17,7 @@ const stixTactic = {
   x_mitre_domains: { type: [String], default: undefined },
   x_mitre_version: String,
   x_mitre_attack_spec_version: String,
-  x_mitre_contributors: [String],
+  x_mitre_contributors: { type: [String], default: undefined },
   x_mitre_shortname: String,
 };
 

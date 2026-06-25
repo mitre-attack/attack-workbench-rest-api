@@ -4,6 +4,7 @@ const _ = require('lodash');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const Group = require('../../../models/group-model');
+const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const logger = require('../../../lib/logger');
@@ -93,6 +94,10 @@ describe('Groups API Input Validation', function () {
     // Check for a valid database configuration
     await databaseConfiguration.checkSystemConfiguration();
 
+    // Enable ADM validation; the request payloads in this spec are ADM-compliant
+    config.validateRequests.withAttackDataModel = true;
+    config.validateRequests.withOpenApi = true;
+
     // Initialize the express app
     app = await require('../../../index').initializeApp();
 
@@ -106,7 +111,7 @@ describe('Groups API Input Validation', function () {
       .post('/api/groups')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -120,7 +125,7 @@ describe('Groups API Input Validation', function () {
       .post('/api/groups?not-a-parameter=unexpectedvalue')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -135,7 +140,7 @@ describe('Groups API Input Validation', function () {
       .post('/api/groups')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
@@ -150,12 +155,12 @@ describe('Groups API Input Validation', function () {
       .post('/api/groups')
       .send(body)
       .set('Accept', 'application/json')
-      .set('Cookie', `${login.passportCookieName}=${passportCookie.value}`)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
       .expect(400);
   });
 
   executeTests(() => app, 'stix.type', { required: true });
-  executeTests(() => app, 'stix.spec_version', { required: true });
+  executeTests(() => app, 'stix.spec_version', { required: false });
   executeTests(() => app, 'stix.name', { required: true });
   executeTests(() => app, 'stix.description');
   executeTests(() => app, 'stix.x_mitre_modified_by_ref');

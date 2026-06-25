@@ -1,14 +1,9 @@
 'use strict';
 
-const detectionStrategiesService = require('../services/detection-strategies-service');
+const detectionStrategiesService = require('../services/stix/detection-strategies-service');
 const logger = require('../lib/logger');
-const {
-  DuplicateIdError,
-  BadlyFormattedParameterError,
-  InvalidQueryStringParameterError,
-} = require('../exceptions');
 
-exports.retrieveAll = async function (req, res) {
+exports.retrieveAll = async function (req, res, next) {
   const options = {
     offset: req.query.offset || 0,
     limit: req.query.limit || 0,
@@ -32,12 +27,11 @@ exports.retrieveAll = async function (req, res) {
     }
     return res.status(200).send(results);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to get detection strategies. Server error.');
+    next(err);
   }
 };
 
-exports.retrieveById = async function (req, res) {
+exports.retrieveById = async function (req, res, next) {
   const options = {
     versions: req.query.versions || 'latest',
   };
@@ -56,20 +50,11 @@ exports.retrieveById = async function (req, res) {
       return res.status(200).send(detectionStrategies);
     }
   } catch (err) {
-    if (err instanceof BadlyFormattedParameterError) {
-      logger.warn('Badly formatted stix id: ' + req.params.stixId);
-      return res.status(400).send('Stix id is badly formatted.');
-    } else if (err instanceof InvalidQueryStringParameterError) {
-      logger.warn('Invalid query string: versions=' + req.query.versions);
-      return res.status(400).send('Query string parameter versions is invalid.');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to get detection strategies. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.retrieveVersionById = async function (req, res) {
+exports.retrieveVersionById = async function (req, res, next) {
   try {
     const detectionStrategy = await detectionStrategiesService.retrieveVersionById(
       req.params.stixId,
@@ -82,71 +67,59 @@ exports.retrieveVersionById = async function (req, res) {
       return res.status(200).send(detectionStrategy);
     }
   } catch (err) {
-    if (err instanceof BadlyFormattedParameterError) {
-      logger.warn('Badly formatted stix id: ' + req.params.stixId);
-      return res.status(400).send('Stix id is badly formatted.');
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to get detection strategy. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.create = async function (req, res) {
+exports.create = async function (req, res, next) {
   // Get the data from the request
   const detectionStrategyData = req.body;
   const options = {
     import: false,
     userAccountId: req.user?.userAccountId,
+    dryRun: req.query.dryRun === 'true' || req.query.dryRun === true,
   };
 
-  // Create the detection strategy
   try {
     const detectionStrategy = await detectionStrategiesService.create(
       detectionStrategyData,
       options,
     );
+    if (options.dryRun) {
+      return res.status(200).send(detectionStrategy);
+    }
     logger.debug('Success: Created detection strategy with id ' + detectionStrategy.stix.id);
     return res.status(201).send(detectionStrategy);
   } catch (err) {
-    if (err instanceof DuplicateIdError) {
-      logger.warn('Duplicate stix.id and stix.modified');
-      return res
-        .status(409)
-        .send(
-          'Unable to create detection strategy. Duplicate stix.id and stix.modified properties.',
-        );
-    } else {
-      logger.error('Failed with error: ' + err);
-      return res.status(500).send('Unable to create detection strategy. Server error.');
-    }
+    next(err);
   }
 };
 
-exports.updateFull = async function (req, res) {
-  // Get the data from the request
+exports.updateFull = async function (req, res, next) {
   const detectionStrategyData = req.body;
+  const options = { dryRun: req.query.dryRun === 'true' || req.query.dryRun === true };
 
-  // Create the detection strategy
   try {
     const detectionStrategy = await detectionStrategiesService.updateFull(
       req.params.stixId,
       req.params.modified,
       detectionStrategyData,
+      options,
     );
     if (!detectionStrategy) {
       return res.status(404).send('Detection strategy not found.');
-    } else {
-      logger.debug('Success: Updated detection strategy with id ' + detectionStrategy.stix.id);
+    }
+    if (options.dryRun) {
       return res.status(200).send(detectionStrategy);
     }
+    logger.debug('Success: Updated detection strategy with id ' + detectionStrategy.stix.id);
+    return res.status(200).send(detectionStrategy);
   } catch (err) {
-    logger.error('Failed with error: ' + err);
-    return res.status(500).send('Unable to update detection strategy. Server error.');
+    next(err);
   }
 };
 
-exports.deleteVersionById = async function (req, res) {
+exports.deleteVersionById = async function (req, res, next) {
   try {
     const detectionStrategy = await detectionStrategiesService.deleteVersionById(
       req.params.stixId,
@@ -159,12 +132,11 @@ exports.deleteVersionById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete detection strategy failed. ' + err);
-    return res.status(500).send('Unable to delete detection strategy. Server error.');
+    next(err);
   }
 };
 
-exports.deleteById = async function (req, res) {
+exports.deleteById = async function (req, res, next) {
   try {
     const detectionStrategies = await detectionStrategiesService.deleteById(req.params.stixId);
     if (detectionStrategies.deletedCount === 0) {
@@ -174,7 +146,6 @@ exports.deleteById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete detection strategy failed. ' + err);
-    return res.status(500).send('Unable to delete detection strategy. Server error.');
+    next(err);
   }
 };

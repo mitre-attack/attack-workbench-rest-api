@@ -1,6 +1,6 @@
 'use strict';
 
-const attackObjectsService = require('../services/attack-objects-service');
+const attackObjectsService = require('../services/stix/attack-objects-service');
 const logger = require('../lib/logger');
 
 exports.retrieveAll = async function (req, res) {

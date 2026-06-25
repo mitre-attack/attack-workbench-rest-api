@@ -97,6 +97,10 @@ class BaseRepository extends AbstractRepository {
         aggregation.push({ $limit: options.limit });
       }
 
+      // Aggregation bypasses Mongoose toJSON/toObject transforms, so we
+      // must strip internal fields explicitly via $project.
+      aggregation.push({ $project: { _id: 0, __v: 0, __t: 0 } });
+
       // Retrieve the documents
       const documents = await this.model.aggregate(aggregation).exec();
 
@@ -153,6 +157,10 @@ class BaseRepository extends AbstractRepository {
         { $match: query },
       ];
 
+      // Aggregation bypasses Mongoose toJSON/toObject transforms, so we
+      // must strip internal fields explicitly via $project.
+      aggregation.push({ $project: { _id: 0, __v: 0, __t: 0 } });
+
       // Bundle export needs ALL matching documents, not a paginated subset
       const documents = await this.model.aggregate(aggregation).exec();
 
@@ -171,17 +179,54 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
-  async retrieveAllById(stixId) {
+  async retrieveLatestByStixId(stixId) {
     try {
-      return await this.model.find({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
+      return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').exec();
     } catch (err) {
       throw new DatabaseError(err);
     }
   }
 
-  async retrieveLatestByStixId(stixId) {
+  async retrieveAllById(stixId) {
     try {
-      return await this.model.findOne({ 'stix.id': stixId }).sort('-stix.modified').lean().exec();
+      // .lean() bypasses Mongoose toJSON/toObject transforms, so .select()
+      // is needed to exclude internal fields at the query level.
+      return await this.model
+        .find({ 'stix.id': stixId })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  /**
+   * Retrieve the latest version of an object by its ATT&CK ID (e.g., "T1234", "G0001").
+   *
+   * @param {string} attackId - The workspace ATT&CK ID to look up
+   * @returns {Promise<Object|null>} The latest object version, or null if not found
+   */
+  async retrieveLatestByAttackId(attackId) {
+    try {
+      return await this.model
+        .findOne({ 'workspace.attack_id': attackId })
+        .sort('-stix.modified')
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async retrieveLatestByStixIdLean(stixId) {
+    try {
+      return await this.model
+        .findOne({ 'stix.id': stixId })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
     } catch (err) {
       throw new DatabaseError(err);
     }
@@ -232,7 +277,7 @@ class BaseRepository extends AbstractRepository {
       }));
 
       // Use cursor for true streaming
-      const cursor = this.model.find({ $or: conditions }).lean().cursor();
+      const cursor = this.model.find({ $or: conditions }).select('-_id -__v -__t').lean().cursor();
 
       let count = 0;
       for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
@@ -301,7 +346,11 @@ class BaseRepository extends AbstractRepository {
         'stix.modified': object_modified,
       }));
 
-      const documents = await this.model.find({ $or: conditions }).lean().exec();
+      const documents = await this.model
+        .find({ $or: conditions })
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
 
       const queryTime = Date.now() - startTime;
       logger.debug(
@@ -340,6 +389,7 @@ class BaseRepository extends AbstractRepository {
       const document = new this.model(data);
       return await document.save();
     } catch (err) {
+      logger.error(`A database error occurred: ${err.message}`);
       if (err.name === 'MongoServerError' && err.code === 11000) {
         throw new DuplicateIdError({
           details: `Document with id '${data.stix.id}' already exists.`,
@@ -349,11 +399,137 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  /**
+   * Bulk insert. Used by the STIX bundle import path to avoid one round-trip
+   * per object.
+   *
+   * `ordered: false` keeps MongoDB inserting the remaining docs after an
+   * individual failure. `throwOnValidationError: true` is critical: without
+   * it, Mongoose's `insertMany` silently drops documents that fail schema
+   * validation (e.g. a required field is missing) and reports success for
+   * the remaining valid docs — leaving the caller unable to record per-object
+   * import errors. With the flag, Mongoose throws a `MongooseBulkWriteError`
+   * after attempting the valid docs, carrying both the validation errors and
+   * the `results` array we use to map each failure back to its source index.
+   *
+   * Discriminator-aware: each child model's `insertMany` sets the correct
+   * `__t` discriminator key automatically, so callers should invoke this on
+   * the type-specific repository (not the AttackObject parent).
+   *
+   * @param {Array<Object>} dataArr - Array of plain objects to insert
+   * @param {Object} [options]
+   * @param {boolean} [options.ordered=false] - Stop on first error if true
+   * @returns {Promise<{ inserted: Array, errors: Array<{ index, message, code }> }>}
+   *   `errors[].index` is the index into the input `dataArr`; the caller can
+   *   use it to recover the original document for error reporting.
+   */
+  async saveMany(dataArr, { ordered = false } = {}) {
+    if (!Array.isArray(dataArr) || dataArr.length === 0) {
+      return { inserted: [], errors: [] };
+    }
+    try {
+      const inserted = await this.model.insertMany(dataArr, {
+        ordered,
+        throwOnValidationError: true,
+      });
+      return { inserted, errors: [] };
+    } catch (err) {
+      // MongooseBulkWriteError: one or more docs failed Mongoose schema
+      // validation. `err.results` mirrors the input order — successfully
+      // inserted entries are Mongoose documents (identifiable by `_id`),
+      // while failures are the original input objects (no `_id`). Walking
+      // the results in order, the k-th failure corresponds to
+      // `err.validationErrors[k]` (Mongoose pre-sorts validationErrors by
+      // source index).
+      if (err?.name === 'MongooseBulkWriteError') {
+        const errors = [];
+        const inserted = [];
+        const validationErrors = err.validationErrors || [];
+        const results = err.results || [];
+        let veIdx = 0;
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r && r._id) {
+            inserted.push(r);
+          } else {
+            const ve = validationErrors[veIdx++];
+            errors.push({
+              index: i,
+              message: ve?.message ?? 'Mongoose validation error',
+              code: ve?.name || 'ValidationError',
+            });
+          }
+        }
+        return { inserted, errors };
+      }
+      // MongoDB driver-side failure (e.g., duplicate-key race). Per-doc
+      // errors are on `err.writeErrors`; successful inserts on
+      // `err.insertedDocs`.
+      if (err?.name === 'MongoBulkWriteError' || err?.writeErrors) {
+        const errors = (err.writeErrors || []).map((we) => ({
+          index: we.index ?? we.err?.index,
+          message: we.errmsg || we.err?.errmsg || we.message,
+          code: we.code || we.err?.code,
+        }));
+        return { inserted: err.insertedDocs || [], errors };
+      }
+      throw new DatabaseError(err);
+    }
+  }
+
+  /**
+   * Retrieve every version of every document whose `stix.id` is in `stixIds`.
+   * Returns a Map keyed by stixId, value is an array of versions sorted
+   * newest-first (matching `retrieveAllById`'s ordering).
+   *
+   * Used by the bundle-import path to pre-fetch all existing versions in one
+   * query instead of N queries (one per imported object).
+   *
+   * @param {Array<string>} stixIds - List of STIX IDs to look up
+   * @returns {Promise<Map<string, Array<Object>>>}
+   */
+  async retrieveAllByStixIds(stixIds) {
+    if (!Array.isArray(stixIds) || stixIds.length === 0) {
+      return new Map();
+    }
+
+    try {
+      const documents = await this.model
+        .find({ 'stix.id': { $in: stixIds } })
+        .sort('-stix.modified')
+        .select('-_id -__v -__t')
+        .lean()
+        .exec();
+
+      const byStixId = new Map();
+      for (const doc of documents) {
+        const id = doc.stix.id;
+        let arr = byStixId.get(id);
+        if (!arr) {
+          arr = [];
+          byStixId.set(id, arr);
+        }
+        arr.push(doc);
+      }
+      return byStixId;
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async updateAndSave(document, data) {
     try {
       // TODO validate that document is valid mongoose object first
       _.merge(document, data);
       return await document.save();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async unsetField(documentId, fieldPath) {
+    try {
+      return await this.model.updateOne({ _id: documentId }, { $unset: { [fieldPath]: '' } });
     } catch (err) {
       throw new DatabaseError(err);
     }
