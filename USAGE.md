@@ -34,9 +34,8 @@ This guide provides comprehensive instructions for installing, configuring, and 
 The ATT&CK Workbench REST API provides services for storing, querying, and editing ATT&CK objects. It is built on Node.js and Express.js, and uses MongoDB for data persistence.
 
 This component is part of the larger ATT&CK Workbench application, which includes:
-
-- [ATT&CK Workbench Frontend](https://github.com/center-for-threat-informed-defense/attack-workbench-frontend)
-- [ATT&CK Workbench REST API](https://github.com/center-for-threat-informed-defense/attack-workbench-rest-api) (this component)
+- [ATT&CK Workbench Frontend](https://github.com/mitre-attack/attack-workbench-frontend)
+- [ATT&CK Workbench REST API](https://github.com/mitre-attack/attack-workbench-rest-api) (this component)
 
 ## Installation Methods
 
@@ -102,7 +101,7 @@ More infomation about configuration options is in the [configuration file docume
 1. **Clone the repository**:
 
    ```shell
-   git clone https://github.com/center-for-threat-informed-defense/attack-workbench-rest-api.git
+   git clone https://github.com/mitre-attack/attack-workbench-rest-api.git
    cd attack-workbench-rest-api
    ```
 
