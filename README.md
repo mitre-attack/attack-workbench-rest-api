@@ -20,7 +20,7 @@ docker run -p 3000:3000 -d \
   --name attack-workbench-rest-api \
   --env DATABASE_URL=mongodb://attack-workbench-mongodb/attack-workspace \
   --network attack-workbench-network \
-  ghcr.io/center-for-threat-informed-defense/attack-workbench-rest-api:latest
+  ghcr.io/mitre-attack/attack-workbench-rest-api:latest
 ```
 
 The REST API will be accessible at `http://localhost:3000`, with API documentation available at `http://localhost:3000/api-docs`.
