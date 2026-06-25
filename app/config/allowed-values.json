@@ -308,5 +308,70 @@
         ]
       }
     ]
+  },
+  {
+    "objectType": "identity",
+    "properties": [
+      {
+        "propertyName": "identity_class",
+        "domains": [
+          {
+            "domainName": "stix",
+            "allowedValues": [
+              "individual",
+              "group",
+              "system",
+              "organization",
+              "class",
+              "unspecified"
+            ]
+          }
+        ]
+      },
+      {
+        "propertyName": "sectors",
+        "domains": [
+          {
+            "domainName": "stix",
+            "allowedValues": [
+              "agriculture",
+              "aerospace",
+              "automotive",
+              "chemical",
+              "commercial",
+              "communications",
+              "construction",
+              "defense",
+              "education",
+              "energy",
+              "entertainment",
+              "financial-services",
+              "government",
+              "government-emergency-services",
+              "government-local",
+              "government-national",
+              "government-public-services",
+              "government-regional",
+              "healthcare",
+              "hospitality-leisure",
+              "infrastructure",
+              "infrastructure-dams",
+              "infrastructure-nuclear",
+              "infrastructure-water",
+              "insurance",
+              "manufacturing",
+              "mining",
+              "non-profit",
+              "pharmaceuticals",
+              "retail",
+              "technology",
+              "telecommunications",
+              "transportation",
+              "utilities"
+            ]
+          }
+        ]
+      }
+    ]
   }
 ]

@@ -24,6 +24,7 @@ router
     authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
     validationBypassesController.retrieveById,
   )
+  .put(authn.authenticate, authz.requireRole(authz.admin), validationBypassesController.updateById)
   .delete(
     authn.authenticate,
     authz.requireRole(authz.admin),

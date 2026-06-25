@@ -137,7 +137,7 @@ exports.updateFull = async function (req, res, next) {
   }
 };
 
-exports.deleteVersionById = async function (req, res) {
+exports.deleteVersionById = async function (req, res, next) {
   try {
     const identity = await identitiesService.deleteVersionById(
       req.params.stixId,
@@ -150,12 +150,11 @@ exports.deleteVersionById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete identity failed. ' + err);
-    return res.status(500).send('Unable to delete identity. Server error.');
+    return next(err);
   }
 };
 
-exports.deleteById = async function (req, res) {
+exports.deleteById = async function (req, res, next) {
   try {
     const identities = await identitiesService.deleteById(req.params.stixId);
     if (identities.deletedCount === 0) {
@@ -165,7 +164,6 @@ exports.deleteById = async function (req, res) {
       return res.status(204).end();
     }
   } catch (err) {
-    logger.error('Delete identity failed. ' + err);
-    return res.status(500).send('Unable to identity identity. Server error.');
+    return next(err);
   }
 };

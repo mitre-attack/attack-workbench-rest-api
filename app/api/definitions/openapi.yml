@@ -58,6 +58,8 @@ tags:
     description: 'Operations on STIX bundles'
   - name: 'System Configuration'
     description: 'Operations on the system configuration'
+  - name: 'Validation Bypasses'
+    description: 'Operations on validation bypass rules'
   - name: 'Session Management'
     description: 'Operations on the current session'
   - name: 'Authentication'
@@ -428,6 +430,15 @@ paths:
 
   /api/config/organization-namespace:
     $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1organization-namespace'
+
+  /api/config/mitre-identity-writes:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1mitre-identity-writes'
+
+  /api/config/validation-bypasses:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses'
+
+  /api/config/validation-bypasses/{id}:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses~1{id}'
 
   # Session Management
   /api/session:

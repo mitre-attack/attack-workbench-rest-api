@@ -297,6 +297,62 @@ describe('System Configuration API', function () {
     expect(namespace.prefix).toBe(testNamespace.prefix);
   });
 
+  it('GET /api/config/mitre-identity-writes returns the default setting', async function () {
+    const res = await request(app)
+      .get('/api/config/mitre-identity-writes')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const mitreIdentityWrites = res.body;
+    expect(mitreIdentityWrites).toBeDefined();
+    expect(mitreIdentityWrites.enabled).toBe(false);
+  });
+
+  it('POST /api/config/mitre-identity-writes sets the setting', async function () {
+    const res = await request(app)
+      .post('/api/config/mitre-identity-writes')
+      .send({ enabled: true })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+
+    expect(res.body).toBeDefined();
+    expect(Object.getOwnPropertyNames(res.body)).toHaveLength(0);
+  });
+
+  it('GET /api/config/mitre-identity-writes returns the updated setting', async function () {
+    const res = await request(app)
+      .get('/api/config/mitre-identity-writes')
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    const mitreIdentityWrites = res.body;
+    expect(mitreIdentityWrites).toBeDefined();
+    expect(mitreIdentityWrites.enabled).toBe(true);
+  });
+
+  it('POST /api/config/mitre-identity-writes rejects invalid settings', async function () {
+    await request(app)
+      .post('/api/config/mitre-identity-writes')
+      .send({ enabled: 'true' })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(400);
+  });
+
+  it('POST /api/config/mitre-identity-writes disables the setting', async function () {
+    await request(app)
+      .post('/api/config/mitre-identity-writes')
+      .send({ enabled: false })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+  });
+
   after(async function () {
     await database.closeConnection();
   });

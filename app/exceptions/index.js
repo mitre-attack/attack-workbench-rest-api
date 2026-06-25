@@ -201,6 +201,24 @@ class OrganizationIdentityNotFoundError extends CustomError {
   }
 }
 
+class ActiveOrganizationIdentityDeleteError extends CustomError {
+  constructor(identityRef, options) {
+    super(
+      `Cannot delete active organization identity ${identityRef}. Select a different organization identity before deleting this identity.`,
+      options,
+    );
+  }
+}
+
+class MitreIdentityWriteError extends CustomError {
+  constructor(identityRef, options) {
+    super(
+      `Cannot create, update, or delete protected MITRE identity ${identityRef}. Enable MITRE identity writes to modify this identity.`,
+      options,
+    );
+  }
+}
+
 class AnonymousUserAccountNotSetError extends CustomError {
   constructor(options) {
     super(`Anonymous user account not set`, options);
@@ -373,6 +391,8 @@ module.exports = {
   DefaultMarkingDefinitionsNotFoundError,
   OrganizationIdentityNotSetError,
   OrganizationIdentityNotFoundError,
+  ActiveOrganizationIdentityDeleteError,
+  MitreIdentityWriteError,
   AnonymousUserAccountNotSetError,
   AnonymousUserAccountNotFoundError,
 };

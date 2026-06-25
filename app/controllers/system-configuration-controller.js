@@ -114,3 +114,30 @@ exports.setOrganizationNamespace = async function (req, res, next) {
     return next(err);
   }
 };
+
+exports.retrieveMitreIdentityWrites = async function (req, res, next) {
+  try {
+    const mitreIdentityWrites = await systemConfigurationService.retrieveMitreIdentityWrites();
+    logger.debug('Success: Retrieved MITRE identity writes configuration.');
+    return res.status(200).send(mitreIdentityWrites);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.setMitreIdentityWrites = async function (req, res, next) {
+  const mitreIdentityWrites = req.body;
+
+  if (typeof mitreIdentityWrites?.enabled !== 'boolean') {
+    logger.warn('MITRE identity writes enabled value must be boolean');
+    return res.status(400).send('MITRE identity writes enabled value must be boolean');
+  }
+
+  try {
+    await systemConfigurationService.setMitreIdentityWrites(mitreIdentityWrites.enabled);
+    logger.debug(`Success: Set MITRE identity writes to: ${mitreIdentityWrites.enabled}`);
+    return res.status(204).send();
+  } catch (err) {
+    return next(err);
+  }
+};

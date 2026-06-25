@@ -122,20 +122,39 @@ class ServiceWithHooks {
   // TODO there are multiple delete methods (e.g., deleteById, deleteVersionById): it is unclear whether they can/should share lifecycle hooks or have their own; if their own, then can the delete methods be consolidated?
 
   /**
-   * Lifecycle hook: Called before deleteVersionById() saves the document
-   * Subclasses can override to prepare data
+   * Lifecycle hook: Called before deleteVersionById() deletes the document.
+   * Subclasses can override to validate the delete request.
    * @param {string} _stixId - The STIX ID
    * @param {string} _stixModified - The modified timestamp
-   * @param {object} _data - The update data
-   * @param {object} _existingDocument - The existing document
    */
-
-  async beforeDeleteVersionById(_stixId, _stixModified, _data, _existingDocument) {
+  async beforeDeleteVersionById(_stixId, _stixModified) {
     // Default: no-op
   }
 
+  /**
+   * Lifecycle hook: Called after deleteVersionById() deletes the document.
+   * @param {object} _deletedDocument - The deleted document
+   */
   async afterDeleteVersionById(_deletedDocument) {
     /// Default: no-op
+  }
+
+  /**
+   * Lifecycle hook: Called before deleteById() deletes all versions of an object.
+   * Subclasses can override to validate the delete request.
+   * @param {string} _stixId - The STIX ID
+   */
+  async beforeDeleteById(_stixId) {
+    // Default: no-op
+  }
+
+  /**
+   * Lifecycle hook: Called after deleteById() deletes all versions of an object.
+   * @param {string} _stixId - The STIX ID
+   * @param {object} _result - The repository delete result
+   */
+  async afterDeleteById(_stixId, _result) {
+    // Default: no-op
   }
 
   /** ******************************** REVOKE ******************************** */

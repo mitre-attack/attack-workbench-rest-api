@@ -94,6 +94,10 @@ class ValidationBypassesService {
     return await this.repository.retrieveById(id);
   }
 
+  async updateById(id, data) {
+    return await this.repository.updateById(id, data);
+  }
+
   async deleteById(id) {
     return await this.repository.deleteById(id);
   }
