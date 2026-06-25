@@ -1,4 +1,4 @@
-FROM node:22
+FROM node:22 AS base
 
 # Define build arguments
 ARG VERSION=dev
@@ -26,15 +26,31 @@ WORKDIR /usr/src/app
 # where available (npm@5+)
 COPY package*.json ./
 
-# Install the app dependencies
-RUN npm ci --only=production
-
-# Copy app source
-COPY . .
-
 # Set version as environment variable for runtime access
 ENV APP_VERSION=${VERSION} \
     GIT_COMMIT=${REVISION} \
     BUILD_DATE=${BUILDTIME}
+
+FROM base AS dev
+
+# Install all dependencies, including file-watching development tools.
+RUN npm ci
+
+# Copy app source
+COPY . .
+RUN mkdir -p /usr/src/app-seed && \
+    cp -R app /usr/src/app-seed/app && \
+    cp -R bin /usr/src/app-seed/bin && \
+    cp -R resources /usr/src/app-seed/resources
+
+CMD [ "sh", "-c", "if [ ! -f app/index.js ]; then cp -R /usr/src/app-seed/app/. app/; fi; if [ ! -f bin/www ]; then cp -R /usr/src/app-seed/bin/. bin/; fi; if [ ! -d resources ] || [ -z \"$(ls -A resources 2>/dev/null)\" ]; then mkdir -p resources && cp -R /usr/src/app-seed/resources/. resources/; fi; exec npm run start:dev" ]
+
+FROM base AS production
+
+# Install the app dependencies
+RUN npm ci --omit=dev
+
+# Copy app source
+COPY . .
 
 CMD [ "npm", "start" ]
