@@ -5,6 +5,7 @@ const config = require('../../../config/config');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
+const AttackObject = require('../../../models/attack-object-model');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -60,10 +61,19 @@ describe('Release Tracks API', function () {
     return res.body;
   }
 
+  async function removeObjectUser(object) {
+    await AttackObject.updateOne(
+      { 'stix.id': object.stix.id, 'stix.modified': object.stix.modified },
+      { $unset: { 'workspace.workflow.created_by_user_account': '' } },
+    );
+  }
+
   it('GET /api/release-tracks includes latest tier count summaries', async function () {
     const memberObject = await createTechnique('Member Technique', 'Member description');
     const candidateObject = await createTechnique('Candidate Technique', 'Candidate description');
     const stagedObject = await createTechnique('Staged Technique', 'Staged description');
+    await removeObjectUser(candidateObject);
+    await removeObjectUser(stagedObject);
 
     const createRes = await request(app)
       .post('/api/release-tracks/new')

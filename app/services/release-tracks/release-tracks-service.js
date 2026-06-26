@@ -24,6 +24,7 @@ const ephemeralService = require('./ephemeral-service');
 const bundleImportService = require('./bundle-import-service');
 const memberSyncService = require('./member-sync-service');
 const attackObjectsService = require('../stix/attack-objects-service');
+const userAccountsService = require('../system/user-accounts-service');
 
 const MODULE = 'release-tracks-service';
 
@@ -35,28 +36,59 @@ function versionKey(objectRef, objectModified) {
   return `${objectRef}:${new Date(objectModified).toISOString()}`;
 }
 
-function addObjectInfo(entry, objectsByVersion) {
-  const object = objectsByVersion.get(versionKey(entry.object_ref, entry.object_modified));
-  if (!object) return entry;
+function getTierUserId(entry) {
+  return entry.object_added_by || entry.object_staged_by;
+}
 
-  const user = object.created_by_user_account;
+function formatUser(user) {
+  if (!user) return undefined;
+
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    name: user.displayName || user.username,
+  };
+}
+
+async function getUsersById(userIds) {
+  const usersById = new Map();
+
+  await Promise.all(
+    userIds.map(async (userId) => {
+      if (userId === 'system') {
+        usersById.set(userId, { id: userId, username: userId });
+        return;
+      }
+
+      const user = await userAccountsService.getLatest(userId);
+      if (user) {
+        usersById.set(userId, user);
+      }
+    }),
+  );
+
+  return usersById;
+}
+
+function addObjectInfo(entry, objectsByVersion, usersById) {
+  const object = objectsByVersion.get(versionKey(entry.object_ref, entry.object_modified));
   const entryWithObjectInfo = {
     ...entry,
-    attack_id: object.workspace?.attack_id,
-    name: object.stix?.name,
   };
 
-  if (object.stix?.description !== undefined) {
+  if (object) {
+    entryWithObjectInfo.attack_id = object.workspace?.attack_id;
+    entryWithObjectInfo.name = object.stix?.name;
+  }
+
+  if (object?.stix?.description !== undefined) {
     entryWithObjectInfo.description = object.stix.description;
   }
 
+  const user = object?.created_by_user_account || usersById.get(getTierUserId(entry));
   if (user) {
-    entryWithObjectInfo.modified_by_user = {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      name: user.displayName || user.username,
-    };
+    entryWithObjectInfo.modified_by_user = formatUser(user);
   }
 
   return entryWithObjectInfo;
@@ -82,15 +114,19 @@ async function addObjectInfoToSnapshot(snapshot) {
   const objectsByVersion = new Map(
     objects.map((object) => [versionKey(object.stix.id, object.stix.modified), object]),
   );
+  const userIds = [...new Set(tierEntries.map(getTierUserId).filter(Boolean))];
+  const usersById = await getUsersById(userIds);
 
   const snapshotWithObjectInfo = { ...snapshot };
   if (snapshot.candidates) {
     snapshotWithObjectInfo.candidates = candidates.map((entry) =>
-      addObjectInfo(entry, objectsByVersion),
+      addObjectInfo(entry, objectsByVersion, usersById),
     );
   }
   if (snapshot.staged) {
-    snapshotWithObjectInfo.staged = staged.map((entry) => addObjectInfo(entry, objectsByVersion));
+    snapshotWithObjectInfo.staged = staged.map((entry) =>
+      addObjectInfo(entry, objectsByVersion, usersById),
+    );
   }
 
   return snapshotWithObjectInfo;
