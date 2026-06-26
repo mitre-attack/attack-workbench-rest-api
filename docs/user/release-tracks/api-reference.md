@@ -262,6 +262,13 @@ Retrieves the most recent snapshot from the release track (by `modified` timesta
 GET /api/release-tracks/:id
 ```
 
+For raw snapshot responses, entries in the `candidates` and `staged` tiers include extra object details:
+
+- `attack_id`
+- `name`
+- `description` (when available)
+- `modified_by_user.name` (display name, or username if display name is missing)
+
 **Query Parameters:**
 
 | Parameter | Values | Description |

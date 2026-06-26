@@ -90,6 +90,32 @@ components:
           type: string
           format: date-time
           description: 'Version pin: the modified timestamp of this object version'
+        attack_id:
+          type: string
+          description: 'ATT&CK ID, if found'
+          example: 'T1234'
+        name:
+          type: string
+          description: 'Object name, if found'
+        description:
+          type: string
+          description: 'Object description, if found'
+        modified_by_user:
+          type: object
+          description: 'User who last modified this object version, if found'
+          properties:
+            id:
+              type: string
+              description: 'User ID'
+            username:
+              type: string
+              description: 'Username'
+            displayName:
+              type: string
+              description: 'Display name'
+            name:
+              type: string
+              description: 'Display name, or username if display name is missing'
 
     candidate-entry:
       allOf:
