@@ -36,6 +36,14 @@ function deepClone(snapshot) {
   return clone;
 }
 
+function normalizeTierSummary(summary) {
+  return {
+    members_count: summary?.members_count ?? 0,
+    staged_count: summary?.staged_count ?? 0,
+    candidates_count: summary?.candidates_count ?? 0,
+  };
+}
+
 /**
  * Recompute and persist denormalized registry counters from actual snapshot data.
  *
@@ -76,7 +84,21 @@ async function syncRegistryCounters(trackId) {
  * @returns {Promise<{ data: Object[], pagination: Object }>}
  */
 exports.listTracks = async function listTracks(options) {
-  return registryRepo.findAll(options);
+  const result = await registryRepo.findAll(options);
+  const data = await Promise.all(
+    result.data.map(async (track) => {
+      const summary = await dynamicRepo.getLatestSnapshotTierSummary(track.track_id);
+      return {
+        ...track,
+        summary: normalizeTierSummary(summary),
+      };
+    }),
+  );
+
+  return {
+    ...result,
+    data,
+  };
 };
 
 /**

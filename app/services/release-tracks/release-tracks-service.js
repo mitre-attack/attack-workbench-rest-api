@@ -23,11 +23,113 @@ const exportService = require('./export-service');
 const ephemeralService = require('./ephemeral-service');
 const bundleImportService = require('./bundle-import-service');
 const memberSyncService = require('./member-sync-service');
+const attackObjectsService = require('../stix/attack-objects-service');
+const userAccountsService = require('../system/user-accounts-service');
 
 const MODULE = 'release-tracks-service';
 
 function notImplemented(methodName) {
   throw new NotImplementedError(MODULE, methodName);
+}
+
+function versionKey(objectRef, objectModified) {
+  return `${objectRef}:${new Date(objectModified).toISOString()}`;
+}
+
+function getTierUserId(entry) {
+  return entry.object_added_by || entry.object_staged_by;
+}
+
+function formatUser(user) {
+  if (!user) return undefined;
+
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    name: user.displayName || user.username,
+  };
+}
+
+async function getUsersById(userIds) {
+  const usersById = new Map();
+
+  await Promise.all(
+    userIds.map(async (userId) => {
+      if (userId === 'system') {
+        usersById.set(userId, { id: userId, username: userId });
+        return;
+      }
+
+      const user = await userAccountsService.getLatest(userId);
+      if (user) {
+        usersById.set(userId, user);
+      }
+    }),
+  );
+
+  return usersById;
+}
+
+function addObjectInfo(entry, objectsByVersion, usersById) {
+  const object = objectsByVersion.get(versionKey(entry.object_ref, entry.object_modified));
+  const entryWithObjectInfo = {
+    ...entry,
+  };
+
+  if (object) {
+    entryWithObjectInfo.attack_id = object.workspace?.attack_id;
+    entryWithObjectInfo.name = object.stix?.name;
+  }
+
+  if (object?.stix?.description !== undefined) {
+    entryWithObjectInfo.description = object.stix.description;
+  }
+
+  const user = object?.created_by_user_account || usersById.get(getTierUserId(entry));
+  if (user) {
+    entryWithObjectInfo.modified_by_user = formatUser(user);
+  }
+
+  return entryWithObjectInfo;
+}
+
+async function addObjectInfoToSnapshot(snapshot) {
+  const candidates = snapshot.candidates || [];
+  const staged = snapshot.staged || [];
+  const tierEntries = [...candidates, ...staged];
+
+  if (tierEntries.length === 0) {
+    return snapshot;
+  }
+
+  const uniqueEntriesByVersion = new Map();
+  for (const entry of tierEntries) {
+    uniqueEntriesByVersion.set(versionKey(entry.object_ref, entry.object_modified), entry);
+  }
+
+  const objects = await attackObjectsService.getBulkByIdAndModified([
+    ...uniqueEntriesByVersion.values(),
+  ]);
+  const objectsByVersion = new Map(
+    objects.map((object) => [versionKey(object.stix.id, object.stix.modified), object]),
+  );
+  const userIds = [...new Set(tierEntries.map(getTierUserId).filter(Boolean))];
+  const usersById = await getUsersById(userIds);
+
+  const snapshotWithObjectInfo = { ...snapshot };
+  if (snapshot.candidates) {
+    snapshotWithObjectInfo.candidates = candidates.map((entry) =>
+      addObjectInfo(entry, objectsByVersion, usersById),
+    );
+  }
+  if (snapshot.staged) {
+    snapshotWithObjectInfo.staged = staged.map((entry) =>
+      addObjectInfo(entry, objectsByVersion, usersById),
+    );
+  }
+
+  return snapshotWithObjectInfo;
 }
 
 // -----------------------------------------------------------------------------
@@ -62,7 +164,7 @@ exports.getLatestSnapshot = async function getLatestSnapshot(trackId, options) {
   if (format && format !== 'snapshot') {
     return exportService.exportSnapshot(snapshot, format, options);
   }
-  return snapshot;
+  return addObjectInfoToSnapshot(snapshot);
 };
 
 exports.getSnapshotByModified = async function getSnapshotByModified(trackId, modified, options) {

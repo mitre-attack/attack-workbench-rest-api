@@ -31,6 +31,29 @@ class ReleaseTrackDynamicRepository {
     }
   }
 
+  async getLatestSnapshotTierSummary(trackId) {
+    try {
+      const Model = this._getModel(trackId);
+      const [summary] = await Model.aggregate([
+        { $match: { id: trackId } },
+        { $sort: { modified: -1 } },
+        { $limit: 1 },
+        {
+          $project: {
+            _id: 0,
+            members_count: { $size: { $ifNull: ['$members', []] } },
+            staged_count: { $size: { $ifNull: ['$staged', []] } },
+            candidates_count: { $size: { $ifNull: ['$candidates', []] } },
+          },
+        },
+      ]).exec();
+
+      return summary || null;
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async getSnapshotByModified(trackId, modified) {
     try {
       const Model = this._getModel(trackId);
