@@ -1050,6 +1050,16 @@ class BaseService extends ServiceWithHooks {
     data.stix.x_mitre_attack_spec_version = document.stix.x_mitre_attack_spec_version;
     data.stix.revoked = document.stix.revoked ?? false;
 
+    // Workspace-only updates may originate from client STIX projections that
+    // omit persisted revision fields. Restore them before comparing the STIX
+    // revision for immutability.
+    if (document.stix.x_mitre_modified_by_ref !== undefined) {
+      data.stix.x_mitre_modified_by_ref = document.stix.x_mitre_modified_by_ref;
+    }
+    if (document.stix.object_marking_refs !== undefined) {
+      data.stix.object_marking_refs = document.stix.object_marking_refs;
+    }
+
     // Preserve x_mitre_is_subtechnique — changing subtechnique status requires
     // the dedicated conversion endpoints, not the generic update path.
     if (document.stix.x_mitre_is_subtechnique !== undefined) {

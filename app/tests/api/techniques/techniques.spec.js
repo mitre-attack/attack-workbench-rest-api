@@ -213,6 +213,23 @@ describe('Techniques Basic API', function () {
     expect(res.body.message).toContain('immutable');
   });
 
+  it('PUT /api/techniques accepts a workspace update with omitted persisted STIX fields', async function () {
+    const body = cloneForCreate(technique1);
+    delete body.stix.x_mitre_modified_by_ref;
+    delete body.stix.object_marking_refs;
+
+    const res = await request(app)
+      .put('/api/techniques/' + technique1.stix.id + '/modified/' + technique1.stix.modified)
+      .send(body)
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    expect(res.body.stix.x_mitre_modified_by_ref).toBe(technique1.stix.x_mitre_modified_by_ref);
+    expect(res.body.stix.object_marking_refs).toEqual(technique1.stix.object_marking_refs);
+  });
+
   it('POST /api/techniques does not create a technique with the same id and modified date', async function () {
     const body = cloneForCreate(technique1);
     await request(app)
