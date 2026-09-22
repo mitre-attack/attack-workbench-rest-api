@@ -72,8 +72,9 @@ publication configuration. That config write creates a draft labelled
 "Configuration updated", even if the supplied config equals its prior value.
 An actual scheduled materialization is labelled "Scheduled snapshot".
 
-Standard tracks keep only their latest rolling draft, so this is provenance
-for each surviving snapshot, not a complete event log. If auto-promotion
+Standard tracks retain their latest rolling draft plus release sources and
+drafts referenced by virtual provenance. This is provenance for each surviving
+snapshot, not a complete event log. If auto-promotion
 immediately replaces a candidate-add/review draft, the surviving snapshot is
 labelled "Candidates automatically promoted". Tagged snapshots retain their
 creation cause throughout their lifetime. Standard release creation persists a

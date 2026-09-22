@@ -301,7 +301,7 @@ A **virtual release track** is a special type of release track that computes its
 **Characteristics:**
 - Does NOT manage objects through candidate/staged/released workflow
 - Aggregates content only from **standard component tracks**
-- Only references **tagged snapshots** from component tracks (never drafts)
+- References tagged snapshots or active drafts explicitly selected with `latest_draft`
 - Creates snapshots **manually** or **on schedule** (*never* event-driven; see [Types of Release Tracks](#types-of-release-tracks) for explanation)
 - All snapshots start as drafts and must be explicitly tagged
 - Is purely compositional and cannot own native objects; place additional
@@ -412,12 +412,14 @@ A **resolution strategy** determines which snapshot from a component track to us
 **Options:**
 1. **latest_tagged** - Use the most recent tagged snapshot from the component track
 2. **specific_version** - Use a specific semantic version (e.g., "5.0")
-3. **specific_snapshot** - Use a specific snapshot by timestamp
+3. **specific_snapshot** - Use a specific tagged snapshot by timestamp
+4. **latest_draft** - Use the newest standard snapshot if it is an active untagged draft; no fallback
 
 **Examples:**
 - `{ resolution_strategy: "latest_tagged", priority: 0 }` → Always gets latest
 - `{ resolution_strategy: "specific_version", version: "5.0", priority: 0 }` → Always uses v5.0
 - `{ resolution_strategy: "specific_snapshot", snapshot: "2024-02-01T10:00:00Z", priority: 0 }` → Always uses that exact snapshot
+- `{ resolution_strategy: "latest_draft", priority: 0 }` → Uses the active draft's members only, never staged objects or candidates
 
 ---
 

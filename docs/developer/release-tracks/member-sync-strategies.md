@@ -131,7 +131,7 @@ Member sync strategies integrate with several existing release track features:
 
 - **Candidacy Threshold:** When a new revision is auto-enrolled as a candidate, it may be immediately promoted to `staged` if its status meets the candidacy threshold.
 - **Conflict Resolution Policies:** Member sync resolves overlaps with existing `candidates`/`staged` entries through its own `supplant` config (below). *Manual* candidate adds and demotions instead go through `config.promotion_conflicts.into_candidates` (default `prefer_latest`) — see `release-workflow.md`. The two are deliberately separate: supplant expresses sync intent (replace/queue/ignore), while `into_candidates` uses the same policy vocabulary as the other tier transitions.
-- **Snapshot Creation:** Any change to a release track's object lists (`candidates`, `staged`, `members`) creates a replacement draft snapshot. Standard tracks retain only the newest untagged draft after it is durably saved; tagged snapshots remain historical. Member sync follows this convention.
+- **Snapshot Creation:** Any change to a release track's object lists (`candidates`, `staged`, `members`) creates a replacement draft snapshot. After it is durably saved, older untagged drafts are pruned unless they are preserved release sources or referenced by virtual provenance. Tagged snapshots remain historical. Member sync follows this convention.
 
 ---
 

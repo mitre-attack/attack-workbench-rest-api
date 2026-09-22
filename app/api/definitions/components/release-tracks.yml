@@ -392,11 +392,13 @@ components:
                 description: 'Exact component snapshot timestamp; also identifies when that snapshot was created'
               resolved_version:
                 type: string
-                description: 'Tagged version of the exact component snapshot'
+                nullable: true
+                description: 'Tagged version of the exact component snapshot, or null for a draft'
               strategy_used:
                 type: string
                 enum:
                   - latest_tagged
+                  - latest_draft
                   - specific_version
                   - specific_snapshot
               filters_applied:
@@ -652,9 +654,11 @@ components:
       type: object
       description: |
         Reference to a component standard track. Selector fields are determined
-        by resolution_strategy: latest_tagged rejects version and snapshot;
-        specific_version requires only version; specific_snapshot requires only
-        snapshot. Unknown properties are rejected.
+        by resolution_strategy: latest_tagged and latest_draft reject version and
+        snapshot; specific_version requires only version; specific_snapshot requires
+        only snapshot and remains tagged-only. latest_draft selects the active
+        untagged standard snapshot, never an older retained source or a tagged
+        fallback. Every strategy imports members only. Unknown properties are rejected.
       additionalProperties: false
       required:
         - track_id
@@ -673,6 +677,7 @@ components:
           type: string
           enum:
             - latest_tagged
+            - latest_draft
             - specific_version
             - specific_snapshot
           description: 'How to resolve which snapshot to use from this component'
@@ -726,6 +731,17 @@ components:
             resolution_strategy:
               enum:
                 - latest_tagged
+          not:
+            anyOf:
+              - required:
+                  - version
+              - required:
+                  - snapshot
+        - title: 'Latest active draft'
+          properties:
+            resolution_strategy:
+              enum:
+                - latest_draft
           not:
             anyOf:
               - required:
@@ -795,11 +811,12 @@ components:
           type: object
           description: |
             Virtual releases only. Immutable provenance keyed by component
-            release-track ID; each value is the tagged component version frozen
-            in the released draft's composition_resolution. Standard release
-            history entries omit this property.
+            release-track ID; each value is the tagged component version or null
+            for a draft source frozen in the released draft's composition_resolution.
+            Standard release history entries omit this property.
           additionalProperties:
             type: string
+            nullable: true
             pattern: '^\d+\.\d+$'
           example:
             release-track--a1b2c3d4-e5f6-7890-abcd-ef1234567890: '5.2'

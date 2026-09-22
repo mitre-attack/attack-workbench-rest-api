@@ -22,7 +22,8 @@ A **snapshot** is an immutable state of a release track at a specific point in t
 
 Every content-changing operation creates a replacement snapshot with a new
 `modified` timestamp. For a standard track, the replacement is saved first and
-then the older untagged draft is removed. Tagged snapshots are never pruned.
+then older untagged drafts are pruned, except preserved release sources and
+drafts referenced by persisted virtual provenance. Tagged snapshots are never pruned.
 
 A snapshot may be either a **draft release** (untagged) or a **tagged release** (has version number).
 
@@ -67,8 +68,9 @@ id: "release-track--123", modified: "2024-01-15T16:20:00.000Z"
   ]
 ```
 
-The timeline lists the first draft only to illustrate its replacement. Once the
-second draft is durably stored, the first draft is no longer retrievable.
+The timeline lists the first draft only to illustrate its replacement. In this
+example it has no virtual dependents or tagged release preserving it, so once
+the second draft is durably stored, the first draft is no longer retrievable.
 
 ## The Release Operation
 

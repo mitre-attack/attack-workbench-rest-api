@@ -467,26 +467,6 @@ describe('Release-track release planning and commit API', function () {
       name: 'DatabaseError',
       details: expect.stringContaining('Component version keys must be valid release track IDs'),
     });
-
-    const missingValueModified = new Date(created.getTime() + 3000);
-    await expect(
-      dynamicRepo.saveSnapshot(track.id, {
-        ...snapshotBase(track),
-        modified: missingValueModified,
-        version: '1.2',
-        version_history: [
-          {
-            ...historyEntry,
-            version: '1.2',
-            snapshot_id: missingValueModified,
-            component_versions: { [track.id]: null },
-          },
-        ],
-      }),
-    ).rejects.toMatchObject({
-      name: 'DatabaseError',
-      details: expect.stringContaining('is required'),
-    });
   });
 
   it('resolves latest when the release request is handled', async function () {

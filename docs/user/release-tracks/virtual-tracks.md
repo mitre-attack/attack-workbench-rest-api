@@ -7,7 +7,7 @@ Virtual release tracks are computed aggregations of standard release tracks. The
 **Key Characteristics:**
 
 - Virtual tracks **compute** their contents from component standard tracks
-- Only reference **tagged snapshots** from standard tracks (never drafts)
+- Reference **tagged snapshots** or explicitly selected **active drafts** from standard tracks
 - Maintain their own **independent snapshot history and versioning**
 - Create snapshots **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
@@ -190,9 +190,36 @@ Resolves to a specific snapshot by its `modified` timestamp.
 
 **Use case:** "Lock to exact snapshot for reproducibility"
 
+#### 4. `latest_draft`
+
+Resolves the standard track's newest snapshot only if it is an active,
+untagged draft. A track with no tagged releases can be used:
+
+```javascript
+{
+  track_id: "release-track--uuid-1",
+  resolution_strategy: "latest_draft",
+  priority: 0
+}
+```
+
+Only the draft's **members** contribute. Staged objects and candidates are
+excluded; this is not a preview of the standard track's prospective release.
+Member revisions are frozen when the virtual snapshot is materialized.
+
+If the newest snapshot is tagged, materialization returns `400 Bad Request`
+with a "no active draft snapshot" message. There is no fallback to a tagged
+release or an older retained draft. Preserved release-source drafts are not
+active drafts. Create a new standard-track draft before materializing.
+
+Mixed compositions may use `latest_draft` for some components and
+`latest_tagged` for others. Draft provenance records the exact
+`resolved_snapshot_id`, `strategy_used: "latest_draft"`, and
+`resolved_version: null`. Tagging the virtual snapshot does not tag its sources.
+
 Component selectors are strict and strategy-specific:
 
-- `latest_tagged` rejects both `version` and `snapshot`.
+- `latest_tagged` and `latest_draft` reject both `version` and `snapshot`.
 - `specific_version` requires `version` and rejects `snapshot`.
 - `specific_snapshot` requires `snapshot` and rejects `version`.
 
@@ -201,15 +228,18 @@ not silently discarded.
 
 ### Component Track Sync Rules
 
-Virtual tracks **only sync from component tracks' `members` tier** (`x_mitre_contents`). This ensures that virtual tracks only aggregate objects that have been officially released in their source tracks.
+Virtual tracks **only sync from component tracks' `members` tier** (`x_mitre_contents`), whether the selected source is tagged or a draft.
 
 **Important:**
 
-- Virtual tracks reference **tagged snapshots only** (never drafts)
+- Draft components require the explicit `latest_draft` strategy; the other strategies remain tagged-only
 - Virtual tracks pull objects from **`members` tier only** (never staged or candidates)
-- This guarantees that virtual track releases are composed of stable, released content
+- Each materialization freezes exact member revisions and source provenance
 
-**Rationale:** Since virtual tracks can only reference tagged snapshots from component tracks, it makes sense to only pull from the `members` tier, which contains the released objects from those snapshots.
+Source drafts referenced by virtual snapshots are retained when the standard
+track advances. Deletion remains blocked while a virtual snapshot depends on
+the source. After the last dependent is removed, a later standard draft write
+can prune that otherwise-unprotected source.
 
 ### Filters
 
@@ -226,7 +256,7 @@ filters: {
 }
 ```
 
-Domain filters hydrate the exact revisions pinned by the component's tagged
+Domain filters hydrate the exact revisions pinned by the selected component
 snapshot; they do not inspect the latest database revision. Matching uses
 inclusive **any-match** semantics, not exact-array equality: an object is
 included when at least one value in its canonical `x_mitre_domains` array
@@ -689,11 +719,11 @@ POST /api/release-tracks/:id/snapshots/:modified/release
 }
 ```
 
-`component_versions` is keyed by immutable component track ID. Its values come
-from the selected draft's `composition_resolution`, not from the component
-tracks' current releases. If a component advances after this virtual draft was
-materialized, the virtual release still records the version that actually
-produced its frozen contents. Standard release history entries omit this
+`component_versions` is keyed by immutable component track ID. Values are
+tagged version strings or `null` for draft components, copied from the selected
+virtual draft's `composition_resolution`. If a component advances or is tagged
+after materialization, the virtual release still records its original source
+state and exact snapshot ID. Standard release history entries omit this
 virtual-only property.
 
 The snapshot-history endpoint (`GET /api/release-tracks/:id/snapshots`) also
@@ -703,7 +733,7 @@ clients present provenance beside the draft or release it describes rather
 than presenting only the virtual track's current HEAD resolution. In each
 component entry, `resolved_snapshot_id` is the exact component snapshot's
 creation timestamp and stable retrieval key; `resolved_version` names its
-tagged version. The stored source, filtered, and contributed counts belong to
+tagged version or is `null` for a draft. The stored source, filtered, and contributed counts belong to
 that materialization and are not recomputed from the component track's current
 state. Full snapshot retrieval additionally returns the deduplication report
 and resolution summary.
@@ -832,37 +862,14 @@ Each virtual track snapshot stores metadata about how it was composed:
 
 ### Validation Rules
 
-#### 1. Component tracks must have tagged snapshots
+#### 1. Component snapshots must satisfy their resolution strategy
 
-```javascript
-// When creating virtual snapshot
-for (const component of composition.component_tracks) {
-  const snapshot = await resolveSnapshot(component);
-
-  if (snapshot.version === null) {
-    throw new ValidationError(
-      `Component track ${component.track_id} resolved to draft snapshot. ` +
-        `Virtual tracks can only reference tagged snapshots.`,
-    );
-  }
-}
-```
-
-**User experience:**
-
-```bash
-POST /api/release-tracks/release-track--uuid-virtual/virtual/snapshots/create
-
-# Error response:
-{
-  "error": "ValidationError",
-  "message": "Cannot create virtual snapshot: component track 'GroupsMonthly' has no tagged releases",
-  "details": {
-    "component": "release-track--uuid-1",
-    "issue": "No tagged snapshots found (all snapshots are drafts)"
-  }
-}
-```
+`latest_tagged`, `specific_version`, and `specific_snapshot` require a tagged
+source. `latest_draft` requires the newest standard snapshot to be an active
+untagged draft. Missing eligible sources return `400 Bad Request`; the server
+does not silently select another strategy. Component identity and type are
+validated when composition is configured, while snapshot eligibility is
+checked at materialization.
 
 #### 2. Component tracks must be standard tracks
 
@@ -1294,15 +1301,20 @@ Virtual tracks cannot transition workflow status of composed objects.
 
 **Alternative:** If you need to change object status, do it in the source standard track.
 
-### 3. Only Reference Tagged Snapshots
+### 3. Draft Composition Is Members-Only
 
-Virtual tracks cannot compose from draft snapshots.
-
-**Rationale:** Ensures stability and prevents virtual snapshots from inadvertently including WIP content.
-
-**Alternative:** Tag the standard track snapshot first, then create virtual snapshot.
+`latest_draft` does not include candidates or staged content and does not
+implicitly release the standard track. To include staged changes, release the
+standard track first and select `latest_tagged`, or make a later active draft
+after the release.
 
 ## Error Handling
+
+### Error: Component Has No Active Draft
+
+`latest_draft` materialization returns `400 Bad Request` when the newest
+standard snapshot is tagged or a preserved release source. Create a new active
+standard draft, or explicitly change the component strategy to `latest_tagged`.
 
 ### Error: Component Has No Tagged Snapshots
 

@@ -122,7 +122,7 @@ const componentTrackDefinition = {
   },
   resolution_strategy: {
     type: String,
-    enum: ['latest_tagged', 'specific_version', 'specific_snapshot'],
+    enum: ['latest_tagged', 'latest_draft', 'specific_version', 'specific_snapshot'],
     required: true,
   },
   priority: {
@@ -172,7 +172,10 @@ const componentSnapshotResolutionDefinition = {
   resolved_snapshot_id: { type: Date, required: true },
   resolved_version: {
     type: String,
-    required: true,
+    required: function () {
+      return this.strategy_used !== 'latest_draft';
+    },
+    default: null,
     validate: validateVersion,
   },
   strategy_used: { type: String, required: true },
@@ -360,12 +363,11 @@ const versionHistoryEntryDefinition = {
     candidates_count: { type: Number },
     quarantine_count: { type: Number },
   },
-  // Virtual tracks only: immutable component track ID → tagged version.
+  // Virtual tracks only: immutable component track ID → version (null for drafts).
   component_versions: {
     type: Map,
     of: {
       type: String,
-      required: true,
       validate: validateVersion,
     },
     default: undefined,

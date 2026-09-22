@@ -659,7 +659,7 @@ The virtual release response records the materialized component provenance in
 ```
 
 Keys are immutable component track IDs and values are the tagged versions
-stored in the selected draft's `composition_resolution`. The server does not
+or `null` for draft components stored in the selected draft's `composition_resolution`. The server does not
 look up the components' current releases, so advancing a component after
 materialization does not rewrite the virtual release's provenance. Standard
 release history entries omit `component_versions`.
@@ -1372,7 +1372,7 @@ multiple standard component tracks based on configurable rules.
 - Compute contents only from standard component tracks; virtual-track nesting
   is rejected
 - Are purely compositional and cannot own native members
-- Only reference **tagged snapshots** from component tracks (never drafts)
+- Reference **tagged snapshots** or explicitly selected **active drafts**
 - Create snapshots **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
 - Support **resolution strategies** to control which component versions are included
@@ -1381,7 +1381,14 @@ multiple standard component tracks based on configurable rules.
 
 1. `latest_tagged` - Always use the most recent tagged snapshot from component
 2. `specific_version` - Pin to a specific semantic version (e.g., "5.0")
-3. `specific_snapshot` - Pin to a specific snapshot by timestamp
+3. `specific_snapshot` - Pin to a specific tagged snapshot by timestamp
+4. `latest_draft` - Use the newest standard snapshot only if it is an active untagged draft
+
+Every strategy contributes **members only**, never staged objects or
+candidates. `latest_draft` does not fall back to a tagged release or older
+retained draft; no active draft returns `400 Bad Request`. Draft component
+provenance stores `resolved_version: null` and the exact source timestamp.
+Later source changes do not alter the materialized virtual snapshot.
 
 See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
 
@@ -1474,8 +1481,8 @@ snapshot, and timestamp-selected snapshot GET requests.
 Composition, component, filter, and deduplication objects are strict. Unknown
 keys, including the incorrect singular `filters.domain`, return
 `400 Bad Request`. Component selectors are also strategy-specific:
-`latest_tagged` rejects `version` and `snapshot`; `specific_version` requires
-only `version`; and `specific_snapshot` requires only `snapshot`.
+`latest_tagged` and `latest_draft` reject `version` and `snapshot`;
+`specific_version` requires only `version`; `specific_snapshot` requires only `snapshot`.
 Every component requires a unique, non-negative integer `priority`; lower
 numbers have higher priority. When composition is supplied during creation,
 each referenced track must already exist and must be a standard track. Virtual
@@ -1613,7 +1620,7 @@ readiness marker for those shared release operations.
 
 Each resulting `members` and `quarantine` entry contains an exact
 `(object_ref, object_modified)` pair. Virtual materialization preserves exact
-revisions already frozen in the selected tagged component snapshots. It also
+revisions already frozen in the selected tagged or active-draft component snapshots. It also
 resolves any unresolved legacy component entry before persistence. The virtual
 snapshot never stores `"latest"` and does not inherit a standard component's
 `track_latest` member-sync behavior.

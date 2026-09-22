@@ -560,7 +560,7 @@ class ReleaseTrackDynamicRepository {
     }
   }
 
-  async deleteOlderDrafts(trackId, modified) {
+  async deleteOlderDrafts(trackId, modified, referencedDrafts = []) {
     try {
       const Model = this._getModel(trackId);
       const retainedDrafts = await Model.distinct('release_source_modified', {
@@ -568,6 +568,7 @@ class ReleaseTrackDynamicRepository {
         version: { $type: 'string' },
         release_source_modified: { $type: 'date' },
       }).exec();
+      retainedDrafts.push(...referencedDrafts);
       const query = {
         id: trackId,
         version: null,
@@ -613,6 +614,26 @@ class ReleaseTrackDynamicRepository {
         .sort({ modified: 1 })
         .lean()
         .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async findResolvedComponentSnapshotIds(trackId, componentTrackId) {
+    try {
+      const Model = this._getModel(trackId);
+      const snapshots = await Model.aggregate([
+        {
+          $match: {
+            id: trackId,
+            'composition_resolution.component_snapshots.track_id': componentTrackId,
+          },
+        },
+        { $unwind: '$composition_resolution.component_snapshots' },
+        { $match: { 'composition_resolution.component_snapshots.track_id': componentTrackId } },
+        { $group: { _id: '$composition_resolution.component_snapshots.resolved_snapshot_id' } },
+      ]).exec();
+      return snapshots.map((snapshot) => snapshot._id);
     } catch (err) {
       throw new DatabaseError(err);
     }

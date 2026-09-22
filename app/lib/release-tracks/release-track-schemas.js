@@ -230,7 +230,12 @@ const deduplicationStrategySchema = z.enum([
   'quarantine',
 ]);
 
-const resolutionStrategySchema = z.enum(['latest_tagged', 'specific_version', 'specific_snapshot']);
+const resolutionStrategySchema = z.enum([
+  'latest_tagged',
+  'latest_draft',
+  'specific_version',
+  'specific_snapshot',
+]);
 
 const conflictPolicySchema = z.enum([
   'prefer_latest',
@@ -363,6 +368,12 @@ const componentTrackSchema = z.discriminatedUnion('resolution_strategy', [
     .object({
       ...componentTrackBaseShape,
       resolution_strategy: z.literal('latest_tagged'),
+    })
+    .strict(),
+  z
+    .object({
+      ...componentTrackBaseShape,
+      resolution_strategy: z.literal('latest_draft'),
     })
     .strict(),
   z

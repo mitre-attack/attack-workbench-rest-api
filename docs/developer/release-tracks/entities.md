@@ -7,7 +7,7 @@ This document tracks new database schemas, interfaces, etc.; as well as changes 
 | Collection                           | Purpose                                                                                                                                                                                                           | Written by                                                                                                | Growth and retention                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `releaseTrackRegistry`               | One document per track: name, type, denormalized counters, the tagged-release catalogue (`tagged_releases`), the release lock, and virtual schedules. The index that maps a track to its own snapshot collection. | Track create/delete, every snapshot write (counters), release commit and conversion to draft (catalogue). | One document per track.                                                                                      |
-| `release-track--<uuid>`              | The track's snapshots: one active rolling draft, a preserved source draft per tagged standard release, and every tagged release; every materialized draft plus releases for a virtual track.                      | Snapshot service and release commit.                                                                      | Standard tracks grow by two snapshots per release plus one active draft; virtual tracks by materializations. |
+| `release-track--<uuid>` | The track's snapshots: one active rolling draft, preserved standard release sources, source drafts referenced by virtual provenance, and tagged releases; every materialized draft plus releases for a virtual track. | Snapshot service and release commit. | Standard tracks retain releases, their source drafts, virtual-pinned drafts, and one active draft; virtual tracks grow by materializations. |
 | `releaseTrackContentManifests`       | The sealed bill of materials each snapshot references (`content_manifest_id`). Several snapshots share one manifest when their member sets are identical.                                                         | Sealed whenever members are written; discarded when no snapshot references it.                            | Bounded by member-changing writes, not by snapshot count.                                                    |
 | `releaseTrackContentManifestEntries` | One exact-revision pointer per object a manifest emits or depends on. The `(object_ref, object_modified)` index is what protects referenced revisions from deletion.                                              | With its manifest.                                                                                        | Roughly members + relationships + a few supporting objects per manifest.                                     |
 | `releaseTrackReconciliations`        | Outstanding backref reconciliation work only: a record is created before the `workspace.release_tracks` listeners run and deleted when they succeed, so anything present is pending or failed and needs repair.   | Every snapshot write.                                                                                     | Normally empty.                                                                                              |
@@ -393,7 +393,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
     component_tracks: [
       {
         track_id: "release-track--groups-monthly",
-        resolution_strategy: "latest_tagged",  // "latest_tagged" | "specific_version" | "specific_snapshot"
+        resolution_strategy: "latest_tagged",  // "latest_tagged" | "latest_draft" | "specific_version" | "specific_snapshot"
         priority: 1,  // Always required and unique (lower number = higher priority)
 
         // Optional: filters to limit which objects are included
@@ -634,15 +634,15 @@ restart recovery idempotent. Failed occurrences remain retryable.
 
 **Virtual Track Constraints:**
 
-- Can only reference **tagged snapshots** from component tracks (not drafts)
-- Can only sync from component tracks' **`members` tier** (released objects only)
+- Reference tagged snapshots or active drafts selected with `latest_draft`
+- Sync from component tracks' **`members` tier** only (never staged or candidates)
 - Can only compose from **standard release tracks** (not other virtual tracks - no nesting allowed)
 - Is purely compositional and has no `native_members` or second membership
   authority; aggregate-specific content belongs in another standard component
   track
 - Snapshots are created **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
-- Component tracks must exist and have at least one tagged release
+- Component tracks must exist; selected source snapshot eligibility is checked at materialization
 - Each component track must have a unique **priority** value (no duplicates)
 - Priority is a required non-negative integer for every component, regardless
   of deduplication strategy
@@ -668,11 +668,12 @@ restart recovery idempotent. Failed occurrences remain retryable.
   `version_history[].component_versions`. This is an object keyed by immutable
   component `track_id`, not display name. It records the frozen materialization
   inputs even when a component has newer releases by the time the virtual draft
-  is tagged. Standard release history entries omit the field
+  is tagged. Draft components record `null`; tagged components record their
+  version string. Standard release history entries omit the field
 - Composition request objects are strict; unknown composition, component,
   filter, and deduplication keys return `400 Bad Request`
 - Selector fields form a discriminated request contract:
-  - `latest_tagged` rejects `version` and `snapshot`
+  - `latest_tagged` and `latest_draft` reject `version` and `snapshot`
   - `specific_version` requires `version` and rejects `snapshot`
   - `specific_snapshot` requires `snapshot` and rejects `version`
 - Quarantine promotion selects an exact revision in a new draft and preserves

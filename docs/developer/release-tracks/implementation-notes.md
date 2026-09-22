@@ -204,7 +204,7 @@ Virtual-only operations are deliberately scoped beneath
   rules, empty members/quarantine tiers, and
   `composition_resolution: null`. Clearing all three prevents a materialized
   result from surviving a change to the rules that produced it.
-- `POST /virtual/snapshots/create` resolves tagged component snapshots and
+- `POST /virtual/snapshots/create` resolves tagged or active-draft component snapshots and
   persists the concrete members, quarantine, and immutable
   `composition_resolution`.
 - Every persisted member and quarantine entry uses an exact
@@ -215,19 +215,32 @@ Virtual-only operations are deliberately scoped beneath
   moving reference.
 - `member_sync.strategy = track_latest` applies only to standard tracks. New
   object revisions may update a component's newer candidate/staged draft, but
-  they cannot rewrite the members of the tagged component snapshot selected
-  during virtual materialization or an already-persisted virtual snapshot.
+  they cannot rewrite the members of the component snapshot selected during
+  virtual materialization or an already-persisted virtual snapshot.
 - `POST /virtual/quarantine/promote` clones the latest virtual snapshot,
   selects one exact quarantined revision for members, and removes all
   quarantined alternatives for that object.
 
 Composition input uses strict Zod objects at the composition, component,
 filter, and deduplication levels. Components form a discriminated union on
-`resolution_strategy`: `latest_tagged` accepts no selector,
+`resolution_strategy`: `latest_tagged` and `latest_draft` accept no selector,
 `specific_version` requires only `version`, and `specific_snapshot` requires
 only `snapshot`. This prevents misspelled filters or irrelevant selectors from
 being silently stripped before persistence. The same schema is used for
 initial virtual-track creation and composition updates.
+
+`latest_draft` resolves the newest standard snapshot only when it is untagged
+and not a preserved release source. It does not search older retained drafts
+or fall back to a release. An unavailable active draft returns `400 Bad Request`.
+All strategies contribute members only; candidates and staged entries are
+never composed. `specific_snapshot` remains tagged-only.
+
+Standard clone save/prune and virtual materialization share the existing
+release lock. Concurrent operations fail fast with `409 Conflict`, preventing
+pruning between source resolution and persisted virtual provenance. Pruning
+retains every source snapshot named by persisted virtual provenance, including
+historical virtual drafts. Once the last dependent disappears, the next
+standard clone can prune the source if no other retention rule protects it.
 
 Component `priority` is always required, even when the selected deduplication
 strategy does not inspect it. Zod rejects duplicate component IDs and
@@ -339,13 +352,13 @@ planned snapshot, and the commit path tags that snapshot in place.
 Virtual release planning also derives
 `version_history[].component_versions` directly from the selected draft's
 immutable `composition_resolution.component_snapshots`. The property is a
-component track ID to tagged `MAJOR.MINOR` version map. It deliberately does
-not query the component tracks at preview or commit time: a component can
-advance after virtual materialization without changing the provenance of the
-already-frozen draft. Standard release history entries omit the virtual-only
-property. Mongoose validates every map value with the shared release-version
-validator and requires every persisted component resolution to identify its
-tagged `resolved_version`.
+component track ID to tagged `MAJOR.MINOR` version or `null` map. It deliberately
+does not query the component tracks at preview or commit time: a component can
+advance after materialization without changing the already-frozen provenance.
+Standard release history entries omit the property. Mongoose validates string
+values with the shared release-version validator. Component resolutions require
+a tagged `resolved_version` for tagged strategies and allow `null` for
+`latest_draft`.
 
 Standard release commit assigns a fresh timestamp, stores
 `release_source_modified`, and inserts the tagged clone while retaining the

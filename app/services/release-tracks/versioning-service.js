@@ -95,15 +95,15 @@ function virtualReleaseChanges(previousSnapshot, draftSnapshot) {
 }
 
 /**
- * Capture the tagged component versions frozen into a materialized virtual
- * draft. Track IDs are stable provenance keys; component names are descriptive
- * metadata and may change or collide.
+ * Capture the component versions frozen into a materialized virtual draft,
+ * using null for draft sources. Track IDs are stable provenance keys;
+ * component names are descriptive metadata and may change or collide.
  */
 function virtualComponentVersions(snapshot) {
   return Object.fromEntries(
     (snapshot.composition_resolution?.component_snapshots || []).map((component) => [
       component.track_id,
-      component.resolved_version,
+      component.resolved_version ?? null,
     ]),
   );
 }
