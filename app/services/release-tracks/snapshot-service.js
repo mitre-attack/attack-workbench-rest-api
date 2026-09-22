@@ -430,6 +430,16 @@ exports.cloneSnapshot = async function cloneSnapshot(
   overrides,
   options = {},
 ) {
+  if (sourceSnapshot.type === 'standard') {
+    const { withReleaseLock } = require('./versioning-service');
+    return withReleaseLock(trackId, () =>
+      cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options),
+    );
+  }
+  return cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options);
+};
+
+async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options) {
   const clone = deepClone(sourceSnapshot);
   const hasSnapshotDescriptionOverride = Object.prototype.hasOwnProperty.call(
     overrides || {},
@@ -479,7 +489,17 @@ exports.cloneSnapshot = async function cloneSnapshot(
   }
 
   if (saved.type === 'standard') {
-    const prunedDrafts = await dynamicRepo.deleteOlderDrafts(trackId, saved.modified);
+    // Materialization holds this same track's release lock until provenance
+    // is persisted, so this scan cannot miss a concurrently created dependent.
+    const virtualTracks = (await registryRepo.findAll({ type: 'virtual' })).data;
+    const referencedDrafts = await mapWithConcurrency(virtualTracks, 12, (track) =>
+      dynamicRepo.findResolvedComponentSnapshotIds(track.track_id, trackId),
+    );
+    const prunedDrafts = await dynamicRepo.deleteOlderDrafts(
+      trackId,
+      saved.modified,
+      referencedDrafts.flat(),
+    );
     await contentManifestService.discardUnreferenced(
       trackId,
       prunedDrafts.map((snapshot) => snapshot.content_manifest_id),
@@ -498,7 +518,7 @@ exports.cloneSnapshot = async function cloneSnapshot(
   }
   logger.verbose(`SnapshotService: Cloned snapshot for track "${trackId}"`);
   return saved;
-};
+}
 
 // =============================================================================
 // Track cloning

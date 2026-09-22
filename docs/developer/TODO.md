@@ -2920,3 +2920,16 @@ database.
 - [x] Frontend: draft-then-tag flow (header keeps only Create Draft; tagging
       from draft cards), DETAILS tab renamed Board, track deletion in a CONFIG
       danger zone.
+
+## Draft components in virtual tracks (2026-09-22)
+
+- [x] Add strict `latest_draft` resolution of the active standard draft's
+      members only, without falling back to tagged or historical snapshots.
+- [x] Preserve exact source timestamps and nullable draft versions in
+      composition resolution and virtual release history.
+- [x] Retain virtual-referenced source drafts during pruning and serialize
+      standard clone writes with materialization using the release lock.
+- [x] Expose per-component draft/tagged selection in frontend creation and
+      configuration; render draft provenance without inventing a version.
+- [x] Verify the real frontend/API flow, focused regressions, and the full
+      backend test suite; update API documentation and Bruno request notes.

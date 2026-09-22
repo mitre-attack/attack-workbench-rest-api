@@ -729,7 +729,7 @@ frontend-only properties in the submitted composition, component, filter, or
 deduplication objects. Component selector fields must also follow the selected
 strategy:
 
-- `latest_tagged` sends neither `version` nor `snapshot`.
+- `latest_tagged` and `latest_draft` send neither `version` nor `snapshot`.
 - `specific_version` sends `version` and omits `snapshot`.
 - `specific_snapshot` sends `snapshot` and omits `version`.
 - Every component sends a unique, non-negative integer `priority`; lower
@@ -915,18 +915,18 @@ Done when:
 Virtual release history entries now include:
 
 ```ts
-component_versions?: Record<string, string>;
+component_versions?: Record<string, string | null>;
 ```
 
 Each key is an immutable component release-track ID and each value is the
-tagged component version frozen in the virtual draft's
+tagged component version or `null` for a draft source, frozen in the virtual draft's
 `composition_resolution`. The map is present only for virtual releases;
 standard release history entries omit it. Component display names are
 deliberately not used as keys because names can change or collide.
 
-The existing `VersionHistoryEntry` interface currently types this property as
-`any`. Replace that with `Record<string, string>`. If the UI presents
-provenance to operators, pair each track ID with the matching
+The `VersionHistoryEntry` interface types this property as
+`Record<string, string | null>`. Display null values as **Draft** and pair
+each track ID with the matching
 `composition_resolution.component_snapshots[].track_name` from the same
 released snapshot while retaining the ID as the authoritative identity.
 

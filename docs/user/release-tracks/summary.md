@@ -36,7 +36,7 @@ The Release Tracks API supports two types of release tracks:
 - No duplicate object tracking - objects managed in source tracks only
 - Purely compositional - virtual tracks cannot add native members of their own
 - Create snapshots manually or on schedule (never event-driven)
-- Always compose from tagged snapshots only (never drafts)
+- Compose members from tagged snapshots or active drafts explicitly selected with `latest_draft`
 - Examples: "EnterpriseTwiceAnnual" (aggregates Groups + Techniques + Software)
 
 **Use Case for Virtual Tracks:**
@@ -102,7 +102,8 @@ We borrow heavily concepts from git. Snapshots are sort of like commits and tagg
 - Identified by `stix.modified` timestamp
 - Immutable once created
 - Standard tracks retain one active rolling draft plus the hidden source draft
-  for each tagged release; tagged releases remain historical
+  for each tagged release and any drafts referenced by virtual provenance;
+  tagged releases remain historical
 - May be a **draft release** (untagged) or **tagged release** (has version number)
 
 **Tagged Releases** (like Git tags)

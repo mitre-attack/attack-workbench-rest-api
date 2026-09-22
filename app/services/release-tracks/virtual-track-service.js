@@ -9,7 +9,7 @@ const CreationCause = require('../../lib/release-tracks/snapshot-creation-causes
 // snapshot creation via resolution of component tracks.
 //
 // Virtual tracks aggregate content from multiple standard tracks by:
-//   1. Resolving each component track to a specific tagged snapshot
+//   1. Resolving each component track to a tagged snapshot or its active draft
 //   2. Collecting members from each resolved snapshot
 //   3. Applying per-component filters (object_types and domains)
 //   4. Deduplicating across all components
@@ -127,8 +127,7 @@ exports.validateComposition = async function validateComposition(composition) {
 };
 
 /**
- * Resolve a component track to a specific tagged snapshot based on its
- * resolution strategy.
+ * Resolve a component track to a snapshot based on its resolution strategy.
  *
  * @param {Object} component - A component_tracks entry
  * @returns {Promise<Object>} The resolved snapshot document
@@ -140,6 +139,22 @@ async function resolveComponentSnapshot(component) {
   switch (component.resolution_strategy) {
     case 'latest_tagged':
       snapshot = await dynamicRepo.getLatestTaggedSnapshot(component.track_id);
+      break;
+
+    case 'latest_draft':
+      snapshot = await dynamicRepo.getLatestSnapshot(component.track_id);
+      // Older untagged snapshots may be retained for releases or virtual
+      // provenance. They are not an active rolling draft.
+      if (
+        !snapshot ||
+        snapshot.version != null ||
+        (await dynamicRepo.getReleaseBySourceModified(component.track_id, snapshot.modified))
+      ) {
+        throw new BadRequestError({
+          message: `Component track '${component.track_id}' has no active draft snapshot`,
+          details: 'Create a standard-track draft before materializing with latest_draft',
+        });
+      }
       break;
 
     case 'specific_version':
@@ -160,8 +175,8 @@ async function resolveComponentSnapshot(component) {
     throw new NoTaggedSnapshotsError(component.track_id);
   }
 
-  // For specific_snapshot strategy, the snapshot may be a draft — validate it's tagged
-  if (snapshot.version == null) {
+  // Explicit snapshot selection remains tagged-only.
+  if (component.resolution_strategy !== 'latest_draft' && snapshot.version == null) {
     throw new NoTaggedSnapshotsError(component.track_id);
   }
 
@@ -375,7 +390,7 @@ async function resolveComposition(snapshot, registryMap) {
       track_name: registry.name,
       track_type: registry.type,
       resolved_snapshot_id: resolvedSnapshot.modified,
-      resolved_version: resolvedSnapshot.version,
+      resolved_version: resolvedSnapshot.version ?? null,
       strategy_used: component.resolution_strategy,
       filters_applied: component.filters || undefined,
       total_objects_in_source: totalObjectsInSource,
@@ -497,7 +512,7 @@ exports.updateSchedule = async function updateSchedule(trackId, schedule) {
  * Create a new virtual snapshot by resolving the composition rules.
  *
  * For each component track:
- *   1. Resolve to a tagged snapshot via the configured strategy
+ *   1. Resolve to a tagged snapshot or active draft via the configured strategy
  *   2. Extract and filter members
  * Then deduplicate across all components and persist a new draft snapshot.
  *

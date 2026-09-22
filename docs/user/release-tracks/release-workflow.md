@@ -1137,8 +1137,8 @@ July 16 (manual):
 
 ### Virtual Track Constraints
 
-- Only references **tagged snapshots** from components (never drafts)
+- References tagged snapshots or active drafts explicitly selected with `latest_draft`; members only
 - Snapshots created **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** (must explicitly tag)
-- Component tracks must have at least one tagged release
+- Component tracks must have a source eligible for their selected strategy at materialization
 - Circular dependencies not allowed
