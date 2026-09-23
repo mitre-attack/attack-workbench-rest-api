@@ -432,6 +432,10 @@ const compositionSchema = z
   .strict()
   .superRefine(validateCompositionUniqueness);
 
+const draftRetentionSchema = z
+  .object({ max_drafts: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable() })
+  .strict();
+
 const createTrackBodySchema = z
   .object({
     name: trackNameSchema,
@@ -441,11 +445,19 @@ const createTrackBodySchema = z
     type: trackTypeQuerySchema.default('standard'),
     composition: compositionSchema.optional(),
     snapshot_schedule: snapshotScheduleSchema.optional(),
+    draft_retention: draftRetentionSchema.optional(),
     scheduled_materialization: scheduledMaterializationSchema.optional(),
     config: updateConfigBodySchema.optional(),
   })
   .strict()
   .superRefine((track, context) => {
+    if (track.type !== 'virtual' && track.draft_retention !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['draft_retention'],
+        message: 'Draft retention is only available for virtual tracks',
+      });
+    }
     if (track.type !== 'virtual' && track.snapshot_schedule !== undefined) {
       context.addIssue({
         code: 'custom',
@@ -500,6 +512,8 @@ const releaseBodySchema = z
     increment: releaseIncrementSchema.optional(),
     version: xMitreVersionSchema.optional(),
     description: snapshotDescriptionSchema.optional(),
+    squash_drafts: z.boolean().optional(),
+    squash_fingerprint: z.string().min(1).max(128).optional(),
   })
   .strict()
   .refine((value) => !(value.increment && value.version), {
@@ -711,6 +725,7 @@ module.exports = {
   componentTrackSchema,
   compositionSchema,
   snapshotScheduleSchema,
+  draftRetentionSchema,
   scheduledMaterializationSchema,
   objectRefEntrySchema,
   promotionConflictsSchema,

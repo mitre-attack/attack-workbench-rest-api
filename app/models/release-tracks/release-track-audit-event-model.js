@@ -9,7 +9,14 @@ const releaseTrackAuditEventSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
-      enum: ['delete_track', 'delete_release', 'retag_release', 'convert_release_to_draft'],
+      enum: [
+        'delete_track',
+        'delete_release',
+        'retag_release',
+        'convert_release_to_draft',
+        'draft_retention',
+        'draft_squash',
+      ],
     },
     track_id: { type: String, required: true, validate: validateTrackId },
     status: {
@@ -22,6 +29,7 @@ const releaseTrackAuditEventSchema = new mongoose.Schema(
     confirmation: { type: String, required: true },
     request: { type: mongoose.Schema.Types.Mixed, default: {} },
     result: { type: mongoose.Schema.Types.Mixed, default: null },
+    cleanup: { type: mongoose.Schema.Types.Mixed, default: undefined },
     error: {
       name: String,
       message: String,

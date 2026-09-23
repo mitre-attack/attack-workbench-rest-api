@@ -82,6 +82,19 @@ const releaseTrackRegistryDefinition = {
   release_lock: { type: releaseLockSchema, default: undefined },
 
   // Virtual tracks only
+  draft_retention: {
+    type: new mongoose.Schema(
+      {
+        max_drafts: {
+          type: Number,
+          default: null,
+          validate: (value) => value == null || (Number.isSafeInteger(value) && value > 0),
+        },
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  },
   snapshot_schedule: {
     type: snapshotScheduleSchema,
     default: undefined,

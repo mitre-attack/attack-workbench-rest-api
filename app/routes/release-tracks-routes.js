@@ -330,6 +330,30 @@ router
     releaseTracksController.updateSchedule,
   );
 
+router
+  .route('/release-tracks/:id/virtual/draft-retention')
+  .put(
+    authn.authenticate,
+    authz.requireRole(authz.admin),
+    releaseTracksController.updateDraftRetention,
+  );
+
+router
+  .route('/release-tracks/:id/virtual/draft-cleanup')
+  .get(
+    authn.authenticate,
+    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
+    releaseTracksController.listDraftCleanup,
+  );
+
+router
+  .route('/release-tracks/:id/virtual/draft-cleanup/:operationId/retry')
+  .post(
+    authn.authenticate,
+    authz.requireRole(authz.admin),
+    releaseTracksController.retryDraftCleanup,
+  );
+
 // =============================================================================
 // Delete release track (must be last -- :id is a catch-all param)
 // =============================================================================

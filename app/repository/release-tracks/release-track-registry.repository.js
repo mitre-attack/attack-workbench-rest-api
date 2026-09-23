@@ -68,9 +68,9 @@ class ReleaseTrackRegistryRepository {
     }
   }
 
-  async findByTrackId(trackId) {
+  async findByTrackId(trackId, projection) {
     try {
-      return await this.model.findOne({ track_id: trackId }).lean().exec();
+      return await this.model.findOne({ track_id: trackId }).select(projection).lean().exec();
     } catch (err) {
       if (err.name === 'CastError') {
         throw new BadlyFormattedParameterError({ parameterName: 'trackId' });
@@ -126,6 +126,19 @@ class ReleaseTrackRegistryRepository {
     } catch (err) {
       throw new DatabaseError(err);
     }
+  }
+
+  async findVirtualTrackBatch(afterTrackId) {
+    return this.model
+      .find({
+        type: 'virtual',
+        ...(afterTrackId ? { track_id: { $gt: afterTrackId } } : {}),
+      })
+      .select('track_id')
+      .sort({ track_id: 1 })
+      .limit(100)
+      .lean()
+      .exec();
   }
 
   async findWithTaggedReleases(options = {}) {
@@ -215,6 +228,24 @@ class ReleaseTrackRegistryRepository {
           },
           { $set: { release_lock: { token, acquired_at: acquiredAt } } },
           { new: true, runValidators: true, lean: true },
+        )
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async renewReleaseLock(trackId, token, staleBefore) {
+    try {
+      return await this.model
+        .findOneAndUpdate(
+          {
+            track_id: trackId,
+            'release_lock.token': token,
+            'release_lock.acquired_at': { $gte: staleBefore },
+          },
+          { $set: { 'release_lock.acquired_at': new Date() } },
+          { new: true, lean: true, projection: { _id: 1 } },
         )
         .exec();
     } catch (err) {

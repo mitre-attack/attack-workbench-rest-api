@@ -235,12 +235,12 @@ or fall back to a release. An unavailable active draft returns `400 Bad Request`
 All strategies contribute members only; candidates and staged entries are
 never composed. `specific_snapshot` remains tagged-only.
 
-Standard clone save/prune and virtual materialization share the existing
-release lock. Concurrent operations fail fast with `409 Conflict`, preventing
-pruning between source resolution and persisted virtual provenance. Pruning
-retains every source snapshot named by persisted virtual provenance, including
-historical virtual drafts. Once the last dependent disappears, the next
-standard clone can prune the source if no other retention rule protects it.
+Standard clone save/prune and virtual materialization share the existing release
+lock; contention returns `409 Conflict`. See [Deletion Guardrails](deletion-guardrails.md)
+for the concurrency rationale. Pruning retains every source snapshot named by
+persisted virtual provenance, including historical virtual drafts. Once the last
+dependent disappears, the next standard clone can prune the source if no other
+retention rule protects it.
 
 Component `priority` is always required, even when the selected deduplication
 strategy does not inspect it. Zod rejects duplicate component IDs and

@@ -6,13 +6,24 @@ This document tracks new database schemas, interfaces, etc.; as well as changes 
 
 | Collection                           | Purpose                                                                                                                                                                                                           | Written by                                                                                                | Growth and retention                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `releaseTrackRegistry`               | One document per track: name, type, denormalized counters, the tagged-release catalogue (`tagged_releases`), the release lock, and virtual schedules. The index that maps a track to its own snapshot collection. | Track create/delete, every snapshot write (counters), release commit and conversion to draft (catalogue). | One document per track.                                                                                      |
-| `release-track--<uuid>` | The track's snapshots: one active rolling draft, preserved standard release sources, source drafts referenced by virtual provenance, and tagged releases; every materialized draft plus releases for a virtual track. | Snapshot service and release commit. | Standard tracks retain releases, their source drafts, virtual-pinned drafts, and one active draft; virtual tracks grow by materializations. |
+| `releaseTrackRegistry` | Track identity, counters, tagged catalogue, lifecycle lock, and live virtual schedule/`draft_retention`. | Track creation/deletion, snapshot lifecycle and live policy updates. | One document per track. |
+| `release-track--<uuid>` | Standard rolling drafts, preserved release sources, virtual-pinned source drafts and tags; virtual drafts and releases. | Snapshot service and release commit. | Virtual drafts can be bounded by count retention or explicit release-time squash; tagged snapshots are never pruned. |
 | `releaseTrackContentManifests`       | The sealed bill of materials each snapshot references (`content_manifest_id`). Several snapshots share one manifest when their member sets are identical.                                                         | Sealed whenever members are written; discarded when no snapshot references it.                            | Bounded by member-changing writes, not by snapshot count.                                                    |
 | `releaseTrackContentManifestEntries` | One exact-revision pointer per object a manifest emits or depends on. The `(object_ref, object_modified)` index is what protects referenced revisions from deletion.                                              | With its manifest.                                                                                        | Roughly members + relationships + a few supporting objects per manifest.                                     |
 | `releaseTrackReconciliations`        | Outstanding backref reconciliation work only: a record is created before the `workspace.release_tracks` listeners run and deleted when they succeed, so anything present is pending or failed and needs repair.   | Every snapshot write.                                                                                     | Normally empty.                                                                                              |
-| `releaseTrackAuditEvents`            | Audit trail for administrator-only track deletion, release conversion to draft, and release retagging (`delete_track`, `convert_release_to_draft` (legacy: `delete_release`), `retag_release`).                   | Those operations.                                                                                         | Empty until an administrator performs one of those operations.                                               |
-| `virtualTrackScheduleOccurrences`    | Durable claims for scheduled virtual materialization (cron or dated schedules) so restarts and duplicate delivery execute each occurrence once.                                                                   | The scheduler.                                                                                            | One record per scheduled occurrence; empty when no virtual track has a schedule.                             |
+| `releaseTrackAuditEvents` | Destructive audit and bounded cleanup intent/progress for deletion, conversion, retag, `draft_retention`, and `draft_squash`. | Destructive operations and cleanup recovery. | Durable audit records; cleanup results are discoverable independently of snapshot survival. |
+| `virtualTrackScheduleOccurrences` | Ownership-fenced claims and monotonic `snapshot_modified` materialization receipts. | Scheduler and scheduled snapshot lifecycle. | One record per track/time, retained after snapshot cleanup; also covers API-originated occurrence metadata. |
+
+Live `draft_retention` is `{ max_drafts: null | positive safe integer }` and is
+virtual-only. Policy writes create no content snapshots. Workbench virtual
+responses project the policy plus registry `snapshot_count` and
+`tagged_release_count` for paginated clients. These are not historical content.
+
+A server-controlled `release_event_id` binds release-time cleanup to the original
+tagging event, independently of mutable version labels and reusable virtual
+snapshot timestamps. Cleanup progress belongs to its audit record, not the
+released manifest or version-history content. See [Deletion Guardrails](deletion-guardrails.md)
+and the [API lifecycle contracts](../../user/release-tracks/api-reference.md#virtual-draft-retention).
 
 Removed by the sealed-manifest work: the former `releaseTrackGraphManifests`
 and `releaseTrackGraphManifestEntries` collections (renamed in place by the
@@ -617,9 +628,11 @@ on the resulting snapshot and projected into track-list and snapshot-history
 responses. Snapshot clones clear inherited occurrence metadata unless the
 mutation explicitly supplies a replacement.
 
-The track-local unique index on `scheduled_for`, together with the durable
-`virtualTrackScheduleOccurrences` claim record, makes duplicate delivery and
-restart recovery idempotent. Failed occurrences remain retryable.
+The track-local unique index prevents duplicate surviving scheduled snapshots.
+The occurrence ledger also retains a monotonic materialization receipt after
+cleanup, so missing snapshots do not make completed work executable again.
+Unmaterialized failures remain retryable; stale claim owners cannot overwrite a
+new worker's completion. See [Deletion Guardrails](deletion-guardrails.md).
 
 **Key Differences from Standard Tracks:**
 

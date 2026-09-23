@@ -1392,6 +1392,116 @@ Later source changes do not alter the materialized virtual snapshot.
 
 See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
 
+### Virtual Draft Retention
+
+Administrators can configure live count-based retention:
+
+```http
+PUT /api/release-tracks/:id/virtual/draft-retention
+Content-Type: application/json
+
+{ "max_drafts": 10 }
+```
+
+The response is `{ "draft_retention": { "max_drafts": 10 } }`. Use `null`
+to disable retention; absent policy also means unlimited drafts. Counts must be
+positive safe integers. Standard tracks reject this setting. Administrators may
+also supply `draft_retention` on initial virtual-track creation; cloned tracks
+start with retention disabled.
+
+Policy changes create no snapshot and delete nothing immediately. After each
+successful virtual draft creation, older eligible drafts are removed to retain
+the newest N. All creation causes count, not just scheduled materialization.
+Tagged releases do not count and are never removed. Protected snapshots can
+leave the track above its configured limit. Workbench snapshot/configuration
+responses project the current registry policy, not a historical policy.
+
+### Release-Time Draft Squash
+
+The existing summary release preview includes virtual-only `draft_squash`:
+
+```json
+{
+  "draft_squash": {
+    "lower_bound": null,
+    "upper_bound": "2026-09-23T10:00:00.000Z",
+    "eligible_count": 3,
+    "protected_count": 0,
+    "fingerprint": "opaque-preview-fingerprint"
+  }
+}
+```
+
+An administrator can explicitly opt into cleanup when tagging the exact
+previewed draft:
+
+```http
+POST /api/release-tracks/:id/snapshots/:modified/release
+Content-Type: application/json
+
+{ "increment": "minor", "squash_drafts": true, "squash_fingerprint": "opaque-preview-fingerprint" }
+```
+
+Use the actual preview fingerprint. A changed selection returns `409` before
+tagging; fetch a fresh preview rather than retrying blindly. Omitted/false squash
+retains ordinary tagging behavior, including editor/team-lead access. True is
+virtual-only and administrator-only. Both latest and exact release endpoints
+accept the option, but the UI uses the exact previewed timestamp.
+
+Cleanup removes only eligible untagged snapshots strictly after the preceding
+tagged snapshot and strictly before the selected snapshot, ordered by `modified`,
+not `tagged_at` or version magnitude. With no preceding tag, all strictly earlier
+eligible drafts are considered. Every tagged snapshot and every newer snapshot
+is preserved. Release content, its manifest and composition provenance are not
+merged or rewritten. Deleted history is not restored by release-to-draft conversion.
+
+### Inspect or Retry Draft Cleanup
+
+Creation, opted-in release, and retry responses can include an operation-only
+`draft_cleanup` result:
+
+```json
+{
+  "operation_id": "97508a36-62cf-4a72-9ed6-49f2690d3609",
+  "status": "failed",
+  "kind": "squash",
+  "eligible_count": 3,
+  "deleted_count": 1,
+  "protected_count": 0,
+  "target_modified": "2026-09-23T10:00:00.000Z",
+  "release_committed": true,
+  "error": "Cleanup could not finish"
+}
+```
+
+`status` is `pending`, `completed`, or `failed`; `kind` is `retention` or
+`squash`. `release_committed` applies to squash; it is omitted if a store failure
+prevents determining the release outcome. A successful release with failed
+cleanup remains a successful release response with a failed cleanup result.
+Interrupted publication may return structured `500` with top-level
+`operation_id`, `release_committed` when known, and `draft_cleanup`.
+
+```http
+GET /api/release-tracks/:id/virtual/draft-cleanup
+POST /api/release-tracks/:id/virtual/draft-cleanup/:operationId/retry
+```
+
+GET returns `{ "data": [...] }`, up to 25 recent pending/failed operations, and
+requires ordinary read access. POST takes `{}`, requires an administrator, and
+returns the cleanup result. It resumes an existing intent; it cannot authorize
+arbitrary new deletion or implicitly tag a draft. Normal repeated release POST
+still rejects an already-tagged snapshot.
+
+Each cleanup invocation processes at most ten 100-snapshot pages. Large histories
+can return `pending`; retry the same operation until complete. Repair is bounded
+by the original intent and current protections. Disabling retention prevents
+further candidate selection but does not prevent repairing already-deleted
+storage. Shared manifests survive while referenced, and underlying STIX objects
+are not cleanup targets.
+
+For the safety rationale and failure examples, see
+[Deletion Guardrails](../../developer/release-tracks/deletion-guardrails.md).
+
 ### Create Virtual Track
 
 ```

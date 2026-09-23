@@ -49,7 +49,8 @@ async function auditAttempt(occurrence, execute) {
   });
 
   try {
-    const { snapshot, recovered } = await execute();
+    const result = await execute();
+    const { snapshot, receipt, recovered } = result;
     await recorder.recordItem({
       status: recovered ? 'unchanged' : 'changed',
       action: recovered ? 'recover_scheduled_virtual_snapshot' : 'materialize_virtual_snapshot',
@@ -59,9 +60,13 @@ async function auditAttempt(occurrence, execute) {
       },
       details: {
         scheduled_for: scheduledFor,
-        snapshot_modified: snapshot.modified,
-        members_count: snapshot.members?.length || 0,
-        quarantine_count: snapshot.quarantine?.length || 0,
+        snapshot_modified: receipt.snapshot_modified,
+        ...(snapshot
+          ? {
+              members_count: snapshot.members?.length || 0,
+              quarantine_count: snapshot.quarantine?.length || 0,
+            }
+          : { materialized_and_removed: true }),
         recovered,
       },
     });
@@ -76,7 +81,7 @@ async function auditAttempt(occurrence, execute) {
           : `Materialized scheduled virtual snapshot for ${occurrence.track_id}`,
       },
     });
-    return snapshot;
+    return result;
   } catch (err) {
     const serialized = serializeError(err);
     await recorder.recordItem({
@@ -101,6 +106,27 @@ async function auditAttempt(occurrence, execute) {
   }
 }
 
+async function recoverMaterialization(claimed) {
+  const receipt = await occurrenceRepo.getMaterializationReceipt(
+    claimed.track_id,
+    claimed.scheduled_for,
+  );
+  const snapshot = await dynamicRepo.getSnapshotByScheduledMaterialization(
+    claimed.track_id,
+    claimed.scheduled_for,
+  );
+  if (receipt?.snapshot_modified) return { snapshot, receipt, recovered: true };
+  if (!snapshot) return null;
+
+  // Backfill legacy saved results before audit completion or any later pruning.
+  const recorded = await occurrenceRepo.recordMaterialization(
+    claimed.track_id,
+    snapshot.scheduled_materialization,
+    snapshot.modified,
+  );
+  return { snapshot, receipt: recorded, recovered: true };
+}
+
 async function executeOccurrence(occurrence, now = new Date()) {
   const scheduledFor = new Date(occurrence.scheduled_for);
   const claimed = await occurrenceRepo.claim(
@@ -111,43 +137,55 @@ async function executeOccurrence(occurrence, now = new Date()) {
   );
   if (!claimed) return null;
 
-  const track = await registryRepo.findByTrackId(claimed.track_id);
-  if (!isConfiguredOccurrence(track, claimed)) {
-    await occurrenceRepo.skip(
-      claimed.track_id,
-      scheduledFor,
-      'Track was deleted or no longer has the schedule that produced this occurrence',
-    );
-    return null;
-  }
-
   try {
-    const snapshot = await auditAttempt(claimed, async () => {
-      // A worker may have persisted the snapshot and exited before completing
-      // the occurrence ledger. Recover that durable result without recomputing
-      // composition, which may no longer be resolvable after the crash.
-      const existing = await dynamicRepo.getSnapshotByScheduledMaterialization(
-        claimed.track_id,
-        scheduledFor,
-      );
-      if (existing) {
-        return { snapshot: existing, recovered: true };
+    const recovered = await recoverMaterialization(claimed);
+    if (!recovered) {
+      const track = await registryRepo.findByTrackId(claimed.track_id);
+      if (!isConfiguredOccurrence(track, claimed)) {
+        await occurrenceRepo.skip(
+          claimed,
+          'Track was deleted or no longer has the schedule that produced this occurrence',
+        );
+        return null;
       }
+    }
 
-      const materialized = await virtualTrackService.createVirtualSnapshot(claimed.track_id, {
-        scheduledMaterialization: {
-          schedule_mode: claimed.schedule_mode,
-          scheduled_for: scheduledFor,
-        },
-      });
-      return { snapshot: materialized, recovered: false };
+    const result = await auditAttempt(claimed, async () => {
+      if (recovered) return recovered;
+
+      const scheduledMaterialization = {
+        schedule_mode: claimed.schedule_mode,
+        scheduled_for: scheduledFor,
+      };
+      let materialized;
+      try {
+        materialized = await virtualTrackService.createVirtualSnapshot(claimed.track_id, {
+          scheduledMaterialization,
+        });
+      } catch (err) {
+        // Another worker may have committed and pruned the result after our
+        // initial read. The locked service rejects replay; recover the receipt.
+        const committed = await recoverMaterialization(claimed);
+        if (committed) return committed;
+        throw err;
+      }
+      const receipt = await occurrenceRepo.recordMaterialization(
+        claimed.track_id,
+        scheduledMaterialization,
+        materialized.modified,
+      );
+      return { snapshot: materialized, receipt, recovered: false };
     });
-    await occurrenceRepo.complete(claimed.track_id, scheduledFor, snapshot.modified);
-    return snapshot;
+    await occurrenceRepo.complete(claimed);
+    return (
+      result.snapshot || {
+        snapshot_modified: result.receipt.snapshot_modified,
+        materialized_and_removed: true,
+      }
+    );
   } catch (err) {
     await occurrenceRepo.fail(
-      claimed.track_id,
-      scheduledFor,
+      claimed,
       serializeError(err),
       new Date(now.getTime() + RETRY_DELAY_MS),
     );

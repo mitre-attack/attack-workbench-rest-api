@@ -10,6 +10,8 @@ const databaseConfiguration = require('../../lib/database-configuration');
 const ReleaseTrackRegistry = require('../../models/release-tracks/release-track-registry-model');
 const VirtualTrackScheduleOccurrence = require('../../models/release-tracks/virtual-track-schedule-occurrence-model');
 const dynamicRepo = require('../../repository/release-tracks/release-track-dynamic.repository');
+const occurrenceRepo = require('../../repository/release-tracks/virtual-track-schedule-occurrence.repository');
+const { ReleaseConflictError } = require('../../exceptions');
 const releaseTracksService = require('../../services/release-tracks/release-tracks-service');
 
 describe('Scheduled virtual release-track materialization', function () {
@@ -218,6 +220,7 @@ describe('Scheduled virtual release-track materialization', function () {
     expect(occurrence).toMatchObject({
       status: 'failed',
       attempt_count: 1,
+      snapshot_modified: null,
     });
     expect(occurrence.last_error.message).toContain('has no tagged snapshots');
     expect(await snapshotCount(virtual.id)).toBe(1);
@@ -308,6 +311,11 @@ describe('Scheduled virtual release-track materialization', function () {
         scheduled_for: scheduledFor,
       },
     });
+    // Simulate a legacy save/crash before the receipt was durably written.
+    await VirtualTrackScheduleOccurrence.updateOne(
+      { track_id: virtual.id, scheduled_for: scheduledFor },
+      { $set: { snapshot_modified: null } },
+    );
 
     // A persisted scheduled snapshot is the authoritative result. Recovery
     // must not depend on the component still being available.
@@ -338,6 +346,189 @@ describe('Scheduled virtual release-track materialization', function () {
       });
     expect(recoveryRun).toMatchObject({
       counts: { materialized: 0, recovered: 1, failed: 0 },
+    });
+  });
+
+  it('recovers a pruned result after save but before completion even after schedule removal', async function () {
+    const component = await createComponent();
+    const scheduledFor = new Date('2026-08-01T00:00:00.000Z');
+    const virtual = await createVirtual(component.id, {
+      mode: 'dates',
+      dates: [scheduledFor.toISOString()],
+    });
+    await occurrenceRepo.register(virtual.id, 'dates', scheduledFor);
+    await occurrenceRepo.claim(
+      virtual.id,
+      scheduledFor,
+      scheduledFor,
+      new Date(scheduledFor.getTime() + 5 * 60 * 1000),
+    );
+    const materialized = await releaseTracksService.createVirtualSnapshot(virtual.id, {
+      scheduledMaterialization: { schedule_mode: 'dates', scheduled_for: scheduledFor },
+    });
+    expect(await occurrenceRepo.getMaterializationReceipt(virtual.id, scheduledFor)).toMatchObject({
+      status: 'running',
+      snapshot_modified: materialized.modified,
+    });
+
+    await dynamicRepo.deleteSnapshot(virtual.id, materialized.modified);
+    await releaseTracksService.deleteTrack(component.id);
+    await ReleaseTrackRegistry.updateOne(
+      { track_id: virtual.id },
+      { $set: { snapshot_schedule: { mode: 'manual' } } },
+    );
+    await task.reconcileSchedules(new Date(scheduledFor.getTime() + 10 * 60 * 1000));
+
+    expect(await snapshotCount(virtual.id)).toBe(1);
+    expect(await occurrenceRepo.getMaterializationReceipt(virtual.id, scheduledFor)).toMatchObject({
+      status: 'completed',
+      attempt_count: 2,
+      snapshot_modified: materialized.modified,
+    });
+    const db = mongoose.connection.getClient().db();
+    const run = await db.collection('automationRuns').findOne({ 'scope.track_id': virtual.id });
+    expect(run).toMatchObject({
+      status: 'completed',
+      counts: { materialized: 0, recovered: 1, failed: 0 },
+    });
+    const item = await db.collection('automationRunItems').findOne({ run_id: run.run_id });
+    expect(item.details).toMatchObject({
+      snapshot_modified: materialized.modified,
+      materialized_and_removed: true,
+      recovered: true,
+    });
+    expect(item.details).not.toHaveProperty('members_count');
+  });
+
+  it('fences stale completion, failure and skip and never replays a completed pruned result', async function () {
+    const component = await createComponent();
+    const scheduledFor = new Date('2026-09-01T00:00:00.000Z');
+    const virtual = await createVirtual(component.id, {
+      mode: 'dates',
+      dates: [scheduledFor.toISOString()],
+    });
+    await occurrenceRepo.register(virtual.id, 'dates', scheduledFor);
+    const expires = new Date(scheduledFor.getTime() + 5 * 60 * 1000);
+    const stale = await occurrenceRepo.claim(virtual.id, scheduledFor, scheduledFor, expires);
+    const owner = await occurrenceRepo.claim(
+      virtual.id,
+      scheduledFor,
+      expires,
+      new Date(expires.getTime() + 5 * 60 * 1000),
+    );
+    expect(await occurrenceRepo.fail(stale, { message: 'stale failure' }, expires)).toBeNull();
+    expect(await occurrenceRepo.skip(stale, 'stale skip')).toBeNull();
+
+    const materialized = await releaseTracksService.createVirtualSnapshot(virtual.id, {
+      scheduledMaterialization: { schedule_mode: 'dates', scheduled_for: scheduledFor },
+    });
+    expect(await occurrenceRepo.complete(stale)).toBeNull();
+    expect(await occurrenceRepo.skip(owner, 'cannot skip saved work')).toBeNull();
+    await occurrenceRepo.complete(owner);
+    await dynamicRepo.deleteSnapshot(virtual.id, materialized.modified);
+
+    expect(await occurrenceRepo.fail(owner, { message: 'late failure' }, expires)).toBeNull();
+    expect(await occurrenceRepo.fail(stale, { message: 'stale failure' }, expires)).toBeNull();
+    expect(await occurrenceRepo.skip(stale, 'late skip')).toBeNull();
+    expect(await occurrenceRepo.complete(stale)).toBeNull();
+    await task.reconcileSchedules(new Date(expires.getTime() + 10 * 60 * 1000));
+    expect(await snapshotCount(virtual.id)).toBe(1);
+    expect(await occurrenceRepo.getMaterializationReceipt(virtual.id, scheduledFor)).toMatchObject({
+      status: 'completed',
+      attempt_count: 2,
+      snapshot_modified: materialized.modified,
+    });
+  });
+
+  it('repairs API-originated materialization without a ledger and refuses a different receipt', async function () {
+    const component = await createComponent();
+    const virtual = await createVirtual(component.id, { mode: 'manual' });
+    const scheduledMaterialization = {
+      schedule_mode: 'dates',
+      scheduled_for: new Date('2026-10-01T00:00:00.000Z'),
+    };
+    const materialized = await releaseTracksService.createVirtualSnapshot(virtual.id, {
+      scheduledMaterialization,
+    });
+    // Older API-originated metadata did not create an occurrence ledger.
+    await VirtualTrackScheduleOccurrence.deleteOne({
+      track_id: virtual.id,
+      scheduled_for: scheduledMaterialization.scheduled_for,
+    });
+    expect(
+      await occurrenceRepo.getMaterializationReceipt(
+        virtual.id,
+        scheduledMaterialization.scheduled_for,
+      ),
+    ).toBeNull();
+    await Promise.all([
+      occurrenceRepo.recordMaterialization(
+        virtual.id,
+        scheduledMaterialization,
+        materialized.modified,
+      ),
+      occurrenceRepo.recordMaterialization(
+        virtual.id,
+        scheduledMaterialization,
+        materialized.modified,
+      ),
+    ]);
+    await expect(
+      occurrenceRepo.recordMaterialization(
+        virtual.id,
+        scheduledMaterialization,
+        new Date(new Date(materialized.modified).getTime() + 1),
+      ),
+    ).rejects.toBeInstanceOf(ReleaseConflictError);
+
+    const receipt = await occurrenceRepo.getMaterializationReceipt(
+      virtual.id,
+      scheduledMaterialization.scheduled_for,
+    );
+    await dynamicRepo.deleteSnapshot(virtual.id, materialized.modified);
+    expect(await task.executeOccurrence(receipt)).toEqual({
+      snapshot_modified: materialized.modified,
+      materialized_and_removed: true,
+    });
+    expect(await snapshotCount(virtual.id)).toBe(1);
+    expect(
+      await occurrenceRepo.getMaterializationReceipt(
+        virtual.id,
+        scheduledMaterialization.scheduled_for,
+      ),
+    ).toMatchObject({ status: 'completed', snapshot_modified: materialized.modified });
+  });
+
+  it('retains a receipt through audit failure and retries only recovery', async function () {
+    const component = await createComponent();
+    const scheduledFor = new Date('2026-11-01T00:00:00.000Z');
+    const virtual = await createVirtual(component.id, {
+      mode: 'dates',
+      dates: [scheduledFor.toISOString()],
+    });
+    await occurrenceRepo.register(virtual.id, 'dates', scheduledFor);
+    const claimed = await occurrenceRepo.claim(
+      virtual.id,
+      scheduledFor,
+      scheduledFor,
+      new Date(scheduledFor.getTime() + 5 * 60 * 1000),
+    );
+    const materialized = await releaseTracksService.createVirtualSnapshot(virtual.id, {
+      scheduledMaterialization: { schedule_mode: 'dates', scheduled_for: scheduledFor },
+    });
+    const retryAt = new Date(scheduledFor.getTime() + 60 * 1000);
+    await occurrenceRepo.fail(claimed, { message: 'audit unavailable after save' }, retryAt);
+    expect(await occurrenceRepo.getMaterializationReceipt(virtual.id, scheduledFor)).toMatchObject({
+      status: 'failed',
+      snapshot_modified: materialized.modified,
+    });
+    await dynamicRepo.deleteSnapshot(virtual.id, materialized.modified);
+    await task.reconcileSchedules(retryAt);
+    expect(await snapshotCount(virtual.id)).toBe(1);
+    expect(await occurrenceRepo.getMaterializationReceipt(virtual.id, scheduledFor)).toMatchObject({
+      status: 'completed',
+      attempt_count: 2,
+      snapshot_modified: materialized.modified,
     });
   });
 

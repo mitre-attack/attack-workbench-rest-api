@@ -130,12 +130,10 @@ valid; new conversions use `convert_release_to_draft`.
 Virtual materialization acquires the existing database-backed release locks
 for all component tracks in sorted order, before resolving any source snapshot, and
 holds them through snapshot persistence. Partial acquisition and failed
-materialization unwind the locks. Contention fails fast with 409. The rollback
-dependency scan therefore cannot miss an in-flight materialization: either
-rollback owns the lock first, or it sees the persisted virtual dependency
-after materialization releases the lock.
-Standard clone save/prune acquires the same lock, so a source draft cannot
-disappear between resolution and persistence. Pruning retains drafts referenced
+materialization unwind the locks. Contention fails fast with 409. Standard
+clone save/prune acquires the same component lock. The concurrency and shared
+manifest deletion rationale is documented in [Deletion Guardrails](deletion-guardrails.md),
+rather than repeated here. Pruning retains drafts referenced
 by virtual provenance; after the final dependent is removed, a later standard
 clone can prune an otherwise-unprotected draft.
 

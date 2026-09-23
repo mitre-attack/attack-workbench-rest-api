@@ -17,6 +17,28 @@ content. Replace it with `PUT /api/release-tracks/:id/virtual/schedule`; this
 does not create a draft. Workbench-format snapshot responses project the
 current schedule for configuration interfaces.
 
+## Draft Retention and Release-Time Squash
+
+Administrators can set `draft_retention.max_drafts` to a positive integer such
+as 10; the default is unlimited (`null`). The policy is live registry metadata,
+like the schedule. Updating it creates no draft and deletes nothing immediately.
+After successful draft creation, older eligible drafts are removed. Manual,
+scheduled, configuration, metadata and quarantine-resolution drafts all count;
+tagged releases never count against the limit or get removed.
+
+When tagging a reviewed draft, administrators can separately opt into deleting
+earlier drafts since the preceding tagged snapshot. The preview reports the
+strict timestamp bounds and eligible/protected counts, and its fingerprint must
+still match at commit. First-release squash considers all earlier eligible
+drafts. Historical tagging preserves all newer snapshots. This removes history,
+not content: the selected snapshot and its manifest remain unchanged.
+
+Both controls preserve protected snapshots and expose incomplete cleanup as a
+retryable operation distinct from release success. Deleted drafts and their
+notes cannot be restored by rollback. See the
+[API retention, squash and recovery contracts](api-reference.md#virtual-draft-retention)
+and [Deletion Guardrails](../../developer/release-tracks/deletion-guardrails.md).
+
 ## Use Cases
 
 ### Scenario 1: Different Cadences for Different Object Types

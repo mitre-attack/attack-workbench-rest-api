@@ -2933,3 +2933,24 @@ database.
       configuration; render draft provenance without inventing a version.
 - [x] Verify the real frontend/API flow, focused regressions, and the full
       backend test suite; update API documentation and Bruno request notes.
+
+## Virtual draft retention and release-time squash (2026-09-23)
+
+Approved plan: [Draft lifecycle](release-tracks/draft-lifecycle-plan.md).
+Safety rationale: [Deletion guardrails](release-tracks/deletion-guardrails.md).
+
+- [x] Prepare both feature branches from `next`, preserving draft composition
+      and the frontend save-dialog regression fix.
+- [x] Preserve the plain-language deletion guardrails explanation and link
+      redundant documentation to it.
+- [x] Serialize virtual target lifecycle operations and preserve durable
+      scheduler materialization receipts after snapshot deletion.
+- [x] Implement guarded, auditable, recoverable historical-draft cleanup and
+      reference-safe manifest deletion.
+- [x] Add disabled-by-default, administrator-managed draft-count retention.
+- [x] Add previewed, fingerprint-confirmed release-time draft squash and
+      cleanup-only status/retry.
+- [x] Add frontend retention controls and paginated virtual history.
+- [x] Add explicit squash consent and partial-outcome recovery feedback.
+- [x] Verify API/scheduler regressions and the complete backend suite.
+- [x] Exercise retention, squash, pagination and recovery on the real frontend.

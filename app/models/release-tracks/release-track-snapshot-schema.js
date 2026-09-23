@@ -430,6 +430,8 @@ const releaseTrackSnapshotDefinition = {
   publication: { type: frozenPublicationSchema },
   bundle_id: { type: String },
   bundle_hashes: { type: bundleHashesSchema },
+  // Identifies the original release event across retags, but not rollback/release cycles.
+  release_event_id: { type: String },
   creation_actor: {
     type: new mongoose.Schema(
       {

@@ -1,6 +1,7 @@
 'use strict';
 
 const modelFactory = require('../../models/release-tracks/model-factory');
+const versionUtils = require('../../lib/release-tracks/version-utils');
 const {
   DatabaseError,
   DuplicateIdError,
@@ -23,10 +24,14 @@ class ReleaseTrackDynamicRepository {
     return this.modelFactory.getModel(trackId);
   }
 
-  async getLatestSnapshot(trackId) {
+  async getLatestSnapshot(trackId, projection) {
     try {
       const Model = this._getModel(trackId);
-      return await Model.findOne({ id: trackId }).sort({ modified: -1 }).lean().exec();
+      return await Model.findOne({ id: trackId })
+        .select(projection)
+        .sort({ modified: -1 })
+        .lean()
+        .exec();
     } catch (err) {
       throw new DatabaseError(err);
     }
@@ -71,10 +76,10 @@ class ReleaseTrackDynamicRepository {
     }
   }
 
-  async getSnapshotByModified(trackId, modified) {
+  async getSnapshotByModified(trackId, modified, projection) {
     try {
       const Model = this._getModel(trackId);
-      return await Model.findOne({ id: trackId, modified }).lean().exec();
+      return await Model.findOne({ id: trackId, modified }).select(projection).lean().exec();
     } catch (err) {
       if (err.name === 'CastError') {
         throw new BadlyFormattedParameterError({ parameterName: 'modified' });
@@ -126,7 +131,7 @@ class ReleaseTrackDynamicRepository {
     }
   }
 
-  async getReleaseBySourceModified(trackId, sourceModified) {
+  async getReleaseBySourceModified(trackId, sourceModified, projection) {
     try {
       const Model = this._getModel(trackId);
       return await Model.findOne({
@@ -134,6 +139,7 @@ class ReleaseTrackDynamicRepository {
         version: { $type: 'string' },
         release_source_modified: sourceModified,
       })
+        .select(projection)
         .lean()
         .exec();
     } catch (err) {
@@ -585,6 +591,106 @@ class ReleaseTrackDynamicRepository {
     } catch (err) {
       throw new DatabaseError(err);
     }
+  }
+
+  async getDraftRetentionBoundary(trackId, count) {
+    return this._getModel(trackId)
+      .findOne({ id: trackId, version: null })
+      .sort({ modified: -1 })
+      .skip(count - 1)
+      .select('modified')
+      .lean()
+      .exec();
+  }
+
+  async getHistoricalDraftBatch(trackId, { lower_bound, upper_bound, cursor }, limit = 100) {
+    const lower = [lower_bound, cursor].filter(Boolean).map((value) => new Date(value));
+    const modified = { $lt: new Date(upper_bound) };
+    if (lower.length) modified.$gt = new Date(Math.max(...lower.map(Number)));
+    return this._getModel(trackId)
+      .find({ id: trackId, version: null, modified })
+      .select('id modified content_manifest_id scheduled_materialization')
+      .sort({ modified: 1 })
+      .limit(limit)
+      .lean()
+      .exec();
+  }
+
+  async deleteHistoricalDraft(trackId, snapshot, bounds, latestModified) {
+    const modified = {
+      $eq: new Date(snapshot.modified),
+      $lt: new Date(bounds.upper_bound),
+      $ne: new Date(latestModified),
+    };
+    if (bounds.lower_bound) modified.$gt = new Date(bounds.lower_bound);
+    return this._getModel(trackId)
+      .findOneAndDelete({
+        id: trackId,
+        _id: snapshot._id,
+        version: null,
+        modified,
+        content_manifest_id: snapshot.content_manifest_id,
+      })
+      .lean()
+      .exec();
+  }
+
+  async getSnapshotCounters(trackId) {
+    const Model = this._getModel(trackId);
+    const [counts] = await Model.aggregate([
+      { $match: { id: trackId } },
+      {
+        $group: {
+          _id: null,
+          snapshot_count: { $sum: 1 },
+          tagged_release_count: {
+            $sum: { $cond: [{ $ne: [{ $ifNull: ['$version', null] }, null] }, 1, 0] },
+          },
+          latest_snapshot_modified: { $max: '$modified' },
+        },
+      },
+    ]).exec();
+    let highest = null;
+    const tagged = Model.find({ id: trackId, version: { $type: 'string' } })
+      .select('version')
+      .lean()
+      .cursor({ batchSize: 100 });
+    for await (const snapshot of tagged) {
+      if (!highest || versionUtils.compareVersions(snapshot.version, highest) > 0) {
+        highest = snapshot.version;
+      }
+    }
+    return {
+      snapshot_count: counts?.snapshot_count || 0,
+      tagged_release_count: counts?.tagged_release_count || 0,
+      latest_snapshot_modified: counts?.latest_snapshot_modified || null,
+      latest_tagged_version: highest,
+    };
+  }
+
+  async hasSnapshotResolvingComponent(trackId, componentTrackId, modified) {
+    return Boolean(
+      await this._getModel(trackId).exists({
+        id: trackId,
+        'composition_resolution.component_snapshots': {
+          $elemMatch: { track_id: componentTrackId, resolved_snapshot_id: new Date(modified) },
+        },
+      }),
+    );
+  }
+
+  async getScheduledSnapshotBatch(trackId, afterModified) {
+    return this._getModel(trackId)
+      .find({
+        id: trackId,
+        'scheduled_materialization.scheduled_for': { $type: 'date' },
+        ...(afterModified ? { modified: { $gt: new Date(afterModified) } } : {}),
+      })
+      .select('id modified scheduled_materialization')
+      .sort({ modified: 1 })
+      .limit(100)
+      .lean()
+      .exec();
   }
 
   async deleteSnapshot(trackId, modified) {
