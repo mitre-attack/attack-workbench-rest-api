@@ -109,6 +109,73 @@ function virtualComponentVersions(snapshot) {
 }
 
 /**
+ * Calculate prospective membership independently of version allocation and
+ * publication. Callers must resolve staged selectors before planning.
+ */
+function planMembership(sourceSnapshot) {
+  if (
+    sourceSnapshot.type === 'standard' &&
+    (sourceSnapshot.staged || []).some((entry) => revisionReference.isLatest(entry.object_modified))
+  ) {
+    throw new TypeError('Standard release planning requires resolved staged revisions');
+  }
+
+  const normalized = tierRevisionInvariant.normalizeSnapshot(sourceSnapshot);
+  const snapshot = normalized.snapshot;
+  const staged = snapshot.type === 'standard' ? snapshot.staged || [] : [];
+  const existingMembers = snapshot.members || [];
+  let mergedMembers = existingMembers;
+  let blockingError;
+
+  if (staged.length > 0) {
+    const incoming = staged.map(({ object_ref, object_modified }) => ({
+      object_ref,
+      object_modified,
+    }));
+    const policy = snapshot.config?.promotion_conflicts?.staged_to_members || 'abort';
+
+    try {
+      mergedMembers = conflictResolution.applyConflictPolicy(
+        existingMembers,
+        incoming,
+        policy,
+      ).merged;
+    } catch (err) {
+      if (!(err instanceof ReleaseConflictError)) throw err;
+      blockingError = err;
+    }
+  }
+
+  return { normalized, snapshot, staged, mergedMembers, blockingError };
+}
+
+async function resolveReleaseInput(snapshot, latestByObjectRef) {
+  const releaseInput =
+    snapshot.type === 'standard'
+      ? {
+          ...snapshot,
+          staged: await revisionReference.resolveEntries(snapshot.staged || [], latestByObjectRef),
+        }
+      : snapshot;
+  await primaryRevisionService.assertStoredEntries([
+    ...(releaseInput.members || []),
+    ...(releaseInput.staged || []),
+  ]);
+  return releaseInput;
+}
+
+/**
+ * Return the exact members a standard draft would release, without allocating
+ * a version, checking prior publication, or changing the source snapshot.
+ */
+exports.planPreviewMembers = async function planPreviewMembers(snapshot, latestByObjectRef) {
+  const input = await resolveReleaseInput(snapshot, latestByObjectRef);
+  const plan = planMembership(input);
+  if (plan.blockingError) throw plan.blockingError;
+  return plan.mergedMembers;
+};
+
+/**
  * Build the complete release plan without reading or writing external state.
  *
  * @param {string} trackId
@@ -136,15 +203,8 @@ function planRelease(
         'Create a persisted draft with POST /api/release-tracks/:id/virtual/snapshots/create before previewing or releasing it',
     });
   }
-  if (
-    sourceSnapshot.type === 'standard' &&
-    (sourceSnapshot.staged || []).some((entry) => revisionReference.isLatest(entry.object_modified))
-  ) {
-    throw new TypeError('Standard release planning requires resolved staged revisions');
-  }
-
-  const normalized = tierRevisionInvariant.normalizeSnapshot(sourceSnapshot);
-  const snapshot = normalized.snapshot;
+  const { normalized, snapshot, staged, mergedMembers, blockingError } =
+    planMembership(sourceSnapshot);
   const releaseModified =
     sourceSnapshot.type === 'standard'
       ? new Date(Math.max(now.getTime(), new Date(sourceSnapshot.modified).getTime() + 1))
@@ -164,29 +224,6 @@ function planRelease(
       ? tierCounts(previousTaggedSnapshot)
       : { members_count: 0, quarantine_count: 0 }
     : tierCounts(snapshot);
-  const staged = snapshot.type === 'standard' ? snapshot.staged || [] : [];
-  const existingMembers = snapshot.members || [];
-  let mergedMembers = existingMembers;
-  let blockingError;
-
-  if (staged.length > 0) {
-    const incoming = staged.map(({ object_ref, object_modified }) => ({
-      object_ref,
-      object_modified,
-    }));
-    const policy = snapshot.config?.promotion_conflicts?.staged_to_members || 'abort';
-
-    try {
-      mergedMembers = conflictResolution.applyConflictPolicy(
-        existingMembers,
-        incoming,
-        policy,
-      ).merged;
-    } catch (err) {
-      if (!(err instanceof ReleaseConflictError)) throw err;
-      blockingError = err;
-    }
-  }
 
   const additionalOps = {};
   for (const tier of normalized.changedTiers) {
@@ -304,26 +341,12 @@ async function planLoadedSnapshot(trackId, snapshot, options) {
       throw new AlreadyReleasedError(existingRelease.version);
     }
   }
-  const [versionHistory, previousTaggedSnapshot, resolvedStaged] = await Promise.all([
+  const [versionHistory, previousTaggedSnapshot, releaseInput] = await Promise.all([
     releaseHistoryService.getTrackWideVersionHistory(trackId),
     snapshot.type === 'virtual'
       ? dynamicRepo.getLatestTaggedSnapshotBefore(trackId, snapshot.modified)
       : Promise.resolve(null),
-    snapshot.type === 'standard'
-      ? revisionReference.resolveEntries(snapshot.staged || [])
-      : Promise.resolve(snapshot.staged || []),
-  ]);
-  const releaseInput =
-    snapshot.type === 'standard'
-      ? {
-          ...snapshot,
-          staged: resolvedStaged,
-        }
-      : snapshot;
-
-  await primaryRevisionService.assertStoredEntries([
-    ...(releaseInput.members || []),
-    ...(releaseInput.staged || []),
+    resolveReleaseInput(snapshot),
   ]);
 
   const plan = planRelease(

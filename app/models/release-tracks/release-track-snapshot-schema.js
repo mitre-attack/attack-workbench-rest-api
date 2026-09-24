@@ -122,7 +122,7 @@ const componentTrackDefinition = {
   },
   resolution_strategy: {
     type: String,
-    enum: ['latest_tagged', 'latest_draft', 'specific_version', 'specific_snapshot'],
+    enum: ['latest_tagged', 'latest_preview', 'specific_version', 'specific_snapshot'],
     required: true,
   },
   priority: {
@@ -173,12 +173,23 @@ const componentSnapshotResolutionDefinition = {
   resolved_version: {
     type: String,
     required: function () {
-      return this.strategy_used !== 'latest_draft';
+      return !['latest_preview', 'latest_draft'].includes(this.strategy_used);
     },
     default: null,
     validate: validateVersion,
   },
-  strategy_used: { type: String, required: true },
+  strategy_used: {
+    type: String,
+    // Historical members-only draft resolutions retain their original strategy.
+    enum: [
+      'latest_tagged',
+      'latest_preview',
+      'latest_draft',
+      'specific_version',
+      'specific_snapshot',
+    ],
+    required: true,
+  },
   filters_applied: { type: componentTrackFiltersSchema, default: undefined },
   total_objects_in_source: { type: Number, required: true },
   objects_after_filter: { type: Number, required: true },

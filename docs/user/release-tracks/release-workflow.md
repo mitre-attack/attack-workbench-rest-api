@@ -1137,7 +1137,7 @@ July 16 (manual):
 
 ### Virtual Track Constraints
 
-- References tagged snapshots or active drafts explicitly selected with `latest_draft`; members only
+- Published strategies compose members; `latest_preview` also includes staged changes through standard release planning without tagging the source
 - Snapshots created **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** (must explicitly tag)
 - Component tracks must have a source eligible for their selected strategy at materialization

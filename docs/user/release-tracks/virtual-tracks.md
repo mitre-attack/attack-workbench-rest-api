@@ -7,7 +7,7 @@ Virtual release tracks are computed aggregations of standard release tracks. The
 **Key Characteristics:**
 
 - Virtual tracks **compute** their contents from component standard tracks
-- Reference **tagged snapshots** or explicitly selected **active drafts** from standard tracks
+- Reference published snapshots or the newest standard snapshot's prospective release contents
 - Maintain their own **independent snapshot history and versioning**
 - Create snapshots **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
@@ -190,36 +190,54 @@ Resolves to a specific snapshot by its `modified` timestamp.
 
 **Use case:** "Lock to exact snapshot for reproducibility"
 
-#### 4. `latest_draft`
+#### 4. `latest_preview`
 
-Resolves the standard track's newest snapshot only if it is an active,
-untagged draft. A track with no tagged releases can be used:
+Resolves the newest standard-track snapshot, whether draft or tagged:
 
 ```javascript
 {
   track_id: "release-track--uuid-1",
-  resolution_strategy: "latest_draft",
+  resolution_strategy: "latest_preview",
   priority: 0
 }
 ```
 
-Only the draft's **members** contribute. Staged objects and candidates are
-excluded; this is not a preview of the standard track's prospective release.
-Member revisions are frozen when the virtual snapshot is materialized.
+For an untagged source, composition uses the same membership calculation as a
+standard release preview: existing members plus staged objects under the source
+track's `promotion_conflicts.staged_to_members` policy. Exact duplicates are
+normalized, dynamic `"latest"` selectors resolve to exact revisions, and
+candidates are excluded. This is not a simple concatenation of the two tiers.
 
-If the newest snapshot is tagged, materialization returns `400 Bad Request`
-with a "no active draft snapshot" message. There is no fallback to a tagged
-release or an older retained draft. Preserved release-source drafts are not
-active drafts. Create a new standard-track draft before materializing.
+For a tagged newest snapshot, composition uses its published members. A new
+source draft is not required after tagging, and no older draft is selected.
+`latest_tagged` remains distinct: it selects the newest published release even
+when a newer draft exists.
 
-Mixed compositions may use `latest_draft` for some components and
-`latest_tagged` for others. Draft provenance records the exact
-`resolved_snapshot_id`, `strategy_used: "latest_draft"`, and
-`resolved_version: null`. Tagging the virtual snapshot does not tag its sources.
+Component planning happens before object/domain filters and cross-component
+deduplication. A blocking source promotion conflict aborts materialization with
+`409 Conflict`, identifying the component and conflict. Virtual filters cannot
+bypass a conflict that would prevent releasing that source.
+
+Neither materialization nor tagging the virtual snapshot tags, promotes,
+allocates a version for, or otherwise mutates the standard source. Operators can
+stage changes, create a virtual snapshot to review the downstream composition,
+and leave standard-track publication to its own release cadence. Revisions
+freeze at virtual materialization; later source edits do not rewrite that result.
+
+Provenance records `strategy_used: "latest_preview"` and the original source
+`resolved_snapshot_id`. `resolved_version` is `null` for a source draft and its
+actual version for a tagged source. Source/contribution counts use the planned
+member set, which can be nonempty even when the draft's stored members are empty.
+
+**Cutover:** `latest_draft` is retired and rejected in new composition requests.
+Existing rules must explicitly select `latest_preview` or `latest_tagged` before
+rematerialization; they are not silently upgraded to include staged content.
+Historical members-only provenance retains its original `latest_draft` label and
+contents and remains readable/releasable.
 
 Component selectors are strict and strategy-specific:
 
-- `latest_tagged` and `latest_draft` reject both `version` and `snapshot`.
+- `latest_tagged` and `latest_preview` reject both `version` and `snapshot`.
 - `specific_version` requires `version` and rejects `snapshot`.
 - `specific_snapshot` requires `snapshot` and rejects `version`.
 
@@ -228,12 +246,12 @@ not silently discarded.
 
 ### Component Track Sync Rules
 
-Virtual tracks **only sync from component tracks' `members` tier** (`x_mitre_contents`), whether the selected source is tagged or a draft.
+Published and pinned strategies use the selected source's members. `latest_preview` uses prospective release membership for a draft, or published members for a tagged newest snapshot.
 
 **Important:**
 
-- Draft components require the explicit `latest_draft` strategy; the other strategies remain tagged-only
-- Virtual tracks pull objects from **`members` tier only** (never staged or candidates)
+- `latest_preview` includes staged changes through the standard release membership planner
+- Candidates are never composed; the other strategies remain tagged-members-only
 - Each materialization freezes exact member revisions and source provenance
 
 Source drafts referenced by virtual snapshots are retained when the standard
@@ -492,7 +510,7 @@ Unlike standard release tracks (which use a three-tier system: candidates → st
 
 **Why only two tiers?**
 
-Virtual tracks aggregate content from component tracks that have already gone through the full workflow (candidates → staged → members). Virtual tracks don't need the intermediate `staged` tier because they're composing already-released content. The only workflow step is resolving conflicts via the `quarantine` tier.
+Virtual tracks compose an effective member set rather than managing a separate authoring workflow. Published sources contribute members; draft previews calculate members plus eligible staged changes without promoting them in the source. The virtual snapshot freezes that result directly into members or quarantine, so it does not need its own staged tier.
 
 ## Virtual Track Snapshot Lifecycle
 
@@ -573,8 +591,8 @@ description.
 
 1. For each component track in `composition.component_tracks`:
    - Resolve snapshot based on `resolution_strategy`
-   - **Validate that resolved snapshot is tagged** (version !== null)
-   - Pull objects from component track's **`members` tier only** (`x_mitre_contents`)
+   - Require a tagged source for published/pinned strategies; `latest_preview` accepts the newest draft or release
+   - For a previewed draft, calculate prospective members with standard release conflict rules; otherwise use published members
    - Apply `filters` to get subset of objects
    - Collect all object references with source metadata
 2. Apply deduplication rules across all components:
@@ -865,11 +883,10 @@ Each virtual track snapshot stores metadata about how it was composed:
 #### 1. Component snapshots must satisfy their resolution strategy
 
 `latest_tagged`, `specific_version`, and `specific_snapshot` require a tagged
-source. `latest_draft` requires the newest standard snapshot to be an active
-untagged draft. Missing eligible sources return `400 Bad Request`; the server
-does not silently select another strategy. Component identity and type are
-validated when composition is configured, while snapshot eligibility is
-checked at materialization.
+source. `latest_preview` accepts the newest standard snapshot whether tagged or
+untagged. Draft preview conflicts block materialization before filters. Component
+identity and type are validated when composition is configured; snapshot
+eligibility and prospective membership are checked at materialization.
 
 #### 2. Component tracks must be standard tracks
 
@@ -1301,20 +1318,28 @@ Virtual tracks cannot transition workflow status of composed objects.
 
 **Alternative:** If you need to change object status, do it in the source standard track.
 
-### 3. Draft Composition Is Members-Only
+### 3. Preview Excludes Candidates
 
-`latest_draft` does not include candidates or staged content and does not
-implicitly release the standard track. To include staged changes, release the
-standard track first and select `latest_tagged`, or make a later active draft
-after the release.
+`latest_preview` composes members plus staged changes under the source's release
+conflict policy, without actually releasing or promoting source content.
+Candidates remain excluded. Stage an intended change before previewing it in a
+virtual composition; source publication is not required.
 
 ## Error Handling
 
-### Error: Component Has No Active Draft
+### Error: Component Preview Has a Blocking Conflict
 
-`latest_draft` materialization returns `400 Bad Request` when the newest
-standard snapshot is tagged or a preserved release source. Create a new active
-standard draft, or explicitly change the component strategy to `latest_tagged`.
+A draft whose staged-to-members promotion would fail also fails virtual
+materialization with `409 Conflict`. The response identifies the source track
+and conflicts. Resolve the source conflict or deliberately change its promotion
+policy; component filters do not bypass this requirement.
+
+### Error: Retired `latest_draft` Rule
+
+New requests reject the retired rule with `400 Bad Request`. Existing saved
+rules also block materialization until an operator explicitly replaces them in
+Config. Choose `latest_preview` for staged changes or `latest_tagged` for
+published content. Historical snapshots are not relabeled or recomputed.
 
 ### Error: Component Has No Tagged Snapshots
 
