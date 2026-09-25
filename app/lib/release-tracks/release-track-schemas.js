@@ -232,7 +232,7 @@ const deduplicationStrategySchema = z.enum([
 
 const resolutionStrategySchema = z.enum([
   'latest_tagged',
-  'latest_draft',
+  'latest_preview',
   'specific_version',
   'specific_snapshot',
 ]);
@@ -373,7 +373,7 @@ const componentTrackSchema = z.discriminatedUnion('resolution_strategy', [
   z
     .object({
       ...componentTrackBaseShape,
-      resolution_strategy: z.literal('latest_draft'),
+      resolution_strategy: z.literal('latest_preview'),
     })
     .strict(),
   z

@@ -729,11 +729,15 @@ frontend-only properties in the submitted composition, component, filter, or
 deduplication objects. Component selector fields must also follow the selected
 strategy:
 
-- `latest_tagged` and `latest_draft` send neither `version` nor `snapshot`.
+- `latest_tagged` and `latest_preview` send neither `version` nor `snapshot`.
 - `specific_version` sends `version` and omits `snapshot`.
 - `specific_snapshot` sends `snapshot` and omits `version`.
 - Every component sends a unique, non-negative integer `priority`; lower
   numbers have higher priority.
+- Retired `latest_draft` remains visible only for loaded historical configuration
+  and provenance; require explicit replacement before saving/rematerializing.
+- Preview provenance can identify a draft or a tagged source. Do not label every
+  `latest_preview` resolution as a draft; use its stored `resolved_version`.
 
 The server validates component identity during both creation and update.
 Referenced tracks must already exist and must be standard tracks, and duplicate

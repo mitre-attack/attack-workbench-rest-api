@@ -36,7 +36,7 @@ The Release Tracks API supports two types of release tracks:
 - No duplicate object tracking - objects managed in source tracks only
 - Purely compositional - virtual tracks cannot add native members of their own
 - Create snapshots manually or on schedule (never event-driven)
-- Compose members from tagged snapshots or active drafts explicitly selected with `latest_draft`
+- Compose published members or prospective release membership selected with `latest_preview`
 - Examples: "EnterpriseTwiceAnnual" (aggregates Groups + Techniques + Software)
 
 **Use Case for Virtual Tracks:**

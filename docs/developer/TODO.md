@@ -2954,3 +2954,28 @@ Safety rationale: [Deletion guardrails](release-tracks/deletion-guardrails.md).
 - [x] Add explicit squash consent and partial-outcome recovery feedback.
 - [x] Verify API/scheduler regressions and the complete backend suite.
 - [x] Exercise retention, squash, pagination and recovery on the real frontend.
+
+## Published versus preview composition
+
+- [x] Prepare isolated worktrees on `next` and agree on `latest_tagged` versus
+      `latest_preview`, retaining version and snapshot pinning.
+- [x] Share standard release membership planning with virtual preview
+      composition, including exact staged resolution and conflict policies.
+- [x] Resolve the newest standard snapshot regardless of draft/tagged state,
+      without publishing or mutating the source.
+- [x] Replace active `latest_draft` input with `latest_preview`; preserve
+      historical provenance and require explicit replacement of retired rules.
+- [x] Update frontend selection, help and provenance labels.
+- [x] Verify staged additions/replacements, conflict parity, frozen revisions,
+      unchanged source state, and tagged-source preview in API and real UI.
+- [x] Update public/developer documentation and Bruno examples; run the full
+      backend suite and affected frontend tests.
+
+Verification: all 1,124 backend tests and 125 focused frontend tests passed.
+Backend lint and changed frontend file lint passed. The backend suite used a
+temporary loopback-family adapter for the local Supertest/listener collision;
+test selection and assertions were unchanged. Browser/API smoke checks proved
+that a source with zero members, one staged object and one candidate contributes
+only the staged object, without changing its snapshots, tiers or release history.
+Virtual tagging left that source untagged; later staged revisions left the
+existing virtual release frozen; a tagged newest source also composed correctly.

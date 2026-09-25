@@ -870,7 +870,7 @@ paths:
         composition_resolution. Materialize it before release preview or commit.
         Request body is strictly validated via Zod. Unknown composition,
         component, filter, and deduplication keys are rejected. latest_tagged and
-        latest_draft reject selector fields; specific_version requires version;
+        latest_preview reject selector fields; specific_version requires version;
         specific_snapshot requires snapshot. Component IDs and required
         non-negative integer priorities must each be unique.
         An optional strict scheduled_materialization object is persisted on the

@@ -9,8 +9,8 @@ const CreationCause = require('../../lib/release-tracks/snapshot-creation-causes
 // snapshot creation via resolution of component tracks.
 //
 // Virtual tracks aggregate content from multiple standard tracks by:
-//   1. Resolving each component track to a tagged snapshot or its active draft
-//   2. Collecting members from each resolved snapshot
+//   1. Resolving each component track to its selected standard snapshot
+//   2. Planning draft preview members or collecting published members
 //   3. Applying per-component filters (object_types and domains)
 //   4. Deduplicating across all components
 //   5. Persisting the result as a new draft snapshot
@@ -33,6 +33,7 @@ const {
   TrackNotFoundError,
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
+  ReleaseConflictError,
   NotFoundError,
 } = require('../../exceptions');
 
@@ -141,20 +142,8 @@ async function resolveComponentSnapshot(component) {
       snapshot = await dynamicRepo.getLatestTaggedSnapshot(component.track_id);
       break;
 
-    case 'latest_draft':
+    case 'latest_preview':
       snapshot = await dynamicRepo.getLatestSnapshot(component.track_id);
-      // Older untagged snapshots may be retained for releases or virtual
-      // provenance. They are not an active rolling draft.
-      if (
-        !snapshot ||
-        snapshot.version != null ||
-        (await dynamicRepo.getReleaseBySourceModified(component.track_id, snapshot.modified))
-      ) {
-        throw new BadRequestError({
-          message: `Component track '${component.track_id}' has no active draft snapshot`,
-          details: 'Create a standard-track draft before materializing with latest_draft',
-        });
-      }
       break;
 
     case 'specific_version':
@@ -164,6 +153,12 @@ async function resolveComponentSnapshot(component) {
     case 'specific_snapshot':
       snapshot = await dynamicRepo.getSnapshotByModified(component.track_id, component.snapshot);
       break;
+
+    case 'latest_draft':
+      throw new BadRequestError({
+        message: `Component track '${component.track_id}' uses retired strategy latest_draft`,
+        details: 'Update composition to explicitly choose latest_preview or latest_tagged',
+      });
 
     default:
       throw new BadRequestError({
@@ -176,7 +171,7 @@ async function resolveComponentSnapshot(component) {
   }
 
   // Explicit snapshot selection remains tagged-only.
-  if (component.resolution_strategy !== 'latest_draft' && snapshot.version == null) {
+  if (component.resolution_strategy !== 'latest_preview' && snapshot.version == null) {
     throw new NoTaggedSnapshotsError(component.track_id);
   }
 
@@ -293,11 +288,10 @@ async function hydrateDomains(componentTracks, resolutions) {
  * component data. The virtual snapshot itself never persists a moving ref.
  *
  * @param {Array<Object>} resolutions
+ * @param {Map<string, Promise<Date>>} latestByObjectRef
  * @returns {Promise<Array<Object>>}
  */
-async function lockComponentMemberRevisions(resolutions) {
-  const latestByObjectRef = new Map();
-
+async function lockComponentMemberRevisions(resolutions, latestByObjectRef) {
   const resolveLatest = (objectRef) => {
     if (!latestByObjectRef.has(objectRef)) {
       latestByObjectRef.set(objectRef, objectResolver.resolveLatestModified(objectRef));
@@ -355,7 +349,29 @@ async function resolveComposition(snapshot, registryMap) {
   const resolvedComponentSnapshots = await Promise.all(
     componentTracks.map((component) => resolveComponentSnapshot(component)),
   );
-  const resolutions = await lockComponentMemberRevisions(resolvedComponentSnapshots);
+  const latestByObjectRef = new Map();
+  const resolutions = await lockComponentMemberRevisions(
+    resolvedComponentSnapshots,
+    latestByObjectRef,
+  );
+  const { planPreviewMembers } = require('./versioning-service');
+  for (let i = 0; i < componentTracks.length; i++) {
+    if (
+      componentTracks[i].resolution_strategy !== 'latest_preview' ||
+      resolutions[i].version != null
+    ) {
+      continue;
+    }
+    try {
+      resolutions[i].members = await planPreviewMembers(resolutions[i], latestByObjectRef);
+    } catch (err) {
+      if (!(err instanceof ReleaseConflictError)) throw err;
+      throw new ReleaseConflictError(
+        `Component track '${componentTracks[i].track_id}' cannot preview staged membership: ${err.message}`,
+        { track_id: componentTracks[i].track_id, conflicts: err.conflicts },
+      );
+    }
+  }
   const domainsByVersion = await hydrateDomains(componentTracks, resolutions);
 
   for (let i = 0; i < componentTracks.length; i++) {
@@ -519,8 +535,8 @@ exports.updateSchedule = async function updateSchedule(trackId, schedule) {
  * Create a new virtual snapshot by resolving the composition rules.
  *
  * For each component track:
- *   1. Resolve to a tagged snapshot or active draft via the configured strategy
- *   2. Extract and filter members
+ *   1. Resolve the selected standard snapshot via the configured strategy
+ *   2. Plan preview membership for drafts, then filter the resolved members
  * Then deduplicate across all components and persist a new draft snapshot.
  *
  * @param {string} trackId

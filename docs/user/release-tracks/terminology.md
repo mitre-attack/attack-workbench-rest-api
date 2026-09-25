@@ -250,7 +250,7 @@ When the release is exported as a `bundle`, all `members` will be included in th
 
 #### Virtual Release Tracks: Two-Tier System
 
-Virtual release tracks use a simplified two-tier system since they aggregate already-released content:
+Virtual release tracks use a simplified two-tier system: they freeze published members or prospective release membership, rather than maintaining a separate authoring workflow.
 
 ##### 1. Member Objects
 
@@ -259,7 +259,7 @@ Virtual release tracks use a simplified two-tier system since they aggregate alr
 **Definition:** Successfully synced objects from component tracks.
 
 **Characteristics:**
-- Contains objects synced from component tracks' `members` tiers
+- Contains published source members or planned members plus staged changes selected with `latest_preview`
 - Objects that were automatically resolved using the deduplication strategy
 - OR objects manually promoted from quarantine
 - These objects are included in published STIX bundles
@@ -301,7 +301,7 @@ A **virtual release track** is a special type of release track that computes its
 **Characteristics:**
 - Does NOT manage objects through candidate/staged/released workflow
 - Aggregates content only from **standard component tracks**
-- References tagged snapshots or active drafts explicitly selected with `latest_draft`
+- References published snapshots or the newest standard snapshot's prospective release contents with `latest_preview`
 - Creates snapshots **manually** or **on schedule** (*never* event-driven; see [Types of Release Tracks](#types-of-release-tracks) for explanation)
 - All snapshots start as drafts and must be explicitly tagged
 - Is purely compositional and cannot own native objects; place additional
@@ -413,13 +413,13 @@ A **resolution strategy** determines which snapshot from a component track to us
 1. **latest_tagged** - Use the most recent tagged snapshot from the component track
 2. **specific_version** - Use a specific semantic version (e.g., "5.0")
 3. **specific_snapshot** - Use a specific tagged snapshot by timestamp
-4. **latest_draft** - Use the newest standard snapshot if it is an active untagged draft; no fallback
+4. **latest_preview** - Use the newest standard snapshot: planned members plus staged changes for a draft, published members for a release; never tag the source
 
 **Examples:**
 - `{ resolution_strategy: "latest_tagged", priority: 0 }` → Always gets latest
 - `{ resolution_strategy: "specific_version", version: "5.0", priority: 0 }` → Always uses v5.0
 - `{ resolution_strategy: "specific_snapshot", snapshot: "2024-02-01T10:00:00Z", priority: 0 }` → Always uses that exact snapshot
-- `{ resolution_strategy: "latest_draft", priority: 0 }` → Uses the active draft's members only, never staged objects or candidates
+- `{ resolution_strategy: "latest_preview", priority: 0 }` → Previews staged changes under source release conflict rules; candidates stay excluded
 
 ---
 

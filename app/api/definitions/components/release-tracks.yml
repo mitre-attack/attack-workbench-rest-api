@@ -167,7 +167,7 @@ components:
         composition:
           nullable: true
           description: 'Component track references (virtual tracks only)'
-          $ref: '#/components/schemas/composition'
+          $ref: '#/components/schemas/stored-composition'
         composition_resolution:
           $ref: '#/components/schemas/composition-resolution'
         snapshot_schedule:
@@ -361,8 +361,8 @@ components:
       readOnly: true
       description: |
         Immutable provenance for a materialized virtual snapshot. Each
-        component_snapshots entry names the exact tagged standard-track
-        snapshot used, including its version and creation timestamp. Null or
+        component_snapshots entry names the exact standard-track snapshot used,
+        including its version (null for a draft) and creation timestamp. Null or
         absent means the composition was configured but not materialized.
         Duplicate counts include STIX IDs contributed by more than one
         component, while conflicts include only genuinely different revisions.
@@ -412,9 +412,11 @@ components:
                 type: string
                 enum:
                   - latest_tagged
+                  - latest_preview
                   - latest_draft
                   - specific_version
                   - specific_snapshot
+                description: 'latest_draft appears only in historical members-only provenance; it is not an active resolution strategy.'
               filters_applied:
                 type: object
                 additionalProperties: false
@@ -430,6 +432,7 @@ components:
               total_objects_in_source:
                 type: integer
                 minimum: 0
+                description: 'Prospective release member count for a preview draft, otherwise the published member count; before filters and cross-component deduplication.'
               objects_after_filter:
                 type: integer
                 minimum: 0
@@ -641,6 +644,61 @@ components:
               description: 'How to handle conflicts when tagging (promoting staged to members)'
               default: 'abort'
 
+    stored-composition:
+      type: object
+      readOnly: true
+      description: |
+        Persisted composition rules. Historical latest_draft rules are returned
+        unchanged, but must be explicitly replaced with latest_preview or
+        latest_tagged before another materialization.
+      properties:
+        component_tracks:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/component-track'
+              - $ref: '#/components/schemas/retired-draft-component'
+        deduplication:
+          type: object
+          properties:
+            strategy:
+              type: string
+              enum:
+                - prioritize_latest_object
+                - prioritize_latest_snapshot
+                - prioritize_higher_priority
+                - quarantine
+
+    retired-draft-component:
+      type: object
+      readOnly: true
+      description: 'Read-only historical members-only rule; rejected in composition requests.'
+      required:
+        - track_id
+        - resolution_strategy
+        - priority
+      properties:
+        track_id:
+          type: string
+        resolution_strategy:
+          type: string
+          enum:
+            - latest_draft
+        priority:
+          type: integer
+          minimum: 0
+        filters:
+          type: object
+          properties:
+            object_types:
+              type: array
+              items:
+                type: string
+            domains:
+              type: array
+              items:
+                type: string
+
     composition:
       type: object
       description: 'Virtual track composition (references to component standard tracks)'
@@ -673,11 +731,13 @@ components:
       type: object
       description: |
         Reference to a component standard track. Selector fields are determined
-        by resolution_strategy: latest_tagged and latest_draft reject version and
+        by resolution_strategy: latest_tagged and latest_preview reject version and
         snapshot; specific_version requires only version; specific_snapshot requires
-        only snapshot and remains tagged-only. latest_draft selects the active
-        untagged standard snapshot, never an older retained source or a tagged
-        fallback. Every strategy imports members only. Unknown properties are rejected.
+        only snapshot and remains tagged-only. latest_preview selects the newest
+        standard snapshot: published members when tagged, otherwise prospective
+        release members including staged changes under the source conflict policy.
+        Candidates are excluded. Filters and deduplication follow membership planning.
+        latest_draft is retired and rejected. Unknown properties are rejected.
       additionalProperties: false
       required:
         - track_id
@@ -696,7 +756,7 @@ components:
           type: string
           enum:
             - latest_tagged
-            - latest_draft
+            - latest_preview
             - specific_version
             - specific_snapshot
           description: 'How to resolve which snapshot to use from this component'
@@ -756,11 +816,11 @@ components:
                   - version
               - required:
                   - snapshot
-        - title: 'Latest active draft'
+        - title: 'Latest preview'
           properties:
             resolution_strategy:
               enum:
-                - latest_draft
+                - latest_preview
           not:
             anyOf:
               - required:

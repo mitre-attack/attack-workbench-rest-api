@@ -404,7 +404,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
     component_tracks: [
       {
         track_id: "release-track--groups-monthly",
-        resolution_strategy: "latest_tagged",  // "latest_tagged" | "latest_draft" | "specific_version" | "specific_snapshot"
+        resolution_strategy: "latest_tagged",  // "latest_tagged" | "latest_preview" | "specific_version" | "specific_snapshot"
         priority: 1,  // Always required and unique (lower number = higher priority)
 
         // Optional: filters to limit which objects are included
@@ -640,15 +640,15 @@ new worker's completion. See [Deletion Guardrails](deletion-guardrails.md).
 2. **Two-Tier System**: Only `members` and `quarantine` (no `candidates` or `staged` tiers)
 3. **Composition Rules**: Defines which component tracks to aggregate and how
 4. **Composition Resolution**: Immutable metadata about how snapshot was computed
-5. **Sync from Members Only**: Always pulls from component tracks' `members` tier (never staged or candidates)
+5. **Effective Membership**: Published sources contribute members; `latest_preview` drafts contribute prospective membership (members plus staged changes under source conflict rules, never candidates)
 6. **No Workflow States**: No work-in-progress, awaiting-review, or reviewed states
 7. **Scheduled Snapshots**: Can auto-generate snapshots on schedule
 8. **Component Version Tracking**: Version history records which component versions were included
 
 **Virtual Track Constraints:**
 
-- Reference tagged snapshots or active drafts selected with `latest_draft`
-- Sync from component tracks' **`members` tier** only (never staged or candidates)
+- Select published snapshots or the newest standard snapshot with `latest_preview`
+- Preview drafts through standard release membership planning; never mutate the source or include candidates
 - Can only compose from **standard release tracks** (not other virtual tracks - no nesting allowed)
 - Is purely compositional and has no `native_members` or second membership
   authority; aggregate-specific content belongs in another standard component
@@ -686,8 +686,10 @@ new worker's completion. See [Deletion Guardrails](deletion-guardrails.md).
 - Composition request objects are strict; unknown composition, component,
   filter, and deduplication keys return `400 Bad Request`
 - Selector fields form a discriminated request contract:
-  - `latest_tagged` and `latest_draft` reject `version` and `snapshot`
+  - `latest_tagged` and `latest_preview` reject `version` and `snapshot`
   - `specific_version` requires `version` and rejects `snapshot`
   - `specific_snapshot` requires `snapshot` and rejects `version`
 - Quarantine promotion selects an exact revision in a new draft and preserves
   the source snapshot's immutable `composition_resolution`
+- Retired `latest_draft` is read-only historical composition/provenance, not an
+  active request strategy or an alias for preview behavior

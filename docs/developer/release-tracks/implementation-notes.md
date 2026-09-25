@@ -204,7 +204,7 @@ Virtual-only operations are deliberately scoped beneath
   rules, empty members/quarantine tiers, and
   `composition_resolution: null`. Clearing all three prevents a materialized
   result from surviving a change to the rules that produced it.
-- `POST /virtual/snapshots/create` resolves tagged or active-draft component snapshots and
+- `POST /virtual/snapshots/create` resolves published or preview component snapshots and
   persists the concrete members, quarantine, and immutable
   `composition_resolution`.
 - Every persisted member and quarantine entry uses an exact
@@ -223,17 +223,32 @@ Virtual-only operations are deliberately scoped beneath
 
 Composition input uses strict Zod objects at the composition, component,
 filter, and deduplication levels. Components form a discriminated union on
-`resolution_strategy`: `latest_tagged` and `latest_draft` accept no selector,
+`resolution_strategy`: `latest_tagged` and `latest_preview` accept no selector,
 `specific_version` requires only `version`, and `specific_snapshot` requires
 only `snapshot`. This prevents misspelled filters or irrelevant selectors from
 being silently stripped before persistence. The same schema is used for
 initial virtual-track creation and composition updates.
 
-`latest_draft` resolves the newest standard snapshot only when it is untagged
-and not a preserved release source. It does not search older retained drafts
-or fall back to a release. An unavailable active draft returns `400 Bad Request`.
-All strategies contribute members only; candidates and staged entries are
-never composed. `specific_snapshot` remains tagged-only.
+`latest_preview` resolves the newest standard snapshot regardless of tag state.
+For a draft, `versioning-service.planPreviewMembers` shares `resolveReleaseInput`
+and `planMembership` with standard release planning: resolve exact revisions,
+normalize tiers and apply the source's staged-to-members conflict policy. It
+does not allocate versions, freeze publication, reject already-released source
+drafts, or write source snapshots. Tagged inputs contribute published members
+without incorporating staged entries.
+
+This planning occurs before component filters/domain hydration and virtual
+deduplication. A blocking source conflict returns `409` with the component
+`track_id` and standard conflict details. Source counts describe planned
+membership; stored source members can still be empty. Candidates are excluded.
+Existing `latest_tagged`, `specific_version` and `specific_snapshot` continue to
+select published members only.
+
+The active request enum rejects retired `latest_draft`; it is not an alias.
+Read-only stored composition and provenance schemas retain the historical token
+so existing members-only results remain truthful and releasable. Saved rules
+must be explicitly replaced before rematerialization. No nightly-data migration
+silently opts existing operators into staged content.
 
 Standard clone save/prune and virtual materialization share the existing release
 lock; contention returns `409 Conflict`. See [Deletion Guardrails](deletion-guardrails.md)
@@ -357,8 +372,9 @@ does not query the component tracks at preview or commit time: a component can
 advance after materialization without changing the already-frozen provenance.
 Standard release history entries omit the property. Mongoose validates string
 values with the shared release-version validator. Component resolutions require
-a tagged `resolved_version` for tagged strategies and allow `null` for
-`latest_draft`.
+a tagged `resolved_version` for tagged strategies. `latest_preview` records
+`null` for a draft or the actual version for a tagged source. Historical
+`latest_draft` provenance continues to permit its original null version.
 
 Standard release commit assigns a fresh timestamp, stores
 `release_source_modified`, and inserts the tagged clone while retaining the

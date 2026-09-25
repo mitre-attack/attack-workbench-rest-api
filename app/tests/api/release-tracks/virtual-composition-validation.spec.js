@@ -128,8 +128,9 @@ describe('Virtual release-track composition validation API', function () {
     const invalidComponents = [
       component('latest_tagged', { version: '1.0' }),
       component('latest_tagged', { snapshot: timestamp }),
-      component('latest_draft', { version: '1.0' }),
-      component('latest_draft', { snapshot: timestamp }),
+      component('latest_preview', { version: '1.0' }),
+      component('latest_preview', { snapshot: timestamp }),
+      component('latest_draft'),
       component('specific_version'),
       component('specific_version', { snapshot: timestamp }),
       component('specific_version', { version: '1.0', snapshot: timestamp }),
@@ -148,7 +149,7 @@ describe('Virtual release-track composition validation API', function () {
     const timestamp = '2024-02-01T10:00:00.000Z';
     const validComponents = [
       component('latest_tagged'),
-      component('latest_draft'),
+      component('latest_preview'),
       component('specific_version', { version: '1.0' }),
       component('specific_snapshot', { snapshot: timestamp }),
     ];

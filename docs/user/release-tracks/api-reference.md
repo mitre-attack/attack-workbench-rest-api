@@ -1382,13 +1382,25 @@ multiple standard component tracks based on configurable rules.
 1. `latest_tagged` - Always use the most recent tagged snapshot from component
 2. `specific_version` - Pin to a specific semantic version (e.g., "5.0")
 3. `specific_snapshot` - Pin to a specific tagged snapshot by timestamp
-4. `latest_draft` - Use the newest standard snapshot only if it is an active untagged draft
+4. `latest_preview` - Use the newest standard snapshot's prospective release membership
 
-Every strategy contributes **members only**, never staged objects or
-candidates. `latest_draft` does not fall back to a tagged release or older
-retained draft; no active draft returns `400 Bad Request`. Draft component
-provenance stores `resolved_version: null` and the exact source timestamp.
-Later source changes do not alter the materialized virtual snapshot.
+`latest_preview` accepts drafts and tagged snapshots. Draft input contributes
+members plus staged changes through the standard release membership planner,
+including dynamic revision resolution and source conflict policies. Tagged input
+contributes published members. Candidates are excluded. The source is not tagged
+or mutated, and standard release version allocation/publication is not performed.
+Filters and cross-component deduplication run after source membership planning;
+blocking source conflicts return `409` with the source track ID and conflicts.
+
+Published and pinned strategies remain members-only. Preview provenance records
+the exact source snapshot timestamp and `resolved_version: null` for a draft, or
+the actual version for a tagged source. `total_objects_in_source` counts planned
+preview members before filters, not just the source draft's stored members.
+Later changes cannot rewrite the frozen virtual materialization.
+
+New composition requests reject retired `latest_draft`. Existing saved rules
+must be explicitly changed to a supported strategy before materialization.
+Historical composition/provenance retains its original label and contents.
 
 See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
 
@@ -1591,7 +1603,7 @@ snapshot, and timestamp-selected snapshot GET requests.
 Composition, component, filter, and deduplication objects are strict. Unknown
 keys, including the incorrect singular `filters.domain`, return
 `400 Bad Request`. Component selectors are also strategy-specific:
-`latest_tagged` and `latest_draft` reject `version` and `snapshot`;
+`latest_tagged` and `latest_preview` reject `version` and `snapshot`;
 `specific_version` requires only `version`; `specific_snapshot` requires only `snapshot`.
 Every component requires a unique, non-negative integer `priority`; lower
 numbers have higher priority. When composition is supplied during creation,
