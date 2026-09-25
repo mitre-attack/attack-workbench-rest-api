@@ -26,6 +26,28 @@ Editors can replace the active schedule through
 immediately in track and Workbench-format snapshot responses; executable jobs
 are refreshed on the next `VIRTUAL_TRACK_SCHEDULES_CRON` reconciliation pass.
 
+Recurring schedules may include administrator-managed retention:
+
+```json
+{
+  "mode": "cron",
+  "cron": "0 * * * *",
+  "draft_retention": { "max_drafts": 10 }
+}
+```
+
+Only actual scheduler cron execution uses this persistent policy. Explicit
+materialization uses only its optional request-scoped policy, and date schedules
+never inherit recurring retention. Client-supplied occurrence metadata is not
+authority to apply the saved policy. Manual/dates schedule payloads reject
+retention fields. Missing/null limits disable cleanup.
+
+Editors can change timing while preserving the existing cron policy or switch
+away from recurring mode; changing a cron retention limit requires an
+administrator. Schedule-only updates create no snapshot and delete nothing
+immediately. The former global policy is inert and must be configured explicitly
+as recurring retention if desired.
+
 ## Idempotency and multiple instances
 
 The `virtualTrackScheduleOccurrences` collection stores one durable occurrence

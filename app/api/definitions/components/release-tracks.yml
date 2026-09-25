@@ -52,8 +52,6 @@ components:
       type: object
       description: 'A snapshot document for a release track, containing versioned member objects and workflow tiers'
       properties:
-        draft_retention:
-          $ref: '#/components/schemas/draft-retention'
         draft_cleanup:
           $ref: '#/components/schemas/draft-cleanup-result'
         snapshot_count:
@@ -591,11 +589,6 @@ components:
       type: object
       description: 'Release track configuration'
       properties:
-        draft_retention:
-          readOnly: true
-          description: Live virtual-track policy; update only through the dedicated draft-retention route.
-          allOf:
-            - $ref: '#/components/schemas/draft-retention'
         publication:
           $ref: '#/components/schemas/publication-config'
         publication_resolved:
@@ -904,8 +897,6 @@ components:
       type: object
       description: 'Registry entry tracking metadata about a release track'
       properties:
-        draft_retention:
-          $ref: '#/components/schemas/draft-retention'
         track_id:
           type: string
           description: 'The release track ID'
@@ -1031,10 +1022,11 @@ components:
       additionalProperties: false
       required: [max_drafts]
       description: |
-        Virtual tracks only. Live registry policy, never snapshot content.
-        Null or missing policy disables retention. All untagged creation causes
-        count. Tags and protected sources survive even when the threshold is exceeded.
-        Changing policy creates no draft and deletes nothing. New clones are disabled.
+        Virtual tracks only. A manual materialization may supply this policy
+        for that operation only; recurring policy belongs inside the cron schedule.
+        Missing policy or max_drafts null disables cleanup. All untagged creation
+        causes count across the track. Tags and protected sources always survive.
+        Saving a cron policy creates no draft and deletes nothing.
       properties:
         max_drafts:
           type: integer
@@ -1194,6 +1186,8 @@ components:
               type: string
               description: 'Five-field UTC cron expression'
               example: '0 0 1 1,7 *'
+            draft_retention:
+              $ref: '#/components/schemas/draft-retention'
         - type: object
           additionalProperties: false
           required:

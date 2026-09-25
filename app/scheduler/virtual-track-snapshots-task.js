@@ -161,6 +161,7 @@ async function executeOccurrence(occurrence, now = new Date()) {
       try {
         materialized = await virtualTrackService.createVirtualSnapshot(claimed.track_id, {
           scheduledMaterialization,
+          useRecurringRetention: claimed.schedule_mode === 'cron',
         });
       } catch (err) {
         // Another worker may have committed and pruned the result after our

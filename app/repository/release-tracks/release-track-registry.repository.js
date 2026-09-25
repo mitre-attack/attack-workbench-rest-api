@@ -101,7 +101,7 @@ class ReleaseTrackRegistryRepository {
         });
       }
 
-      aggregation.push({ $project: { release_lock: 0 } });
+      aggregation.push({ $project: { release_lock: 0, draft_retention: 0 } });
 
       // Total count before pagination
       const totalCountResult = await this.model.aggregate(aggregation).count('totalCount').exec();

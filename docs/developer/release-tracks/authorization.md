@@ -18,7 +18,7 @@ history requires an administrator.
 | Change a tagged release's semantic version                            |      No |                 No |           Yes |
 | Delete an entire track and all snapshot history                       |      No |                 No |           Yes |
 | Inspect pending/failed virtual draft cleanup                          |     Yes |                Yes |           Yes |
-| Configure virtual draft retention                                    |      No |                 No |           Yes |
+| Set an ad-hoc limit or change recurring draft retention                |      No |                 No |           Yes |
 | Opt into draft squash when tagging or retry draft cleanup              |      No |                 No |           Yes |
 
 Full-track deletion also requires `confirm_track_id` to equal the `:id` path
@@ -38,11 +38,13 @@ release lock. Both conversion and retag capture audit identity under that same
 lock, so a competing version correction cannot invalidate confirmation or
 change the version between audit capture and mutation.
 
-Draft retention configuration and explicit squash/retry use the existing global
-administrator role; there is no track-specific administrator role. Ordinary
+Supplying an ad-hoc retention policy, changing a recurring retention limit, and
+explicit squash/retry use the existing global administrator role; there is no
+track-specific administrator role. Editors may change cron timing while keeping
+its retention policy unchanged, or switch away from recurring mode. Ordinary
 tagging retains editor-or-higher access. Squash authorization and the reviewed
-fingerprint are checked before tagging. Automatic retention runs under the
-administrator-configured policy and records its system actor.
+fingerprint are checked before tagging. Recurring retention records its system
+actor; ad-hoc cleanup records the invoking administrator.
 
 ## Audited destructive actions
 

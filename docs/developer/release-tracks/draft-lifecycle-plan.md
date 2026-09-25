@@ -16,16 +16,16 @@ internal, guarded historical-draft cleanup operation. Keep normal latest-draft
 DELETE semantics unchanged. Add a compact history view independently of storage
 retention: hiding drafts is reversible; deleting them is not.
 
-The following defaults were approved for implementation:
+The defaults below include the subsequent frontend-feedback refinements:
 
 | Decision                     | Recommended behavior                                                                                                            |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | Scope                        | Virtual tracks only; leave standard rolling drafts and rollback sources unchanged                                               |
-| Automatic retention          | Disabled by default; when enabled, retain the newest N untagged snapshots                                                       |
+| Retention triggers           | One-shot manual materialization policy or persistent cron-schedule policy, both disabled by default                             |
 | Suggested starting threshold | 10; positive integer, minimum 1; no zero-as-delete-all behavior                                                                 |
 | Counted drafts               | All virtual drafts, including manual, scheduled, composition/configuration/metadata and quarantine-resolution drafts            |
 | Tagged snapshots             | Never count against N and never delete                                                                                          |
-| Policy changes               | Live registry metadata; no content draft and no immediate deletion; apply on the next successful draft creation                 |
+| Policy changes               | Saved cron schedule updates create no content draft/deletion; manual policies last one request                                  |
 | New track clones             | Retention disabled rather than inheriting a destructive policy silently                                                         |
 | Release-time squash          | Explicit, unchecked opt-in on each virtual release                                                                              |
 | First-release squash         | Delete all eligible drafts strictly before the selected snapshot                                                                |
@@ -67,54 +67,41 @@ or editors is a product decision, not a reason to introduce ACL infrastructure.
   (`release-tracks.service.ts:223-245`, `release-track-page.component.ts:1058-1081`,
   `release-track-page.component.html:545-570` in the frontend repository).
 
-## Feature A: automatic count-based retention
+## Feature A: trigger-scoped count-based retention
 
-### Contract
+Frontend feedback replaced the original global policy with two distinct choices:
 
-Proposed registry field:
+- **Ad-hoc:** optional `draft_retention: { max_drafts: N }` on
+  `POST /api/release-tracks/:id/virtual/snapshots/create`. It applies only to this
+  materialization, is off by default, and never changes/inherits recurring policy.
+- **Recurring:** optional `snapshot_schedule.draft_retention` within the cron
+  schedule, saved through `PUT /api/release-tracks/:id/virtual/schedule` or initial
+  virtual-track creation. Only trusted scheduler cron execution applies it.
 
-```json
-{ "draft_retention": { "max_drafts": 10 } }
-```
+Positive safe integers are accepted; missing/null limits disable cleanup.
+Manual/dates schedule shapes reject retention fields. Metadata, configuration,
+composition and quarantine writes do not invoke retention. Both policies still
+count all untagged snapshots across the track, not separate cause pools.
 
-Missing configuration or `max_drafts: null` means disabled. Reject zero, negative,
-fractional and nonnumeric values. Reject configuration on standard tracks.
+Supplying an ad-hoc policy or changing a cron limit requires an administrator.
+Editors can preserve the policy while editing cron timing or switch away from
+recurring mode. Schedule-only saves create no draft or immediate deletion.
 
-Expose an optional field on virtual-track creation and a dedicated endpoint:
+Materialization locks its target before reading its source, chooses the policy
+from the trusted trigger, and creates durable bounded intent before saving.
+After successful persistence it removes eligible older drafts, preserving the
+newest N, tagged snapshots, and source/receipt protections. Shared manifests and
+registry counters are repaired through the existing cleanup path.
 
-```text
-PUT /api/release-tracks/:id/virtual/draft-retention
-{ "max_drafts": 10 }
-```
+Intent records preserve `source`, `max_drafts`, and the original cutoff. Manual
+retry retains its immutable request limit independently of later schedule edits;
+recurring retry also respects the current applicable cron policy. Disabling or
+leaving recurring mode stops additional recurring selection. Legacy intents with
+no trigger/limit may repair already-deleted storage but cannot select more rows.
 
-Use the existing registry-backed schedule-update pattern. Return current policy
-in track/configuration responses as live metadata, not historical content; do not
-add it to bundles, sealed manifests, or copied version histories. Policy-only
-saves must not create a configuration draft accidentally in the frontend.
-
-### Selection and application
-
-1. Lock the target before reading the source snapshot or its manifest.
-2. Create and durably persist the new draft and its manifest; complete required
-   latest-membership reconciliation. Failed creation never deletes old history.
-3. Read the current policy. Select untagged snapshots newest-first by `modified`.
-4. Keep the newest N, including the newly created/current latest draft. Select
-   older eligible drafts for cleanup, across the whole history, not per release
-   interval. Tags do not consume the count.
-5. Preserve source/dependency protections and scheduled snapshots whose durable
-   non-replay receipt cannot be secured. Report any protected excess above N.
-6. Delete eligible historical snapshots in bounded batches; remove only manifests
-   with no surviving references; repair registry counts once per batch/operation.
-
-Example: 12 drafts and 3 releases with N=10 removes the oldest 2 eligible drafts
-and retains all 3 releases. A protected old draft can make the retained total
-exceed 10. Manual notes and quarantine alternatives are not implicitly exempt:
-if all-draft retention is approved, the configuration warning must say that their
-historical snapshots can be permanently removed too.
-
-Run the policy after every successful virtual draft-creation path, not just cron
-materialization. Keeping only scheduled drafts bounded would leave other virtual
-history unbounded and would need a separate, explicitly named policy.
+The earlier global field/endpoint are removed, with no compatibility alias.
+Stored legacy global values are inert rather than silently adopted as new
+destructive policies. The existing deletion guardrails and squash behavior remain.
 
 ## Feature B: opt-in release-time squash
 
@@ -195,22 +182,25 @@ Implementation requirements specific to this plan:
 
 ## Frontend history changes
 
-For virtual tracks, default to **Releases + current draft**. Load tagged summaries
-through the existing `tagged=true` server filter and use the already loaded latest
-snapshot for the current-draft card. Offer **Drafts** and **All snapshots** views,
-with a 25-item paginator using existing `limit`, `offset`, and `pagination.total`.
+Virtual-track history now offers **Drafts only**, **Releases only**, and **All
+releases** (the default). All releases includes both states. Use exact server
+tagged filtering with no pinned-draft injection, and retain the 25-item paginator.
+The small summary reports filtered tagged/draft/total counts across matching
+pages, including zero results, rather than registry-wide totals or page length.
 
-Use server totals/registry metadata, not the loaded page length, for counts.
-Refresh/reset pagination after creation, tagging or cleanup; handle an emptied
-page and a draft disappearing under an active user with an explanatory refresh
-message. Counts and “Latest” status must not be inferred from filtered array
-position. Keep standard-track source-draft hiding behavior unchanged.
+Refresh lightweight history and cleanup status every 30 seconds while Releases
+is visible, plus immediately on entry/focus/visibility return. Pause during
+editing, dialogs, mutations and active requests; preserve filter/page/scroll and
+clamp an emptied page. Tear down timers/listeners and cancel stale requests.
+Unfiltered server latest identities control Latest markers and latest-only
+actions. Keep standard-track source-draft hiding behavior unchanged.
 
-Add a virtual Config **Draft retention** control with disabled/unlimited and
-positive count states, administrator authorization, and an explicit deletion
-warning. Display protected excess or deferred cleanup without suggesting tags
-were removed. Cleanup response errors must distinguish a successful release
-from unsuccessful cleanup and offer retry instead of a second tag attempt.
+The **Create Draft** dialog offers a fresh, off-by-default ad-hoc policy.
+Saved recurring policy controls appear only for **Recurring** mode and follow
+**Edit Config**, **Cancel**, and **Save Config**. Center the history controls,
+refresh authoritative counts with stale-response protection, and omit the
+redundant pinned label. Completed cleanup uses a floating dismissible notification;
+pending/failed cleanup remains discoverable with cleanup-only retry.
 
 ## Implementation sequence on the same feature branches
 
@@ -278,7 +268,7 @@ for verification completion. Public behavior is documented in the
 the explanation requested during planning is preserved in
 [Deletion Guardrails](deletion-guardrails.md).
 
-Verification completed: 1,143 backend tests across all `npm test` stages and
+Initial lifecycle verification completed: 1,143 backend tests across all `npm test` stages and
 143 focused frontend tests passed. Backend lint and changed frontend source lint
 passed. Real-browser checks also covered 26 tagged releases across two pages,
 with the current draft pinned and global counts unchanged between pages.
@@ -290,3 +280,12 @@ matching the listener's address family, without changing test selection,
 assertions, or production code. That diagnostic tooling was removed afterward.
 Repository-wide frontend lint still reports existing errors in untouched files;
 the changed lifecycle files pass their scoped lint check.
+
+Trigger-policy feedback verification: all 1,149 backend tests and 132 focused
+frontend tests passed, together with backend and changed-source frontend lint.
+The real browser/API flow verified centered controls, no redundant pinned text,
+manual counter growth (4 to 5), one-shot cleanup and fresh-dialog reset, floating
+notification dismissal without refresh resurrection, Edit Config gating/Cancel,
+and schedule-only saving without a new snapshot. Actual cron execution reduced
+five drafts to its saved limit of three; a separate ad-hoc limit of one left that
+saved recurring limit unchanged.

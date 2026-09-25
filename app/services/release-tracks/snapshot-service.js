@@ -190,8 +190,12 @@ exports.createTrack = async function createTrack(data, options = {}) {
   const trackId = `release-track--${uuidv4()}`;
   const now = new Date();
   const trackType = data.type || 'standard';
-  if (data.draft_retention !== undefined) {
-    require('./draft-cleanup-service').validatePolicy(data.draft_retention, data.actor, trackType);
+  if (data.snapshot_schedule?.draft_retention !== undefined) {
+    require('./draft-cleanup-service').validatePolicy(
+      data.snapshot_schedule.draft_retention,
+      data.actor,
+      trackType,
+    );
   }
   if (data.alias) await assertAliasAvailable(data.alias);
 
@@ -235,8 +239,6 @@ exports.createTrack = async function createTrack(data, options = {}) {
     created_at: now,
     updated_at: now,
     snapshot_schedule: trackType === 'virtual' ? data.snapshot_schedule : undefined,
-    draft_retention:
-      trackType === 'virtual' ? data.draft_retention || { max_drafts: null } : undefined,
   });
   if (trackType === 'virtual') {
     const { withReleaseLock } = require('./versioning-service');
@@ -254,9 +256,7 @@ exports.createTrack = async function createTrack(data, options = {}) {
   }
 
   logger.verbose(`SnapshotService: Created ${trackType} track "${data.name}" (${trackId})`);
-  return trackType === 'virtual'
-    ? { ...snapshot, draft_retention: data.draft_retention || { max_drafts: null } }
-    : snapshot;
+  return snapshot;
 };
 
 /**
@@ -288,8 +288,6 @@ exports.getTrackMetadata = async function getTrackMetadata(trackId) {
   return {
     alias: entry?.alias ?? null,
     snapshot_schedule: entry?.snapshot_schedule,
-    draft_retention:
-      entry?.type === 'virtual' ? entry.draft_retention || { max_drafts: null } : undefined,
     snapshot_count: entry?.snapshot_count,
     tagged_release_count: entry?.tagged_release_count,
   };
@@ -309,7 +307,8 @@ exports.getTrackMetadata = async function getTrackMetadata(trackId) {
  *
  * @param {string} trackId
  * @param {Object} options - { tagged?, limit, offset }
- * @returns {Promise<{data: Object[], pagination: Object}>}
+ * @returns {Promise<{data: Object[], pagination: Object, counts: Object,
+ *   latest_snapshot_modified: Date|null, latest_tagged_snapshot_modified: Date|null}>}
  * @throws {TrackNotFoundError} If the release track does not exist
  */
 exports.listSnapshots = async function listSnapshots(trackId, options) {
@@ -322,8 +321,15 @@ exports.listSnapshots = async function listSnapshots(trackId, options) {
   const statisticsByManifestId = await contentManifestService.getStatisticsByManifestIds(
     result.data.map((snapshot) => snapshot.content_manifest_id),
   );
+  const latestTaggedModified = (track.tagged_releases || []).reduce(
+    (latest, release) =>
+      !latest || release.snapshot_modified > latest ? release.snapshot_modified : latest,
+    null,
+  );
   return {
     ...result,
+    latest_snapshot_modified: track.latest_snapshot_modified ?? null,
+    latest_tagged_snapshot_modified: latestTaggedModified,
     data: result.data.map((snapshot) => {
       const common = {
         id: snapshot.id,
@@ -492,9 +498,10 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
   const normalized = tierRevisionInvariant.normalizeSnapshot(clone);
   await options.lease.assertOwned();
   const cleanupIntent =
-    normalized.snapshot.type === 'virtual'
+    normalized.snapshot.type === 'virtual' && options.retention
       ? await require('./draft-cleanup-service').prepareRetention(
           normalized.snapshot,
+          options.retention,
           options.lease,
         )
       : null;
@@ -648,7 +655,6 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
     tagged_release_count: 0,
     created_at: now,
     updated_at: now,
-    draft_retention: sourceSnapshot.type === 'virtual' ? { max_drafts: null } : undefined,
   });
 
   // The new track's initial snapshot carries the source track's contents
@@ -777,13 +783,11 @@ exports.updateSnapshotDescription = async function updateSnapshotDescription(
  */
 exports.getConfig = async function getConfig(trackId) {
   const snapshot = await exports.getLatestSnapshot(trackId);
-  const metadata = await exports.getTrackMetadata(trackId);
   const config = JSON.parse(JSON.stringify(snapshot.config || {}));
   const resolved = await publicationService.resolvePublication(snapshot);
   return {
     ...config,
     publication_resolved: resolved,
-    ...(snapshot.type === 'virtual' ? { draft_retention: metadata.draft_retention } : {}),
   };
 };
 

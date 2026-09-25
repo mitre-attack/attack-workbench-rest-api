@@ -2,10 +2,12 @@
 
 Workbench stores destructive attempts in `releaseTrackAuditEvents`: full-track
 deletion (`delete_track`), release conversion (`convert_release_to_draft`),
-version correction (`retag_release`), automatic virtual draft retention
-(`draft_retention`), and opt-in release-time draft squash (`draft_squash`).
-Automatic retention records a system actor under the administrator-configured
-policy; explicit destructive actions record the authenticated administrator.
+version correction (`retag_release`), virtual draft retention (`draft_retention`),
+and opt-in release-time draft squash (`draft_squash`). Recurring retention records
+a system actor under the saved cron policy; one-shot retention and explicit
+destructive actions record the authenticated administrator. Retention intents
+record their source, applied threshold and original cutoff. Legacy unscoped
+intents can repair storage but cannot select additional drafts.
 
 Older `delete_release` events retain their historical meaning. New snapshot
 DELETE requests reject tagged releases; conversion and draft deletion are

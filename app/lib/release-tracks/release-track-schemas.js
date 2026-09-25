@@ -308,6 +308,10 @@ const updateConfigBodySchema = z.object({
 // Request body schemas (used inline by controller handlers)
 // =============================================================================
 
+const draftRetentionSchema = z
+  .object({ max_drafts: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable() })
+  .strict();
+
 /** POST /release-tracks/new */
 const snapshotScheduleSchema = z.discriminatedUnion('mode', [
   z
@@ -319,6 +323,7 @@ const snapshotScheduleSchema = z.discriminatedUnion('mode', [
     .object({
       mode: z.literal('cron'),
       cron: cronSchema,
+      draft_retention: draftRetentionSchema.optional(),
     })
     .strict(),
   z
@@ -432,10 +437,6 @@ const compositionSchema = z
   .strict()
   .superRefine(validateCompositionUniqueness);
 
-const draftRetentionSchema = z
-  .object({ max_drafts: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable() })
-  .strict();
-
 const createTrackBodySchema = z
   .object({
     name: trackNameSchema,
@@ -445,19 +446,11 @@ const createTrackBodySchema = z
     type: trackTypeQuerySchema.default('standard'),
     composition: compositionSchema.optional(),
     snapshot_schedule: snapshotScheduleSchema.optional(),
-    draft_retention: draftRetentionSchema.optional(),
     scheduled_materialization: scheduledMaterializationSchema.optional(),
     config: updateConfigBodySchema.optional(),
   })
   .strict()
   .superRefine((track, context) => {
-    if (track.type !== 'virtual' && track.draft_retention !== undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['draft_retention'],
-        message: 'Draft retention is only available for virtual tracks',
-      });
-    }
     if (track.type !== 'virtual' && track.snapshot_schedule !== undefined) {
       context.addIssue({
         code: 'custom',
@@ -597,6 +590,7 @@ const updateCompositionBodySchema = z
 const createVirtualSnapshotBodySchema = z
   .object({
     description: snapshotDescriptionSchema.optional(),
+    draft_retention: draftRetentionSchema.nullable().optional(),
     scheduled_materialization: scheduledMaterializationSchema.optional(),
   })
   .strict()

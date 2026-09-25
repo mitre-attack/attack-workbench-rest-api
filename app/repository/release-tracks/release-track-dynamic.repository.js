@@ -291,7 +291,20 @@ class ReleaseTrackDynamicRepository {
         query.version = null;
       }
 
-      const totalCount = await Model.countDocuments(query).exec();
+      const [summaryCounts] = await Model.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            tagged: {
+              $sum: { $cond: [{ $eq: [{ $type: '$version' }, 'string'] }, 1, 0] },
+            },
+          },
+        },
+      ]).exec();
+      const total = summaryCounts?.total || 0;
+      const tagged = summaryCounts?.tagged || 0;
       const aggregation = [
         { $match: query },
         { $sort: { modified: -1 } },
@@ -331,8 +344,9 @@ class ReleaseTrackDynamicRepository {
 
       return {
         data: documents,
+        counts: { tagged, drafts: total - tagged, total },
         pagination: {
-          total: totalCount,
+          total,
           offset: options.offset || 0,
           limit: options.limit || 0,
         },

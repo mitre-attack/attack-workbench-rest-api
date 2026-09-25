@@ -20,6 +20,7 @@ describe('Scheduled virtual release-track materialization', function () {
 
   before(async function () {
     config.scheduler.enableScheduler = false;
+    config.validateRequests.withAttackDataModel = true;
     await database.initializeConnection();
     await databaseConfiguration.checkSystemConfiguration();
     task = require('../../scheduler/virtual-track-snapshots-task');
@@ -60,6 +61,7 @@ describe('Scheduled virtual release-track materialization', function () {
         ],
       },
       snapshot_schedule: snapshotSchedule,
+      actor: { role: 'admin' },
     });
   }
 
@@ -178,6 +180,50 @@ describe('Scheduled virtual release-track materialization', function () {
         status: 'completed',
       }),
     ).toBe(1);
+  });
+
+  it('applies only saved cron retention on trusted recurring execution, never on manual or date runs', async function () {
+    const component = await createComponent();
+    const virtual = await createVirtual(component.id, {
+      mode: 'cron',
+      cron: '0 0 * * *',
+      draft_retention: { max_drafts: 2 },
+    });
+    await releaseTracksService.updateMetadata(virtual.id, { description: 'Count metadata too' });
+    await releaseTracksService.createVirtualSnapshot(virtual.id);
+    const spoofed = await releaseTracksService.createVirtualSnapshot(virtual.id, {
+      scheduledMaterialization: {
+        schedule_mode: 'cron',
+        scheduled_for: new Date('2026-07-01T00:00:00.000Z'),
+      },
+    });
+    expect(spoofed).not.toHaveProperty('draft_cleanup');
+    expect(await snapshotCount(virtual.id)).toBe(4);
+    const scheduled = await task.executeCronOccurrence(
+      virtual.id,
+      new Date('2026-07-02T00:00:00.000Z'),
+    );
+    expect(scheduled.draft_cleanup).toMatchObject({ status: 'completed', deleted_count: 3 });
+    expect(await snapshotCount(virtual.id)).toBe(2);
+    const remaining = (await dynamicRepo.getAllSnapshots(virtual.id)).data;
+    expect(remaining.map((entry) => entry.modified)).toEqual([
+      scheduled.modified,
+      spoofed.modified,
+    ]);
+
+    const scheduledFor = new Date('2026-07-03T00:00:00.000Z');
+    await releaseTracksService.updateSchedule(
+      virtual.id,
+      { mode: 'dates', dates: [scheduledFor.toISOString()] },
+      { role: 'editor' },
+    );
+    await task.reconcileSchedules(scheduledFor);
+    expect(await snapshotCount(virtual.id)).toBe(3);
+    const dateSnapshot = await dynamicRepo.getSnapshotByScheduledMaterialization(
+      virtual.id,
+      scheduledFor,
+    );
+    expect(dateSnapshot.scheduled_materialization.schedule_mode).toBe('dates');
   });
 
   it('registers cron tracks in UTC and removes their jobs after track deletion', async function () {

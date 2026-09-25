@@ -53,7 +53,6 @@ const {
   updateConfigBodySchema,
   updateCompositionBodySchema,
   updateScheduleBodySchema,
-  draftRetentionSchema,
   createVirtualSnapshotBodySchema,
   promoteQuarantinedObjectBodySchema,
   reconstructSnapshotGraphBodySchema,
@@ -1089,34 +1088,16 @@ exports.updateSchedule = async function updateSchedule(req, res, next) {
       );
     }
 
-    const result = await releaseTracksService.updateSchedule(req.params.id, bodyResult.data);
+    const result = await releaseTracksService.updateSchedule(
+      req.params.id,
+      bodyResult.data,
+      destructiveActor(req),
+    );
     logger.debug(`Success: Updated snapshot schedule for track ${req.params.id}`);
     return res.status(200).send(result);
   } catch (err) {
     logger.error('Failed to update snapshot schedule: ' + err);
     return next(err);
-  }
-};
-
-exports.updateDraftRetention = async function updateDraftRetention(req, res, next) {
-  try {
-    const parsed = draftRetentionSchema.safeParse(req.body);
-    if (!parsed.success)
-      throw new BadRequestError({
-        message: 'Invalid draft retention policy',
-        details: parsed.error.errors,
-      });
-    return res
-      .status(200)
-      .send(
-        await releaseTracksService.updateDraftRetention(
-          req.params.id,
-          parsed.data,
-          destructiveActor(req),
-        ),
-      );
-  } catch (error) {
-    return next(error);
   }
 };
 
@@ -1163,6 +1144,7 @@ exports.createVirtualSnapshot = async function createVirtualSnapshot(req, res, n
       ...snapshotOptions,
       scheduledMaterialization,
       userAccountId: req.user?.userAccountId,
+      actor: destructiveActor(req),
     });
     logger.debug(`Success: Created virtual snapshot for track ${req.params.id}`);
     return res.status(201).send(result);

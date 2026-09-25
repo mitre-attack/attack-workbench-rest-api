@@ -388,9 +388,6 @@ paths:
   /api/release-tracks/{id}/virtual/schedule:
     $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1virtual~1schedule'
 
-  /api/release-tracks/{id}/virtual/draft-retention:
-    $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1virtual~1draft-retention'
-
   /api/release-tracks/{id}/virtual/draft-cleanup:
     $ref: 'paths/release-tracks-paths.yml#/paths/~1api~1release-tracks~1{id}~1virtual~1draft-cleanup'
 

@@ -6,7 +6,7 @@ This document tracks new database schemas, interfaces, etc.; as well as changes 
 
 | Collection                           | Purpose                                                                                                                                                                                                           | Written by                                                                                                | Growth and retention                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `releaseTrackRegistry` | Track identity, counters, tagged catalogue, lifecycle lock, and live virtual schedule/`draft_retention`. | Track creation/deletion, snapshot lifecycle and live policy updates. | One document per track. |
+| `releaseTrackRegistry` | Track identity, counters, tagged catalogue, lifecycle lock, and live virtual schedule with cron-only nested retention. | Track creation/deletion, snapshot lifecycle and schedule updates. | One document per track. |
 | `release-track--<uuid>` | Standard rolling drafts, preserved release sources, virtual-pinned source drafts and tags; virtual drafts and releases. | Snapshot service and release commit. | Virtual drafts can be bounded by count retention or explicit release-time squash; tagged snapshots are never pruned. |
 | `releaseTrackContentManifests`       | The sealed bill of materials each snapshot references (`content_manifest_id`). Several snapshots share one manifest when their member sets are identical.                                                         | Sealed whenever members are written; discarded when no snapshot references it.                            | Bounded by member-changing writes, not by snapshot count.                                                    |
 | `releaseTrackContentManifestEntries` | One exact-revision pointer per object a manifest emits or depends on. The `(object_ref, object_modified)` index is what protects referenced revisions from deletion.                                              | With its manifest.                                                                                        | Roughly members + relationships + a few supporting objects per manifest.                                     |
@@ -14,10 +14,17 @@ This document tracks new database schemas, interfaces, etc.; as well as changes 
 | `releaseTrackAuditEvents` | Destructive audit and bounded cleanup intent/progress for deletion, conversion, retag, `draft_retention`, and `draft_squash`. | Destructive operations and cleanup recovery. | Durable audit records; cleanup results are discoverable independently of snapshot survival. |
 | `virtualTrackScheduleOccurrences` | Ownership-fenced claims and monotonic `snapshot_modified` materialization receipts. | Scheduler and scheduled snapshot lifecycle. | One record per track/time, retained after snapshot cleanup; also covers API-originated occurrence metadata. |
 
-Live `draft_retention` is `{ max_drafts: null | positive safe integer }` and is
-virtual-only. Policy writes create no content snapshots. Workbench virtual
-responses project the policy plus registry `snapshot_count` and
-`tagged_release_count` for paginated clients. These are not historical content.
+Retention is `{ max_drafts: null | positive safe integer }`, supplied either on
+the manual materialization request or inside the live cron `snapshot_schedule`.
+There is no global registry retention policy. Workbench virtual responses
+project the schedule plus registry `snapshot_count` and `tagged_release_count`
+for paginated clients; these are not historical snapshot content.
+
+Retention audit intents persist their `source` (`manual` or `recurring`), applied
+`max_drafts`, and original cutoff. Manual retries use that fixed request policy;
+recurring retries additionally honor the currently enabled cron policy. Legacy
+intents lacking these fields cannot select further drafts, but storage repair
+remains available.
 
 A server-controlled `release_event_id` binds release-time cleanup to the original
 tagging event, independently of mutable version labels and reusable virtual
@@ -662,8 +669,8 @@ new worker's completion. See [Deletion Guardrails](deletion-guardrails.md).
 - Component IDs and priorities are validated before initial virtual-track
   persistence as well as during composition updates and materialization
 - Snapshot schedules are strict and mode-discriminated: `manual` accepts only
-  `mode`, `cron` requires only a five-field `cron` expression, and `dates`
-  requires only a nonempty `dates` array
+  `mode`, `cron` requires a five-field `cron` expression and accepts optional
+  nested `draft_retention`, and `dates` requires only a nonempty `dates` array
 - Standard tracks reject `snapshot_schedule`; virtual `cron` and `dates`
   schedules execute through the global scheduler
 - `filters.object_types` uses the canonical Workbench STIX type names from

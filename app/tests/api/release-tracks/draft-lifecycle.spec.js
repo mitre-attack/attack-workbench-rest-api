@@ -8,6 +8,7 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
 const service = require('../../../services/release-tracks/release-tracks-service');
 const snapshotService = require('../../../services/release-tracks/snapshot-service');
+const virtual = require('../../../services/release-tracks/virtual-track-service');
 const versioning = require('../../../services/release-tracks/versioning-service');
 const cleanup = require('../../../services/release-tracks/draft-cleanup-service');
 const manifests = require('../../../services/release-tracks/content-manifest-service');
@@ -69,7 +70,29 @@ describe('Virtual draft lifecycle API', function () {
     return api('post', `${base(track)}/meta`, { description });
   }
   async function policy(track, maximum) {
-    return api('put', `${base(track)}/virtual/draft-retention`, { max_drafts: maximum });
+    return api('put', `${base(track)}/virtual/schedule`, {
+      mode: 'cron',
+      cron: '0 0 * * *',
+      draft_retention: { max_drafts: maximum },
+    });
+  }
+  async function materialize(track, maximum, options = {}) {
+    return api(
+      'post',
+      `${base(track)}/virtual/snapshots/create`,
+      {
+        ...(maximum === undefined ? {} : { draft_retention: { max_drafts: maximum } }),
+        ...options,
+      },
+      201,
+    );
+  }
+  async function recurringDraft(track) {
+    return JSON.parse(
+      JSON.stringify(
+        await virtual.createVirtualSnapshot(track.id, { useRecurringRetention: true }),
+      ),
+    );
   }
   async function preview(track, snapshot) {
     return api('get', `${selected(track, snapshot)}/release/preview`);
@@ -93,7 +116,7 @@ describe('Virtual draft lifecycle API', function () {
     );
     const composition = {
       component_tracks: [
-        { track_id: component.id, resolution_strategy: 'latest_draft', priority: 0 },
+        { track_id: component.id, resolution_strategy: 'latest_preview', priority: 0 },
       ],
     };
     const track = await api(
@@ -106,50 +129,90 @@ describe('Virtual draft lifecycle API', function () {
     return { track, materialized, component, composition };
   }
 
-  it('keeps disabled history and changes live policy without creating or deleting a snapshot', async function () {
+  it('saves cron policy without a content snapshot and never projects a global policy', async function () {
     const { track } = await fixture();
     await draft(track, 'Unlimited first');
     const latest = await draft(track, 'Unlimited second');
     const before = await history(track);
     expect(before.pagination.total).toBe(4);
-    expect((await policy(track, 1)).draft_retention).toEqual({ max_drafts: 1 });
+    const saved = await policy(track, 1);
+    expect(saved.snapshot_schedule.draft_retention).toEqual({ max_drafts: 1 });
     expect((await history(track)).data.map((entry) => entry.modified)).toEqual(
       before.data.map((entry) => entry.modified),
     );
     const oldView = await api('get', selected(track, track));
-    expect(oldView.draft_retention).toEqual({ max_drafts: 1 });
+    expect(oldView.snapshot_schedule).toEqual(saved.snapshot_schedule);
+    expect(oldView).not.toHaveProperty('draft_retention');
     expect(oldView.snapshot_count).toBe(4);
     expect(oldView.tagged_release_count).toBe(0);
-    expect((await api('get', `${base(track)}/config`)).draft_retention).toEqual({ max_drafts: 1 });
-    await policy(track, null);
-    await draft(track, 'Disabled again');
-    expect((await history(track)).pagination.total).toBe(5);
-    await policy(track, 1);
+    expect(await api('get', `${base(track)}/config`)).not.toHaveProperty('draft_retention');
     const clone = await api(
       'post',
       `${selected(track, latest)}/clone`,
       { name: `Lifecycle Clone ${fixtureNumber}` },
       201,
     );
-    expect((await api('get', `${base(clone)}/snapshots/latest`)).draft_retention).toEqual({
-      max_drafts: null,
+    expect((await api('get', `${base(clone)}/snapshots/latest`)).snapshot_schedule).toEqual({
+      mode: 'manual',
     });
+    expect((await history(track)).pagination.total).toBe(4);
+    await api('put', `${base(track)}/virtual/draft-retention`, { max_drafts: 1 }, 404);
+    await api(
+      'post',
+      '/api/release-tracks/new',
+      { name: 'Retired Policy Input', type: 'virtual', draft_retention: { max_drafts: 1 } },
+      400,
+    );
   });
 
   it('rejects destructive policy values and enforces administrator authorization in the service', async function () {
     const { track, materialized, component } = await fixture();
     for (const value of [0, -1, 1.5, '10', Number.MAX_SAFE_INTEGER + 1]) {
-      await api('put', `${base(track)}/virtual/draft-retention`, { max_drafts: value }, 400);
+      await api(
+        'post',
+        `${base(track)}/virtual/snapshots/create`,
+        { draft_retention: { max_drafts: value } },
+        400,
+      );
+      await api(
+        'put',
+        `${base(track)}/virtual/schedule`,
+        { mode: 'cron', cron: '0 0 * * *', draft_retention: { max_drafts: value } },
+        400,
+      );
     }
-    await api('put', `${base(component)}/virtual/draft-retention`, { max_drafts: 1 }, 400);
-    await expect(cleanup.updatePolicy(track.id, { max_drafts: 1 }, editor)).rejects.toBeInstanceOf(
-      InsufficientRoleError,
+    for (const mode of ['manual', 'dates']) {
+      await api(
+        'put',
+        `${base(track)}/virtual/schedule`,
+        {
+          mode,
+          ...(mode === 'dates' ? { dates: ['2030-01-01T00:00:00.000Z'] } : {}),
+          draft_retention: { max_drafts: 1 },
+        },
+        400,
+      );
+    }
+    await api(
+      'post',
+      `${base(track)}/virtual/snapshots/create`,
+      { useRecurringRetention: true },
+      400,
     );
+    await expect(
+      service.createVirtualSnapshot(track.id, {
+        draft_retention: { max_drafts: 1 },
+        actor: editor,
+      }),
+    ).rejects.toBeInstanceOf(InsufficientRoleError);
+    await expect(
+      service.createVirtualSnapshot(track.id, { draft_retention: null, actor: editor }),
+    ).rejects.toBeInstanceOf(InsufficientRoleError);
     await expect(
       service.createTrack({
         name: 'Forbidden Retention',
         type: 'virtual',
-        draft_retention: { max_drafts: 1 },
+        snapshot_schedule: { mode: 'cron', cron: '0 0 * * *', draft_retention: { max_drafts: 1 } },
         actor: editor,
       }),
     ).rejects.toBeInstanceOf(InsufficientRoleError);
@@ -175,14 +238,31 @@ describe('Virtual draft lifecycle API', function () {
     ).toBe('1.0');
   });
 
-  it('counts every virtual draft creation cause at N equals one, including quarantine alternatives', async function () {
+  it('never cleans unrelated clones or metadata-spoofed materialization; explicit cleanup counts every cause', async function () {
     const { track, composition } = await fixture();
     await policy(track, 1);
+    // A stored pre-cutover root policy is inert even when read through lean queries.
+    await registryRepo.model.collection.updateOne(
+      { track_id: track.id },
+      { $set: { draft_retention: { max_drafts: 1 } } },
+    );
     const writes = [
       () => draft(track, 'Metadata counted'),
       () => api('put', `${base(track)}/config`, { auto_promote: true }),
       () => api('put', `${base(track)}/virtual/composition`, composition),
       () => api('post', `${base(track)}/virtual/snapshots/create`, {}, 201),
+      () =>
+        api(
+          'post',
+          `${base(track)}/virtual/snapshots/create`,
+          {
+            scheduled_materialization: {
+              schedule_mode: 'cron',
+              scheduled_for: '2030-02-01T00:00:00.000Z',
+            },
+          },
+          201,
+        ),
       () =>
         api(
           'post',
@@ -196,11 +276,12 @@ describe('Virtual draft lifecycle API', function () {
           201,
         ),
     ];
+    let total = 2;
     for (const write of writes) {
       const created = await write();
-      expect(created.draft_cleanup.status).toBe('completed');
+      expect(created).not.toHaveProperty('draft_cleanup');
       const remaining = await history(track);
-      expect(remaining.data.map((entry) => entry.modified)).toEqual([created.modified]);
+      expect(remaining.pagination.total).toBe(++total);
     }
     const technique = await api(
       'post',
@@ -243,7 +324,8 @@ describe('Virtual draft lifecycle API', function () {
       object_modified: technique.stix.modified,
     });
     expect(promoted.creation_cause).toBe('quarantine_promoted');
-    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([promoted.modified]);
+    expect(promoted).not.toHaveProperty('draft_cleanup');
+    expect((await history(track)).pagination.total).toBe(++total);
     const retainedObject = await api(
       'get',
       `/api/techniques/${technique.stix.id}/modified/${technique.stix.modified}`,
@@ -255,6 +337,94 @@ describe('Virtual draft lifecycle API', function () {
       type: 'virtual',
       tier: 'members',
     });
+    const cleaned = await materialize(track, 1);
+    expect(cleaned.draft_cleanup).toMatchObject({ status: 'completed', deleted_count: total });
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([cleaned.modified]);
+  });
+
+  it('keeps ad-hoc retention independent of the recurring policy and defaults every manual run to unlimited', async function () {
+    const { track } = await fixture();
+    await policy(track, 1);
+    await draft(track, 'Retain this metadata');
+    const retained = await draft(track, 'Retain this too');
+    const created = await materialize(track, 3);
+    expect(created.draft_cleanup).toMatchObject({ status: 'completed', deleted_count: 2 });
+    expect((await history(track)).pagination.total).toBe(3);
+    expect((await api('get', selected(track, retained))).modified).toBe(retained.modified);
+    await materialize(track);
+    await materialize(track, null);
+    await materialize(track, undefined, { draft_retention: null });
+    const latest = await api('get', `${base(track)}/snapshots/latest`);
+    expect(latest.snapshot_schedule.draft_retention).toEqual({ max_drafts: 1 });
+    expect(latest.snapshot_count).toBe(6);
+    expect(latest.tagged_release_count).toBe(0);
+  });
+
+  it('retries manual cleanup with its immutable limit and original cutoff after later cron edits', async function () {
+    const { track } = await fixture();
+    const boundary = await draft(track, 'Original retained boundary');
+    const retained = await draft(track, 'Original retained draft');
+    await policy(track, 10);
+    const remove = dynamicRepo.deleteHistoricalDraft;
+    let created;
+    try {
+      dynamicRepo.deleteHistoricalDraft = async () => {
+        throw new Error('Pause manual cleanup before deletion');
+      };
+      created = await materialize(track, 3);
+    } finally {
+      dynamicRepo.deleteHistoricalDraft = remove;
+    }
+    expect(created.draft_cleanup.status).toBe('failed');
+    await policy(track, 1);
+    const newer = await draft(track, 'Later history remains outside the original request');
+    await policy(track, null);
+    const repaired = await cleanup.retry(track.id, created.draft_cleanup.operation_id, admin);
+    expect(repaired).toMatchObject({ status: 'completed', deleted_count: 2 });
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
+      newer.modified,
+      created.modified,
+      retained.modified,
+      boundary.modified,
+    ]);
+  });
+
+  it('repairs legacy retention storage without adopting the intent as a new manual cleanup', async function () {
+    const { track, materialized } = await fixture();
+    const latest = await draft(track, 'Legacy cleanup target');
+    await policy(track, 1);
+    const event = await auditRepo.create({
+      action: 'draft_retention',
+      trackId: track.id,
+      actor: { kind: 'system' },
+      confirmation: track.id,
+      request: {
+        kind: 'retention',
+        lower_bound: null,
+        upper_bound: latest.modified,
+        target_modified: latest.modified,
+      },
+    });
+    await auditRepo.saveCleanup(event.event_id, {
+      kind: 'retention',
+      eligible_count: 2,
+      deleted_count: 0,
+      protected_count: 0,
+      cursor: null,
+      pending_batch: [track, materialized],
+      creation_complete: true,
+    });
+    await dynamicRepo.deleteSnapshot(track.id, track.modified);
+    const repaired = await cleanup.retry(track.id, event.event_id, admin);
+    expect(repaired).toMatchObject({ status: 'completed', deleted_count: 1, protected_count: 1 });
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
+      latest.modified,
+      materialized.modified,
+    ]);
+    expect(
+      await ReleaseTrackContentManifest.exists({ manifest_id: track.content_manifest_id }),
+    ).toBeNull();
+    expect((await api('get', `${base(track)}/snapshots/latest`)).snapshot_count).toBe(2);
   });
 
   it('keeps ten drafts across release boundaries while tags never consume the count', async function () {
@@ -262,9 +432,9 @@ describe('Virtual draft lifecycle API', function () {
     const released = await api('post', `${selected(track, materialized)}/release`, {
       version: '1.0',
     });
-    await policy(track, 10);
     const drafts = [];
-    for (let index = 0; index < 12; index += 1) drafts.push(await draft(track, `Count ${index}`));
+    for (let index = 0; index < 12; index += 1)
+      drafts.push(await materialize(track, 10, { description: `Count ${index}` }));
     const all = await history(track);
     expect(all.pagination.total).toBe(11);
     expect(
@@ -341,9 +511,8 @@ describe('Virtual draft lifecycle API', function () {
     });
     const beforeBundle = await api('get', `${selected(track, released)}?format=bundle`);
     const sharedDraft = await draft(track, 'Shares released manifest');
-    await policy(track, 1);
-    const latest = await draft(track, 'Keep same shared manifest');
-    expect(latest.content_manifest_id).toBe(sharedDraft.content_manifest_id);
+    expect(sharedDraft.content_manifest_id).toBe(released.content_manifest_id);
+    const latest = await materialize(track, 1);
     expect(await ReleaseTrackContentManifest.exists({ manifest_id: orphanId })).toBeNull();
     expect(await ReleaseTrackContentManifestEntry.countDocuments({ manifest_id: orphanId })).toBe(
       0,
@@ -379,8 +548,7 @@ describe('Virtual draft lifecycle API', function () {
       { scheduled_materialization: { schedule_mode: 'dates', scheduled_for: scheduledFor } },
       201,
     );
-    await policy(track, 1);
-    const latest = await draft(track, 'Receipt backed pruning');
+    const latest = await materialize(track, 1);
     expect(latest.draft_cleanup.protected_count).toBe(1);
     expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
       latest.modified,
@@ -412,7 +580,7 @@ describe('Virtual draft lifecycle API', function () {
       manifests.discardUnreferenced = async () => {
         throw new Error('Injected orphan cleanup failure');
       };
-      created = await draft(track, 'Committed draft with deferred cleanup');
+      created = await recurringDraft(track);
     } finally {
       manifests.discardUnreferenced = discard;
     }
@@ -439,6 +607,53 @@ describe('Virtual draft lifecycle API', function () {
         .map((entry) => entry.manifest_id)
         .sort(),
     ).toEqual(survivingIds.sort());
+  });
+
+  it('narrows recurring retries to the current cron threshold and stops selection after leaving cron', async function () {
+    const { track } = await fixture();
+    const retained = await draft(track, 'Retained by the replacement threshold');
+    await policy(track, 1);
+    const remove = dynamicRepo.deleteHistoricalDraft;
+    let first;
+    try {
+      dynamicRepo.deleteHistoricalDraft = async () => {
+        throw new Error('Pause recurring cleanup before deletion');
+      };
+      first = await recurringDraft(track);
+    } finally {
+      dynamicRepo.deleteHistoricalDraft = remove;
+    }
+    expect(first.draft_cleanup.status).toBe('failed');
+    const newer = await draft(track, 'New draft beyond the cleanup cutoff');
+    await policy(track, 3);
+    const narrowed = await cleanup.retry(track.id, first.draft_cleanup.operation_id, admin);
+    expect(narrowed).toMatchObject({ status: 'completed', deleted_count: 2 });
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
+      newer.modified,
+      first.modified,
+      retained.modified,
+    ]);
+
+    await policy(track, 1);
+    let second;
+    try {
+      dynamicRepo.deleteHistoricalDraft = async () => {
+        throw new Error('Pause recurring cleanup before leaving cron');
+      };
+      second = await recurringDraft(track);
+    } finally {
+      dynamicRepo.deleteHistoricalDraft = remove;
+    }
+    expect(second.draft_cleanup.status).toBe('failed');
+    await service.updateSchedule(track.id, { mode: 'manual' }, editor);
+    const stopped = await cleanup.retry(track.id, second.draft_cleanup.operation_id, admin);
+    expect(stopped).toMatchObject({ status: 'completed', deleted_count: 0 });
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
+      second.modified,
+      newer.modified,
+      first.modified,
+      retained.modified,
+    ]);
   });
 
   it('finishes partial release publication through cleanup retry, never a repeated tag', async function () {
@@ -563,7 +778,7 @@ describe('Virtual draft lifecycle API', function () {
     expect((await api('get', selected(track, target))).bundle_id).toBe(released.bundle_id);
   });
 
-  it('persists a creation-time policy and scheduled API receipts through composition cleanup', async function () {
+  it('persists nested cron policy but never applies it to creation or scheduled composition clones', async function () {
     const { component, composition } = await fixture();
     const initialScheduled = { schedule_mode: 'dates', scheduled_for: '2032-01-01T00:00:00.000Z' };
     const track = await api(
@@ -573,12 +788,16 @@ describe('Virtual draft lifecycle API', function () {
         name: `Lifecycle Configured ${fixtureNumber}`,
         type: 'virtual',
         composition,
-        draft_retention: { max_drafts: 1 },
+        snapshot_schedule: { mode: 'cron', cron: '0 0 * * *', draft_retention: { max_drafts: 1 } },
         scheduled_materialization: initialScheduled,
       },
       201,
     );
-    expect(track.draft_retention).toEqual({ max_drafts: 1 });
+    expect((await api('get', `${base(track)}/snapshots/latest`)).snapshot_schedule).toEqual({
+      mode: 'cron',
+      cron: '0 0 * * *',
+      draft_retention: { max_drafts: 1 },
+    });
     expect(
       iso(
         (await occurrenceRepo.getMaterializationReceipt(track.id, initialScheduled.scheduled_for))
@@ -588,18 +807,22 @@ describe('Virtual draft lifecycle API', function () {
     const nextScheduled = { schedule_mode: 'dates', scheduled_for: '2032-02-01T00:00:00.000Z' };
     const updated = await api('put', `${base(track)}/virtual/composition`, {
       component_tracks: [
-        { track_id: component.id, resolution_strategy: 'latest_draft', priority: 0 },
+        { track_id: component.id, resolution_strategy: 'latest_preview', priority: 0 },
       ],
       scheduled_materialization: nextScheduled,
     });
-    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([updated.modified]);
+    expect(updated).not.toHaveProperty('draft_cleanup');
+    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([
+      updated.modified,
+      track.modified,
+    ]);
     expect(
       iso(
         (await occurrenceRepo.getMaterializationReceipt(track.id, nextScheduled.scheduled_for))
           .snapshot_modified,
       ),
     ).toBe(updated.modified);
-    await draft(track, 'Remove scheduled composition result');
+    await materialize(track, 1);
     await api(
       'put',
       `${base(track)}/virtual/composition`,
@@ -623,14 +846,13 @@ describe('Virtual draft lifecycle API', function () {
       },
       201,
     );
-    await policy(track, 1);
     const record = occurrenceRepo.recordMaterialization;
     let latest;
     try {
       occurrenceRepo.recordMaterialization = async () => {
         throw new Error('Receipt store unavailable');
       };
-      latest = await draft(track, 'Keep protected scheduled excess');
+      latest = await materialize(track, 1);
     } finally {
       occurrenceRepo.recordMaterialization = record;
     }
@@ -647,7 +869,6 @@ describe('Virtual draft lifecycle API', function () {
     const originalEntries = await ReleaseTrackContentManifestEntry.countDocuments({
       manifest_id: manifestId,
     });
-    await policy(track, 1);
     const removeEntries = ReleaseTrackContentManifestEntry.deleteMany;
     let latest;
     try {
@@ -660,7 +881,7 @@ describe('Virtual draft lifecycle API', function () {
           };
         return removeEntries.call(this, query);
       };
-      latest = await draft(track, 'Entries first recovery');
+      latest = await materialize(track, 1);
     } finally {
       ReleaseTrackContentManifestEntry.deleteMany = removeEntries;
     }
@@ -718,7 +939,6 @@ describe('Virtual draft lifecycle API', function () {
 
   it('repairs persisted draft completion before attempting retention after a counter failure', async function () {
     const { track } = await fixture();
-    await policy(track, 1);
     const update = registryRepo.updateByTrackId;
     let created;
     try {
@@ -727,7 +947,7 @@ describe('Virtual draft lifecycle API', function () {
           throw new Error('Counter repair unavailable');
         return update.call(this, id, values);
       };
-      created = await draft(track, 'Saved before counters failed');
+      created = await materialize(track, 1);
     } finally {
       registryRepo.updateByTrackId = update;
     }
@@ -782,7 +1002,7 @@ describe('Virtual draft lifecycle API', function () {
     }
     const latest = await api('get', `${base(track)}/snapshots/latest`);
     expect(latest.description).toBe('Serialized metadata winner');
-    expect((await history(track)).data.map((entry) => entry.modified)).toEqual([latest.modified]);
+    expect((await history(track)).pagination.total).toBe(3);
     expect((await api('get', `${selected(track, latest)}?format=bundle`)).type).toBe('bundle');
   });
 
@@ -794,6 +1014,7 @@ describe('Virtual draft lifecycle API', function () {
         () => service.updateMetadata(track.id, { description: 'blocked' }),
         () => service.updateConfig(track.id, { auto_promote: true }),
         () => service.updateComposition(track.id, composition),
+        () => service.updateSchedule(track.id, { mode: 'manual' }, editor),
         () => service.createVirtualSnapshot(track.id, {}),
         () =>
           service.promoteQuarantinedObject(track.id, {

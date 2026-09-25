@@ -19,6 +19,7 @@ const CreationCause = require('../../lib/release-tracks/snapshot-creation-causes
 // =============================================================================
 
 const snapshotService = require('./snapshot-service');
+const draftCleanup = require('./draft-cleanup-service');
 const primaryRevisionService = require('./primary-revision-service');
 const dynamicRepo = require('../../repository/release-tracks/release-track-dynamic.repository');
 const registryRepo = require('../../repository/release-tracks/release-track-registry.repository');
@@ -510,25 +511,38 @@ exports.updateComposition = async function updateComposition(
  *
  * @param {string} trackId
  * @param {Object} schedule
+ * @param {Object} actor
  * @returns {Promise<{snapshot_schedule: Object}>}
  */
-exports.updateSchedule = async function updateSchedule(trackId, schedule) {
-  const registry = await registryRepo.findByTrackId(trackId);
-  if (!registry) {
-    throw new TrackNotFoundError(trackId);
-  }
-  if (registry.type !== 'virtual') {
-    throw new BadRequestError({
-      message: 'This operation is only available for virtual release tracks',
-      details: `Track ${trackId} is a ${registry.type} track`,
-    });
-  }
-
-  const updated = await registryRepo.setSnapshotSchedule(trackId, schedule);
-  logger.verbose(
-    `VirtualTrackService: Updated snapshot schedule for track "${trackId}" to ${schedule.mode}`,
-  );
-  return { snapshot_schedule: updated.snapshot_schedule };
+exports.updateSchedule = async function updateSchedule(trackId, schedule, actor) {
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const registry = await registryRepo.findByTrackId(trackId);
+    if (!registry) {
+      throw new TrackNotFoundError(trackId);
+    }
+    if (registry.type !== 'virtual') {
+      throw new BadRequestError({
+        message: 'This operation is only available for virtual release tracks',
+        details: `Track ${trackId} is a ${registry.type} track`,
+      });
+    }
+    const previousMaximum =
+      registry.snapshot_schedule?.mode === 'cron'
+        ? (registry.snapshot_schedule.draft_retention?.max_drafts ?? null)
+        : null;
+    if (
+      schedule.mode === 'cron' &&
+      (schedule.draft_retention?.max_drafts ?? null) !== previousMaximum
+    ) {
+      draftCleanup.assertAdmin(actor);
+    }
+    await lease.assertOwned();
+    const updated = await registryRepo.setSnapshotSchedule(trackId, schedule);
+    logger.verbose(
+      `VirtualTrackService: Updated snapshot schedule for track "${trackId}" to ${schedule.mode}`,
+    );
+    return { snapshot_schedule: updated.snapshot_schedule };
+  });
 };
 
 /**
@@ -545,6 +559,26 @@ exports.updateSchedule = async function updateSchedule(trackId, schedule) {
  */
 exports.createVirtualSnapshot = async function createVirtualSnapshot(trackId, options = {}) {
   return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    // Only an internal scheduler option can select recurring policy. Public
+    // occurrence metadata is an idempotency receipt, never cleanup authority.
+    const manualPolicy =
+      options.draft_retention !== undefined
+        ? draftCleanup.validatePolicy(options.draft_retention, options.actor, 'virtual')
+        : null;
+    let retention = null;
+    if (options.useRecurringRetention === true) {
+      const registry = await registryRepo.findByTrackId(trackId, 'snapshot_schedule');
+      const schedule = registry?.snapshot_schedule;
+      if (schedule?.mode === 'cron' && schedule.draft_retention?.max_drafts != null) {
+        retention = {
+          source: 'recurring',
+          policy: schedule.draft_retention,
+          actor: { kind: 'system' },
+        };
+      }
+    } else if (manualPolicy?.max_drafts != null) {
+      retention = { source: 'manual', policy: manualPolicy, actor: options.actor };
+    }
     const scheduledFor = options.scheduledMaterialization?.scheduled_for;
     const existing = await require('./draft-cleanup-service').findScheduledResult(
       trackId,
@@ -614,6 +648,7 @@ exports.createVirtualSnapshot = async function createVirtualSnapshot(trackId, op
       try {
         snapshot = await snapshotService.cloneSnapshot(trackId, source, overrides, {
           lease: materializationLease,
+          retention,
           creationCause: options.scheduledMaterialization
             ? CreationCause.ScheduledSnapshot
             : CreationCause.ManualSnapshot,

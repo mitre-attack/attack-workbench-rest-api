@@ -455,6 +455,18 @@ GET /api/release-tracks/:id/snapshots
 Filtering occurs before pagination, so `pagination.total` is the total number
 of snapshots matching `tagged`, not the total number in the track.
 
+The response also includes `counts: { tagged, drafts, total }`. All three counts
+use the same `tagged` filter before pagination: `counts.total` equals
+`pagination.total` and `counts.tagged + counts.drafts`. They remain query-wide
+when the requested page is partial or empty. Thus `tagged=true` always reports
+zero drafts, and `tagged=false` always reports zero tagged releases.
+
+`latest_snapshot_modified` and `latest_tagged_snapshot_modified` are unfiltered
+track identities, not the first row of the selected page. They are nullable ISO
+timestamps; the tagged identity is chronological rather than the highest semantic
+version. Clients use them to mark the actual latest snapshot and gate latest-only
+actions while refreshing filtered/paginated history.
+
 Every summary contains `id`, `type`, `modified`, `version`, `name`, the
 track-level `description` (when set), `snapshot_description` (when the snapshot
 has user-authored notes), `members_count`, the opaque `content_manifest_id`
@@ -513,10 +525,17 @@ Inapplicable count keys are omitted rather than returned as zero.
     }
   ],
   "pagination": {
-    "total": 47,
+    "total": 1,
     "limit": 50,
     "offset": 0
-  }
+  },
+  "counts": {
+    "tagged": 1,
+    "drafts": 0,
+    "total": 1
+  },
+  "latest_snapshot_modified": "2024-01-15T16:20:00.000Z",
+  "latest_tagged_snapshot_modified": "2024-01-15T16:20:00.000Z"
 }
 ```
 
@@ -1406,27 +1425,54 @@ See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
 
 ### Virtual Draft Retention
 
-Administrators can configure live count-based retention:
+Retention has two independent, administrator-controlled triggers. Both count
+untagged snapshots across the whole virtual track, regardless of creation cause;
+tags and protected snapshots remain excluded from deletion.
+
+**Ad-hoc policy:** pass a one-shot limit when explicitly creating a draft:
 
 ```http
-PUT /api/release-tracks/:id/virtual/draft-retention
+POST /api/release-tracks/:id/virtual/snapshots/create
 Content-Type: application/json
 
-{ "max_drafts": 10 }
+{ "description": "Reviewed composition", "draft_retention": { "max_drafts": 10 } }
 ```
 
-The response is `{ "draft_retention": { "max_drafts": 10 } }`. Use `null`
-to disable retention; absent policy also means unlimited drafts. Counts must be
-positive safe integers. Standard tracks reject this setting. Administrators may
-also supply `draft_retention` on initial virtual-track creation; cloned tracks
-start with retention disabled.
+Omitting `draft_retention`, or setting `max_drafts` to `null`, means no retention
+for this operation. The policy is not saved and never inherits or changes the
+recurring schedule's policy. A supplied policy requires an administrator.
 
-Policy changes create no snapshot and delete nothing immediately. After each
-successful virtual draft creation, older eligible drafts are removed to retain
-the newest N. All creation causes count, not just scheduled materialization.
-Tagged releases do not count and are never removed. Protected snapshots can
-leave the track above its configured limit. Workbench snapshot/configuration
-responses project the current registry policy, not a historical policy.
+**Recurring policy:** save a limit inside the cron schedule:
+
+```http
+PUT /api/release-tracks/:id/virtual/schedule
+Content-Type: application/json
+
+{ "mode": "cron", "cron": "0 * * * *", "draft_retention": { "max_drafts": 10 } }
+```
+
+Only trusted scheduler cron execution applies this saved policy. Manual
+materialization never inherits it, and dated schedules do not use it. Clients
+cannot activate it by supplying `scheduled_materialization` provenance. The
+policy can also be nested in `snapshot_schedule` when creating a virtual track.
+
+Counts must be positive safe integers; missing/null limits disable cleanup.
+The `manual` and `dates` schedule shapes reject retention fields. Changing a
+cron retention policy requires an administrator; editors can change timing while
+preserving that policy, or switch away from recurring mode. Saving only the
+schedule/policy creates no draft and deletes nothing immediately.
+
+Configuration, metadata, composition and quarantine updates never trigger
+retention. Cleanup still runs only after successful materialization. Manual
+cleanup retries preserve the approved request limit and original cutoff;
+recurring retries also honor the current saved policy, stopping further deletion
+if it is disabled or the schedule changes away from cron.
+
+The former global policy, top-level track-creation field, and
+`PUT /virtual/draft-retention` endpoint are retired. Existing root/global settings
+are inert; configure the recurring policy explicitly. Legacy cleanup intents
+without trigger/limit provenance may repair already-deleted storage but cannot
+select additional drafts.
 
 ### Release-Time Draft Squash
 
@@ -1584,7 +1630,7 @@ by the resolved component snapshot.
 is enabled. Its shape depends on `mode`:
 
 - `manual` accepts only `{ "mode": "manual" }`;
-- `cron` requires a five-field `cron` expression and rejects `dates`;
+- `cron` requires a five-field `cron` expression, accepts optional `draft_retention`, and rejects `dates`;
 - `dates` requires at least one ISO timestamp and rejects `cron`.
 
 Unknown schedule properties return `400 Bad Request`. Standard tracks also

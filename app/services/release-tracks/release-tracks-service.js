@@ -251,7 +251,6 @@ async function formatWorkbenchSnapshot(snapshot, options) {
   attributed.creation_cause = snapshot.creation_cause || 'unknown';
   if (snapshot.type === 'virtual') {
     attributed.snapshot_schedule = metadata.snapshot_schedule || { mode: 'manual' };
-    attributed.draft_retention = metadata.draft_retention;
     attributed.snapshot_count = metadata.snapshot_count;
     attributed.tagged_release_count = metadata.tagged_release_count;
   }
@@ -276,17 +275,6 @@ exports.getReleasesByObject = function getReleasesByObject(objectRef, options) {
 
 exports.createTrack = async function createTrack(data) {
   let validatedData = data;
-  if (data.draft_retention !== undefined) {
-    validatedData = {
-      ...validatedData,
-      draft_retention: draftCleanupService.validatePolicy(
-        data.draft_retention,
-        data.actor,
-        data.type,
-      ),
-    };
-  }
-
   if (data.scheduled_materialization !== undefined) {
     if (data.type !== 'virtual') {
       throw new BadRequestError({
@@ -633,7 +621,7 @@ exports.updateComposition = function updateComposition(trackId, composition, use
   });
 };
 
-exports.updateSchedule = function updateSchedule(trackId, schedule) {
+exports.updateSchedule = function updateSchedule(trackId, schedule, actor) {
   const scheduleResult = snapshotScheduleSchema.safeParse(schedule);
   if (!scheduleResult.success) {
     throw new BadRequestError({
@@ -641,10 +629,9 @@ exports.updateSchedule = function updateSchedule(trackId, schedule) {
       details: scheduleResult.error.errors,
     });
   }
-  return virtualTrackService.updateSchedule(trackId, scheduleResult.data);
+  return virtualTrackService.updateSchedule(trackId, scheduleResult.data, actor);
 };
 
-exports.updateDraftRetention = draftCleanupService.updatePolicy;
 exports.listDraftCleanup = draftCleanupService.list;
 exports.retryDraftCleanup = draftCleanupService.retry;
 

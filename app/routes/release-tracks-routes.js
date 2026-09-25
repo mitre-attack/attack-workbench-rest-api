@@ -331,14 +331,6 @@ router
   );
 
 router
-  .route('/release-tracks/:id/virtual/draft-retention')
-  .put(
-    authn.authenticate,
-    authz.requireRole(authz.admin),
-    releaseTracksController.updateDraftRetention,
-  );
-
-router
   .route('/release-tracks/:id/virtual/draft-cleanup')
   .get(
     authn.authenticate,

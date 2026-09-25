@@ -19,12 +19,17 @@ current schedule for configuration interfaces.
 
 ## Draft Retention and Release-Time Squash
 
-Administrators can set `draft_retention.max_drafts` to a positive integer such
-as 10; the default is unlimited (`null`). The policy is live registry metadata,
-like the schedule. Updating it creates no draft and deletes nothing immediately.
-After successful draft creation, older eligible drafts are removed. Manual,
-scheduled, configuration, metadata and quarantine-resolution drafts all count;
-tagged releases never count against the limit or get removed.
+Administrators choose an optional **ad-hoc** retention limit in **Create Draft**
+or configure a **persistent recurring** limit inside a cron snapshot schedule.
+Both default to disabled and accept a positive safe integer such as 10.
+The one-shot policy applies only to its manual materialization; the recurring
+policy applies only to actual scheduler cron executions. Neither inherits from
+the other. Dated schedules, configuration/metadata/composition changes, and
+quarantine promotion do not trigger retention.
+
+Both policies retain the newest N untagged snapshots across the track's history,
+not separate manual/scheduled pools. Tagged releases are never removed.
+Saving only the schedule/policy creates no draft and deletes nothing immediately.
 
 When tagging a reviewed draft, administrators can separately opt into deleting
 earlier drafts since the preceding tagged snapshot. The preview reports the

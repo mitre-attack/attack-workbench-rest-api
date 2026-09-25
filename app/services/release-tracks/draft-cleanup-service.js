@@ -37,7 +37,7 @@ function validatePolicy(policy, actor, type) {
   assertAdmin(actor);
   if (type !== 'virtual')
     throw new BadRequestError({ message: 'Draft retention is only available for virtual tracks' });
-  const parsed = draftRetentionSchema.safeParse(policy);
+  const parsed = draftRetentionSchema.nullable().safeParse(policy);
   if (!parsed.success)
     throw new BadRequestError({
       message: 'Invalid draft retention policy',
@@ -48,26 +48,12 @@ function validatePolicy(policy, actor, type) {
 exports.validatePolicy = validatePolicy;
 
 async function virtualRegistry(trackId) {
-  const registry = await registryRepo.findByTrackId(trackId, 'track_id type draft_retention');
+  const registry = await registryRepo.findByTrackId(trackId, 'track_id type snapshot_schedule');
   if (!registry) throw new TrackNotFoundError(trackId);
   if (registry.type !== 'virtual')
     throw new BadRequestError({ message: 'Draft cleanup is only available for virtual tracks' });
   return registry;
 }
-
-exports.updatePolicy = async function updatePolicy(trackId, policy, actor) {
-  assertAdmin(actor);
-  const { withReleaseLock } = require('./versioning-service');
-  return withReleaseLock(trackId, async () => {
-    const registry = await virtualRegistry(trackId);
-    const draftRetention = validatePolicy(policy, actor, registry.type);
-    await registryRepo.updateByTrackId(trackId, {
-      draft_retention: draftRetention,
-      updated_at: new Date(),
-    });
-    return { draft_retention: draftRetention };
-  });
-};
 
 // Called under the target lock before any write carrying scheduled metadata.
 // A durable receipt outlives its snapshot; its absence is never permission to replay.
@@ -287,8 +273,22 @@ exports.failRelease = async function failRelease(event, error) {
 async function boundsFor(event, registry) {
   const original = event.request;
   if (original.kind === 'retention') {
-    const maximum = registry.draft_retention?.max_drafts;
-    if (maximum == null) return null;
+    // Legacy intents did not identify an approved trigger/policy. They may
+    // repair already-deleted storage, but must never select more history.
+    if (
+      !['manual', 'recurring'].includes(original.source) ||
+      !Number.isSafeInteger(original.max_drafts) ||
+      original.max_drafts < 1 ||
+      !original.upper_bound
+    )
+      return null;
+    const maximum =
+      original.source === 'manual'
+        ? original.max_drafts
+        : registry.snapshot_schedule?.mode === 'cron'
+          ? registry.snapshot_schedule.draft_retention?.max_drafts
+          : null;
+    if (!Number.isSafeInteger(maximum) || maximum < 1) return null;
     const boundary = await dynamicRepo.getDraftRetentionBoundary(event.track_id, maximum);
     if (!boundary) return null;
     return {
@@ -457,22 +457,25 @@ async function runCleanup(event, lease) {
 }
 exports.runCleanup = runCleanup;
 
-exports.prepareRetention = async function prepareRetention(snapshot, lease) {
-  const registry = await virtualRegistry(snapshot.id);
-  if (registry.draft_retention?.max_drafts == null) return null;
+exports.prepareRetention = async function prepareRetention(snapshot, retention, lease) {
+  const maximum = retention.policy.max_drafts;
+  // Account for the new draft before it is saved. Preserve this original cutoff
+  // durably so retries never expand into drafts retained by the approved run.
+  const boundary =
+    maximum === 1
+      ? snapshot
+      : await dynamicRepo.getDraftRetentionBoundary(snapshot.id, maximum - 1);
   await lease.assertOwned();
   // Insert before saving the new draft: an audit outage cannot produce a
   // successful creation with an undiscoverable/fabricated cleanup operation.
-  return createIntent(
-    snapshot.id,
-    { kind: 'system' },
-    {
-      kind: 'retention',
-      lower_bound: null,
-      upper_bound: iso(snapshot.modified),
-      target_modified: iso(snapshot.modified),
-    },
-  );
+  return createIntent(snapshot.id, retention.actor, {
+    kind: 'retention',
+    source: retention.source,
+    max_drafts: maximum,
+    lower_bound: null,
+    upper_bound: boundary ? iso(boundary.modified) : null,
+    target_modified: iso(snapshot.modified),
+  });
 };
 
 exports.afterDraft = async function afterDraft(snapshot, lease, event) {
