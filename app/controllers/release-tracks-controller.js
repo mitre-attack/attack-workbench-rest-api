@@ -373,6 +373,7 @@ exports.createReleaseTrack = async function createReleaseTrack(req, res, next) {
     const result = await releaseTracksService.createTrack({
       ...bodyResult.data,
       userAccountId: req.user?.userAccountId,
+      actor: destructiveActor(req),
     });
     logger.debug(`Success: Created release track "${bodyResult.data.name}"`);
     return res.status(201).send(result);
@@ -527,6 +528,7 @@ exports.releaseLatest = async function releaseLatest(req, res, next) {
     const result = await releaseTracksService.releaseLatest(req.params.id, {
       ...bodyResult.data,
       userAccountId: req.user?.userAccountId,
+      actor: destructiveActor(req),
     });
     logger.debug(`Success: Released latest snapshot for track ${req.params.id}`);
     return res.status(200).send(result);
@@ -626,6 +628,7 @@ exports.releaseByModified = async function releaseByModified(req, res, next) {
       {
         ...bodyResult.data,
         userAccountId: req.user?.userAccountId,
+        actor: destructiveActor(req),
       },
     );
     logger.debug(`Success: Released snapshot ${req.params.modified}`);
@@ -1085,12 +1088,40 @@ exports.updateSchedule = async function updateSchedule(req, res, next) {
       );
     }
 
-    const result = await releaseTracksService.updateSchedule(req.params.id, bodyResult.data);
+    const result = await releaseTracksService.updateSchedule(
+      req.params.id,
+      bodyResult.data,
+      destructiveActor(req),
+    );
     logger.debug(`Success: Updated snapshot schedule for track ${req.params.id}`);
     return res.status(200).send(result);
   } catch (err) {
     logger.error('Failed to update snapshot schedule: ' + err);
     return next(err);
+  }
+};
+
+exports.listDraftCleanup = async function listDraftCleanup(req, res, next) {
+  try {
+    return res.status(200).send(await releaseTracksService.listDraftCleanup(req.params.id));
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.retryDraftCleanup = async function retryDraftCleanup(req, res, next) {
+  try {
+    return res
+      .status(200)
+      .send(
+        await releaseTracksService.retryDraftCleanup(
+          req.params.id,
+          req.params.operationId,
+          destructiveActor(req),
+        ),
+      );
+  } catch (error) {
+    return next(error);
   }
 };
 
@@ -1113,6 +1144,7 @@ exports.createVirtualSnapshot = async function createVirtualSnapshot(req, res, n
       ...snapshotOptions,
       scheduledMaterialization,
       userAccountId: req.user?.userAccountId,
+      actor: destructiveActor(req),
     });
     logger.debug(`Success: Created virtual snapshot for track ${req.params.id}`);
     return res.status(201).send(result);

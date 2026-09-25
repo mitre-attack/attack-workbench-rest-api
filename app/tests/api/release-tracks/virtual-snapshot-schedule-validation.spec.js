@@ -9,6 +9,8 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
 const ReleaseTrackRegistry = require('../../../models/release-tracks/release-track-registry-model');
 const releaseTracksService = require('../../../services/release-tracks/release-tracks-service');
+const { InsufficientRoleError } = require('../../../exceptions');
+const editor = { role: 'editor' };
 
 describe('Virtual release-track snapshot schedule validation API', function () {
   let app;
@@ -65,6 +67,7 @@ describe('Virtual release-track snapshot schedule validation API', function () {
     const schedules = [
       { mode: 'manual' },
       { mode: 'cron', cron: '0 0 1 1,7 *' },
+      { mode: 'cron', cron: '0 0 * * *', draft_retention: { max_drafts: 10 } },
       {
         mode: 'dates',
         dates: ['2027-01-15T00:00:00.000Z', '2027-07-15T00:00:00.000Z'],
@@ -137,11 +140,50 @@ describe('Virtual release-track snapshot schedule validation API', function () {
     expect(() => releaseTracksService.updateSchedule(virtual.body.id, { mode: 'cron' })).toThrow();
   });
 
+  it('allows editor timing edits but requires admin for every changed cron retention threshold', async function () {
+    const created = await createTrack({
+      mode: 'cron',
+      cron: '0 0 * * *',
+      draft_retention: { max_drafts: 10 },
+    });
+    const trackId = created.body.id;
+    const changedTiming = {
+      mode: 'cron',
+      cron: '30 1 * * *',
+      draft_retention: { max_drafts: 10 },
+    };
+    await releaseTracksService.updateSchedule(trackId, changedTiming, editor);
+    expect((await getRegistryTrack(created.name)).snapshot_schedule).toEqual(changedTiming);
+    for (const draftRetention of [{ max_drafts: 1 }, { max_drafts: null }, undefined]) {
+      await expect(
+        releaseTracksService.updateSchedule(
+          trackId,
+          { mode: 'cron', cron: changedTiming.cron, draft_retention: draftRetention },
+          editor,
+        ),
+      ).rejects.toBeInstanceOf(InsufficientRoleError);
+    }
+    expect((await getRegistryTrack(created.name)).snapshot_schedule).toEqual(changedTiming);
+    await releaseTracksService.updateSchedule(
+      trackId,
+      { mode: 'dates', dates: ['2030-01-01T00:00:00.000Z'] },
+      editor,
+    );
+    await expect(
+      releaseTracksService.updateSchedule(trackId, changedTiming, editor),
+    ).rejects.toBeInstanceOf(InsufficientRoleError);
+    await releaseTracksService.updateSchedule(trackId, { mode: 'manual' }, editor);
+    const registry = await getRegistryTrack(created.name);
+    expect(registry.snapshot_schedule).toEqual({ mode: 'manual' });
+    expect(registry.snapshot_count).toBe(1);
+  });
+
   it('rejects fields that do not apply to manual schedules', async function () {
     const invalidSchedules = [
       { mode: 'manual', cron: '0 0 1 1,7 *' },
       { mode: 'manual', dates: ['2027-01-15T00:00:00.000Z'] },
       { mode: 'manual', unexpected: true },
+      { mode: 'manual', draft_retention: { max_drafts: 1 } },
     ];
 
     for (const schedule of invalidSchedules) {
@@ -173,6 +215,11 @@ describe('Virtual release-track snapshot schedule validation API', function () {
         mode: 'dates',
         dates: ['2027-01-15T00:00:00.000Z'],
         cron: '0 0 1 1,7 *',
+      },
+      {
+        mode: 'dates',
+        dates: ['2027-01-15T00:00:00.000Z'],
+        draft_retention: { max_drafts: 1 },
       },
     ];
 

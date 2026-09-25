@@ -250,12 +250,12 @@ so existing members-only results remain truthful and releasable. Saved rules
 must be explicitly replaced before rematerialization. No nightly-data migration
 silently opts existing operators into staged content.
 
-Standard clone save/prune and virtual materialization share the existing
-release lock. Concurrent operations fail fast with `409 Conflict`, preventing
-pruning between source resolution and persisted virtual provenance. Pruning
-retains every source snapshot named by persisted virtual provenance, including
-historical virtual drafts. Once the last dependent disappears, the next
-standard clone can prune the source if no other retention rule protects it.
+Standard clone save/prune and virtual materialization share the existing release
+lock; contention returns `409 Conflict`. See [Deletion Guardrails](deletion-guardrails.md)
+for the concurrency rationale. Pruning retains every source snapshot named by
+persisted virtual provenance, including historical virtual drafts. Once the last
+dependent disappears, the next standard clone can prune the source if no other
+retention rule protects it.
 
 Component `priority` is always required, even when the selected deduplication
 strategy does not inspect it. Zod rejects duplicate component IDs and
@@ -400,9 +400,10 @@ and a list response.
 
 `release-track-dynamic.repository.getSnapshotSummaries` performs tagged-state
 filtering, descending timestamp ordering, pagination, and tier counts in
-MongoDB. It projects counts with `$size` rather than hydrating the potentially
-large tier arrays. The filter is applied to both the data query and
-`countDocuments`, making `pagination.total` the filtered total.
+MongoDB. A metadata-only grouping computes filtered `counts.tagged`,
+`counts.drafts`, and `counts.total` before pagination. The page query projects
+tier counts with `$size` only for its bounded result, rather than hydrating every
+snapshot's potentially large arrays. `pagination.total` equals `counts.total`.
 
 The service shapes projected counts according to `snapshot.type`:
 
@@ -421,6 +422,15 @@ against `releaseTrackContentManifestEntries`, grouped by `manifest_id` and
 match, and shared manifests are counted once. The service fills zero-valued
 categories for empty manifests. This keeps history latency to one additional
 bounded query rather than one query per snapshot.
+
+The history service also projects unfiltered `latest_snapshot_modified` and
+`latest_tagged_snapshot_modified` from the registry metadata it already reads.
+The latter uses the newest catalogue snapshot timestamp, not highest semantic
+version or tagging time. Filtered pages therefore retain correct latest-only
+action identities. The frontend polls this lightweight history plus outstanding
+cleanup while Releases is visible; it does not poll full member/configuration
+payloads. Visibility/focus and tab entry refresh immediately, while edits,
+dialogs, mutations and active requests pause background refresh.
 
 ## Integrating with the Event-Driven Architecture
 

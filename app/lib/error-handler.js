@@ -46,6 +46,7 @@ const {
   ReleaseContentIntegrityError,
   ReleaseTrackReconciliationError,
   ReleaseTrackAuditError,
+  ReleasePublicationError,
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
   VirtualSnapshotNotMaterializedError,
@@ -172,7 +173,8 @@ exports.serviceExceptions = function (err, req, res, next) {
     err instanceof GenericServiceError ||
     err instanceof DatabaseError ||
     err instanceof ReleaseTrackReconciliationError ||
-    err instanceof ReleaseTrackAuditError
+    err instanceof ReleaseTrackAuditError ||
+    err instanceof ReleasePublicationError
   ) {
     logger.error('Service error: %s', JSON.stringify(buildErrorResponse(err)));
     return res.status(500).send(buildErrorResponse(err));
