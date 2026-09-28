@@ -37,6 +37,7 @@ const bundleImportService = require('./bundle-import-service');
 const memberSyncService = require('./member-sync-service');
 const releaseHistoryService = require('./release-history-service');
 const destructiveAuditService = require('./destructive-audit-service');
+const draftCleanupService = require('./draft-cleanup-service');
 const attackObjectsService = require('../stix/attack-objects-service');
 const userAccountsService = require('../system/user-accounts-service');
 const revisionReference = require('../../lib/release-tracks/revision-reference');
@@ -246,10 +247,12 @@ async function formatWorkbenchSnapshot(snapshot, options) {
   const [attributed] = await addCreationActors([enriched]);
   // Registry-derived, read-only metadata used alongside snapshot content.
   const metadata = await snapshotService.getTrackMetadata(snapshot.id);
-  enriched.alias = metadata.alias;
-  enriched.creation_cause = snapshot.creation_cause || 'unknown';
+  attributed.alias = metadata.alias;
+  attributed.creation_cause = snapshot.creation_cause || 'unknown';
   if (snapshot.type === 'virtual') {
-    enriched.snapshot_schedule = metadata.snapshot_schedule || { mode: 'manual' };
+    attributed.snapshot_schedule = metadata.snapshot_schedule || { mode: 'manual' };
+    attributed.snapshot_count = metadata.snapshot_count;
+    attributed.tagged_release_count = metadata.tagged_release_count;
   }
   return filterSnapshotTiers(attributed, options?.include);
 }
@@ -272,7 +275,6 @@ exports.getReleasesByObject = function getReleasesByObject(objectRef, options) {
 
 exports.createTrack = async function createTrack(data) {
   let validatedData = data;
-
   if (data.scheduled_materialization !== undefined) {
     if (data.type !== 'virtual') {
       throw new BadRequestError({
@@ -309,7 +311,7 @@ exports.createTrack = async function createTrack(data) {
         details: scheduleResult.error.errors,
       });
     }
-    validatedData = { ...data, snapshot_schedule: scheduleResult.data };
+    validatedData = { ...validatedData, snapshot_schedule: scheduleResult.data };
   }
 
   if (validatedData.composition !== undefined) {
@@ -392,15 +394,17 @@ exports.cloneFromSnapshot = function cloneFromSnapshot(trackId, modified, option
 };
 
 exports.deleteTrack = function deleteTrack(trackId, actor, confirmation) {
-  return destructiveAuditService.execute(
-    {
-      action: 'delete_track',
-      trackId,
-      ...destructiveIdentity(trackId, actor, confirmation),
-      request: {},
-      result: () => ({ deleted: true }),
-    },
-    () => snapshotService.deleteTrack(trackId),
+  return versioningService.withReleaseLock(trackId, (lease) =>
+    destructiveAuditService.execute(
+      {
+        action: 'delete_track',
+        trackId,
+        ...destructiveIdentity(trackId, actor, confirmation),
+        request: {},
+        result: () => ({ deleted: true }),
+      },
+      () => snapshotService.deleteTrack(trackId, lease),
+    ),
   );
 };
 
@@ -617,7 +621,7 @@ exports.updateComposition = function updateComposition(trackId, composition, use
   });
 };
 
-exports.updateSchedule = function updateSchedule(trackId, schedule) {
+exports.updateSchedule = function updateSchedule(trackId, schedule, actor) {
   const scheduleResult = snapshotScheduleSchema.safeParse(schedule);
   if (!scheduleResult.success) {
     throw new BadRequestError({
@@ -625,8 +629,11 @@ exports.updateSchedule = function updateSchedule(trackId, schedule) {
       details: scheduleResult.error.errors,
     });
   }
-  return virtualTrackService.updateSchedule(trackId, scheduleResult.data);
+  return virtualTrackService.updateSchedule(trackId, scheduleResult.data, actor);
 };
+
+exports.listDraftCleanup = draftCleanupService.list;
+exports.retryDraftCleanup = draftCleanupService.retry;
 
 exports.createVirtualSnapshot = function createVirtualSnapshot(trackId, options) {
   let validatedOptions = options;

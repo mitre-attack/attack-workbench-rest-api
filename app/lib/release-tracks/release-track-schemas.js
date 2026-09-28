@@ -308,6 +308,10 @@ const updateConfigBodySchema = z.object({
 // Request body schemas (used inline by controller handlers)
 // =============================================================================
 
+const draftRetentionSchema = z
+  .object({ max_drafts: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable() })
+  .strict();
+
 /** POST /release-tracks/new */
 const snapshotScheduleSchema = z.discriminatedUnion('mode', [
   z
@@ -319,6 +323,7 @@ const snapshotScheduleSchema = z.discriminatedUnion('mode', [
     .object({
       mode: z.literal('cron'),
       cron: cronSchema,
+      draft_retention: draftRetentionSchema.optional(),
     })
     .strict(),
   z
@@ -500,6 +505,8 @@ const releaseBodySchema = z
     increment: releaseIncrementSchema.optional(),
     version: xMitreVersionSchema.optional(),
     description: snapshotDescriptionSchema.optional(),
+    squash_drafts: z.boolean().optional(),
+    squash_fingerprint: z.string().min(1).max(128).optional(),
   })
   .strict()
   .refine((value) => !(value.increment && value.version), {
@@ -583,6 +590,7 @@ const updateCompositionBodySchema = z
 const createVirtualSnapshotBodySchema = z
   .object({
     description: snapshotDescriptionSchema.optional(),
+    draft_retention: draftRetentionSchema.nullable().optional(),
     scheduled_materialization: scheduledMaterializationSchema.optional(),
   })
   .strict()
@@ -711,6 +719,7 @@ module.exports = {
   componentTrackSchema,
   compositionSchema,
   snapshotScheduleSchema,
+  draftRetentionSchema,
   scheduledMaterializationSchema,
   objectRefEntrySchema,
   promotionConflictsSchema,

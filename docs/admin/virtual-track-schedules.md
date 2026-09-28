@@ -26,20 +26,50 @@ Editors can replace the active schedule through
 immediately in track and Workbench-format snapshot responses; executable jobs
 are refreshed on the next `VIRTUAL_TRACK_SCHEDULES_CRON` reconciliation pass.
 
+Recurring schedules may include administrator-managed retention:
+
+```json
+{
+  "mode": "cron",
+  "cron": "0 * * * *",
+  "draft_retention": { "max_drafts": 10 }
+}
+```
+
+Only actual scheduler cron execution uses this persistent policy. Explicit
+materialization uses only its optional request-scoped policy, and date schedules
+never inherit recurring retention. Client-supplied occurrence metadata is not
+authority to apply the saved policy. Manual/dates schedule payloads reject
+retention fields. Missing/null limits disable cleanup.
+
+Editors can change timing while preserving the existing cron policy or switch
+away from recurring mode; changing a cron retention limit requires an
+administrator. Schedule-only updates create no snapshot and delete nothing
+immediately. The former global policy is inert and must be configured explicitly
+as recurring retention if desired.
+
 ## Idempotency and multiple instances
 
 The `virtualTrackScheduleOccurrences` collection stores one durable occurrence
 per track and UTC timestamp. Workers atomically claim pending or retryable
-occurrences. The resulting snapshot also records
+occurrences with an ownership token. The resulting snapshot also records
 `scheduled_materialization.scheduled_for` under a unique track-local index.
-Together, these controls prevent duplicate drafts across restarts, retry
-delivery, and multiple scheduler-enabled API instances.
+The occurrence's monotonic `snapshot_modified` receipt survives snapshot cleanup;
+it must not be TTL-expired while the track remains in use.
 
-If a worker persists the scheduled snapshot but exits before marking the
-occurrence complete, the next worker treats that snapshot as the authoritative
-result. It completes the occurrence from the persisted snapshot without
-recomputing composition. The recovery attempt is audited as an unchanged
-`recover_scheduled_virtual_snapshot` item with `counts.recovered: 1`.
+If a worker persists a snapshot but exits before marking the occurrence complete,
+the next worker recovers the existing snapshot or its receipt. A receipt whose
+snapshot has been deleted means the occurrence already materialized and was
+subsequently removed; it never authorizes recomputing composition. API-originated
+scheduled metadata and legacy snapshots receive the same receipt protection
+before deletion. Explicit attempts to recreate removed occurrences return `409`.
+
+Recovery is audited as `recover_scheduled_virtual_snapshot`, including
+`materialized_and_removed` when no snapshot remains. Claim ownership prevents
+stale worker failure/completion from reopening another worker's completed run.
+
+For why scheduled execution evidence must outlive retained snapshots, see
+[Deletion Guardrails](../developer/release-tracks/deletion-guardrails.md).
 
 ## Failures and retries
 

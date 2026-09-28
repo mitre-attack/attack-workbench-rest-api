@@ -347,10 +347,10 @@ async function activate(manifestId) {
 
 async function discard(manifestId) {
   if (!manifestId) return;
-  await Promise.all([
-    ReleaseTrackContentManifestEntry.deleteMany({ manifest_id: manifestId }).exec(),
-    ReleaseTrackContentManifest.deleteOne({ manifest_id: manifestId }).exec(),
-  ]);
+  // Keep the discoverable header until every entry is gone. A failed entry
+  // deletion can then be resumed by orphan repair instead of stranding data.
+  await ReleaseTrackContentManifestEntry.deleteMany({ manifest_id: manifestId }).exec();
+  await ReleaseTrackContentManifest.deleteOne({ manifest_id: manifestId }).exec();
 }
 
 /**
@@ -367,34 +367,47 @@ async function discardUnreferenced(trackId, manifestIds) {
   return unreferenced;
 }
 
-async function discardTrack(trackId) {
-  const manifests = await ReleaseTrackContentManifest.find({ track_id: trackId })
-    .select({ manifest_id: 1, _id: 0 })
-    .lean()
-    .exec();
-  const manifestIds = manifests.map((manifest) => manifest.manifest_id);
-
-  await Promise.all([
-    manifestIds.length > 0
-      ? ReleaseTrackContentManifestEntry.deleteMany({ manifest_id: { $in: manifestIds } }).exec()
-      : Promise.resolve(),
-    ReleaseTrackContentManifest.deleteMany({ track_id: trackId }).exec(),
-  ]);
+async function discardTrack(trackId, assertOwned = async () => {}) {
+  for (;;) {
+    await assertOwned();
+    const manifests = await ReleaseTrackContentManifest.find({ track_id: trackId })
+      .select({ manifest_id: 1, _id: 0 })
+      .limit(100)
+      .lean()
+      .exec();
+    if (!manifests.length) return;
+    for (const manifest of manifests) {
+      await assertOwned();
+      await discard(manifest.manifest_id);
+    }
+  }
 }
 
 /**
  * Remove manifests owned by a track that no surviving snapshot references.
  * Used by deletion recovery paths.
  */
-async function discardOrphans(trackId) {
-  const manifests = await ReleaseTrackContentManifest.find({ track_id: trackId })
-    .select({ manifest_id: 1, _id: 0 })
-    .lean()
-    .exec();
-  return discardUnreferenced(
-    trackId,
-    manifests.map((manifest) => manifest.manifest_id),
-  );
+async function discardOrphans(trackId, assertOwned = async () => {}) {
+  let cursor;
+  for (;;) {
+    await assertOwned();
+    const manifests = await ReleaseTrackContentManifest.find({
+      track_id: trackId,
+      ...(cursor ? { _id: { $gt: cursor } } : {}),
+    })
+      .select({ manifest_id: 1 })
+      .sort({ _id: 1 })
+      .limit(100)
+      .lean()
+      .exec();
+    if (!manifests.length) return;
+    await assertOwned();
+    await discardUnreferenced(
+      trackId,
+      manifests.map((manifest) => manifest.manifest_id),
+    );
+    cursor = manifests.at(-1)._id;
+  }
 }
 
 // =============================================================================

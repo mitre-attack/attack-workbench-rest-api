@@ -2934,6 +2934,27 @@ database.
 - [x] Verify the real frontend/API flow, focused regressions, and the full
       backend test suite; update API documentation and Bruno request notes.
 
+## Virtual draft retention and release-time squash (2026-09-23)
+
+Approved plan: [Draft lifecycle](release-tracks/draft-lifecycle-plan.md).
+Safety rationale: [Deletion guardrails](release-tracks/deletion-guardrails.md).
+
+- [x] Prepare both feature branches from `next`, preserving draft composition
+      and the frontend save-dialog regression fix.
+- [x] Preserve the plain-language deletion guardrails explanation and link
+      redundant documentation to it.
+- [x] Serialize virtual target lifecycle operations and preserve durable
+      scheduler materialization receipts after snapshot deletion.
+- [x] Implement guarded, auditable, recoverable historical-draft cleanup and
+      reference-safe manifest deletion.
+- [x] Add disabled-by-default, administrator-managed draft-count retention.
+- [x] Add previewed, fingerprint-confirmed release-time draft squash and
+      cleanup-only status/retry.
+- [x] Add frontend retention controls and paginated virtual history.
+- [x] Add explicit squash consent and partial-outcome recovery feedback.
+- [x] Verify API/scheduler regressions and the complete backend suite.
+- [x] Exercise retention, squash, pagination and recovery on the real frontend.
+
 ## Published versus preview composition
 
 - [x] Prepare isolated worktrees on `next` and agree on `latest_tagged` versus
@@ -2958,3 +2979,31 @@ that a source with zero members, one staged object and one candidate contributes
 only the staged object, without changing its snapshots, tiers or release history.
 Virtual tagging left that source untagged; later staged revisions left the
 existing virtual release frozen; a tagged newest source also composed correctly.
+
+## Virtual draft lifecycle feedback
+
+- [x] Make completed cleanup feedback floating and dismissible without adding
+      a notification-center subsystem.
+- [x] Refresh authoritative total snapshot counts after draft creation.
+- [x] Center history filters and refresh controls above the cards.
+- [x] Remove the redundant "Current draft (pinned)" label.
+- [x] Gate persistent retention editing behind Edit Config and preserve Cancel.
+- [x] Replace global retention with one-shot Create Draft policy and saved
+      Recurring-schedule policy; unrelated writes never trigger retention.
+- [x] Verify affected regressions and the real frontend/API workflow.
+
+## Upstream integration and history views (2026-09-25)
+
+- [x] Merge upstream `next` into both feature branches, retaining local
+      uncommitted retention feedback and upstream preview/priority behavior.
+- [x] Offer Drafts only, Releases only, and All releases with exact filtering.
+- [x] Replace the manual refresh button with visible-history polling and
+      focus/visibility refresh, preserving page selection and edit state.
+- [x] Report filtered tagged, draft, and total counts across matching pages.
+- [x] Verify upstream integration regressions and the live browser workflow.
+
+Merged backend `a69abef9` and frontend `592c087c` from upstream `next`, preserving
+the local trigger-specific retention feedback. Full backend verification passed
+1,158 tests; 161 focused frontend tests passed. Browser checks covered all three
+views, zero results, query-wide counts across pages, periodic external-create
+refresh, focus/tab-entry refresh and preservation of page selection/unsaved edits.

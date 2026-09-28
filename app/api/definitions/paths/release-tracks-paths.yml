@@ -241,9 +241,22 @@ paths:
         draft snapshot and is limited to 4000 characters. `alias` is an
         optional URL-safe slug (2-64 lowercase letters, digits, and hyphens,
         unique across tracks) accepted wherever the track ID is.
+        Administrators may provide snapshot_schedule.draft_retention in the
+        cron variant only, with max_drafts a positive safe integer or null.
+        This applies only to future recurring materializations. Initial track
+        creation never deletes history; no top-level retention policy is accepted.
       tags:
         - 'Release Tracks'
       # Request body validation moved to Zod in controller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                snapshot_schedule:
+                  $ref: '../components/release-tracks.yml#/components/schemas/snapshot-schedule'
       responses:
         '201':
           description: 'Release track created successfully'
@@ -253,6 +266,8 @@ paths:
                 $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
         '400':
           description: 'Invalid request parameters'
+        '403':
+          description: 'Only administrators may supply a retention policy'
 
   /api/release-tracks/new-from-bundle:
     post:
@@ -402,6 +417,9 @@ paths:
         Relative increments use the latest tagged release. A historical
         standard draft is published as a new release at the current time and
         must follow the current version lineage.
+        Administrators may opt into virtual-only squash_drafts with the exact
+        preview squash_fingerprint. Stale previews fail before tagging. Successful
+        publication may return pending/failed draft_cleanup; use cleanup retry.
       tags:
         - 'Release Tracks'
       parameters:
@@ -420,21 +438,28 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              $ref: '../components/release-tracks.yml#/components/schemas/release-request'
       responses:
         '200':
           description: 'Snapshot released successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+        '403':
+          description: 'Only administrators may opt into draft squash'
         '400':
           description: 'Invalid release request'
         '409':
           description: 'Already released, another release is in progress, conflicting snapshot, or missing persisted primary revisions'
         '500':
-          description: 'The release may be tagged, but durable membership-protection reconciliation failed'
+          description: 'Publication or reconciliation failed; squash errors include operation_id and release_committed for cleanup-only recovery'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                  - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
 
   /api/release-tracks/{id}/snapshots/latest/release/preview:
     get:
@@ -497,6 +522,12 @@ paths:
       responses:
         '200':
           description: 'Release preview generated'
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
         '409':
           description: 'Virtual draft is unmaterialized, release is blocked by a conflict, or persisted primary revisions are missing'
         '501':
@@ -763,6 +794,10 @@ paths:
       responses:
         '200':
           description: 'Configuration updated successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
 
   # =============================================================================
   # Object version history
@@ -859,6 +894,10 @@ paths:
       responses:
         '200':
           description: 'Composition updated successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
         '400':
           description: 'Track is not virtual or composition is invalid'
 
@@ -871,8 +910,12 @@ paths:
         track without creating or mutating a content snapshot. Request bodies
         are strictly validated via Zod: manual accepts only mode, cron requires
         one five-field UTC expression, and dates requires at least one ISO UTC
-        timestamp. Scheduler reconciliation observes the replacement on its
-        next configured pass.
+        timestamp. Only cron accepts draft_retention, with max_drafts a positive
+        safe integer or null. Changing that threshold while remaining in cron
+        requires an administrator, including disabling retention. Editors may
+        preserve its value while editing cron timing, or switch away from cron.
+        Policy changes delete nothing. Scheduler reconciliation observes the
+        replacement on its next configured pass.
       tags:
         - 'Release Tracks'
       parameters:
@@ -901,8 +944,79 @@ paths:
                     $ref: '../components/release-tracks.yml#/components/schemas/snapshot-schedule'
         '400':
           description: 'Track is not virtual or schedule is invalid'
+        '403':
+          description: 'Changing cron retention requires an administrator'
         '404':
           description: 'Release track not found'
+
+  /api/release-tracks/{id}/virtual/draft-cleanup:
+    get:
+      summary: Discover pending or failed virtual draft cleanup
+      operationId: release-tracks-draft-cleanup-list
+      description: Returns the most recent 25 pending/failed audit-bound operations, including operations whose HTTP response was lost.
+      tags: ['Release Tracks']
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent incomplete cleanup operations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-result'
+        '400':
+          description: Nonvirtual track
+        '404':
+          description: Track not found
+
+  /api/release-tracks/{id}/virtual/draft-cleanup/{operationId}/retry:
+    post:
+      summary: Repair an existing draft cleanup operation
+      operationId: release-tracks-draft-cleanup-retry
+      description: |
+        Administrator-only cleanup recovery. Accepts no fresh selector or release
+        request. Repairs partial publication for the original release event and
+        never tags again. Rechecks protected sources, new tags, and live retention
+        policy without widening the recorded interval. Disabling retention permits
+        orphan/counter repair but no additional draft deletion.
+      tags: ['Release Tracks']
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current operation result, including any repair failure
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-result'
+        '400':
+          description: Nonvirtual track
+        '403':
+          description: Administrator required
+        '404':
+          description: Track or existing cleanup intent not found
+        '409':
+          description: Another lifecycle operation holds the track lock
 
   /api/release-tracks/{id}/virtual/snapshots/create:
     post:
@@ -924,6 +1038,10 @@ paths:
         Component release locks are held from resolution through persistence.
         A concurrent release, rollback, retag, or materialization sharing a
         component may return 409; retry after the competing operation finishes.
+        Administrators may supply draft_retention for this operation only.
+        Omitted policy, null, or max_drafts null means no cleanup. Manual
+        requests never inherit or persist recurring policy, and supplied
+        scheduled_materialization metadata cannot invoke cron retention.
       tags:
         - 'Release Tracks'
       parameters:
@@ -943,13 +1061,30 @@ paths:
                   type: string
                   maxLength: 4000
                   description: 'Optional notes for this snapshot'
+                draft_retention:
+                  type: object
+                  nullable: true
+                  additionalProperties: false
+                  required: [max_drafts]
+                  properties:
+                    max_drafts:
+                      type: integer
+                      nullable: true
+                      minimum: 1
+                      maximum: 9007199254740991
                 scheduled_materialization:
                   $ref: '../components/release-tracks.yml#/components/schemas/scheduled-materialization'
       responses:
         '201':
           description: 'Virtual snapshot created successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
         '400':
           description: 'Track is not virtual or cannot resolve its composition'
+        '403':
+          description: 'Supplying manual draft retention requires an administrator'
         '409':
           description: 'A component release lock is busy or a resolved snapshot references missing primary revisions'
           content:
@@ -1022,6 +1157,11 @@ paths:
         summaries also expose bundle_id and bundle_hashes.
         Standard releases with a preserved source draft also expose
         release_source_modified, allowing clients to hide that retained draft.
+        Counts describe every snapshot matching the tagged filter before
+        pagination, including when the requested page is empty. Latest snapshot
+        identities are unfiltered live track metadata, independent of the page
+        and tagged filter. The latest tagged identity is chronological, not
+        the highest semantic version.
       tags:
         - 'Release Tracks'
       parameters:
@@ -1063,6 +1203,9 @@ paths:
                 required:
                   - data
                   - pagination
+                  - counts
+                  - latest_snapshot_modified
+                  - latest_tagged_snapshot_modified
                 properties:
                   data:
                     type: array
@@ -1070,6 +1213,34 @@ paths:
                       oneOf:
                         - $ref: '../components/release-tracks.yml#/components/schemas/standard-snapshot-summary'
                         - $ref: '../components/release-tracks.yml#/components/schemas/virtual-snapshot-summary'
+                  counts:
+                    type: object
+                    description: 'Counts across all snapshots matching the tagged filter, before pagination'
+                    required:
+                      - tagged
+                      - drafts
+                      - total
+                    properties:
+                      tagged:
+                        type: integer
+                        minimum: 0
+                      drafts:
+                        type: integer
+                        minimum: 0
+                      total:
+                        type: integer
+                        minimum: 0
+                        description: 'Sum of tagged and drafts; equals pagination.total'
+                  latest_snapshot_modified:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 'Latest snapshot identity for the track, independent of filtering and pagination; null when absent'
+                  latest_tagged_snapshot_modified:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: 'Chronologically latest tagged snapshot identity for the track, independent of filtering and pagination; null when absent'
                   pagination:
                     type: object
                     required:
@@ -1463,6 +1634,10 @@ paths:
         selected draft is historical. An optional `description` is stored as
         snapshot-local release notes. Relative increments use the latest
         tagged release.
+        Explicit virtual squash requires an administrator and the preview
+        squash_fingerprint. Its exclusive chronological interval never includes
+        the target, a newer draft, or a tagged release. Publication completes
+        before cleanup; failures expose an existing cleanup operation for repair.
       tags:
         - 'Release Tracks'
       parameters:
@@ -1486,21 +1661,28 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              $ref: '../components/release-tracks.yml#/components/schemas/release-request'
       responses:
         '200':
           description: 'Snapshot released successfully'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+        '403':
+          description: 'Only administrators may opt into draft squash'
         '400':
           description: 'Invalid release request'
         '409':
           description: 'Already released, another release is in progress, conflicting snapshot, or missing persisted primary revisions'
         '500':
-          description: 'The release may be tagged, but durable membership-protection reconciliation failed'
+          description: 'Publication or reconciliation failed; squash errors include operation_id and release_committed for cleanup-only recovery'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                  - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
     put:
       summary: 'Change a release version'
       operationId: 'release-tracks-release-retag'
@@ -1615,6 +1797,12 @@ paths:
       responses:
         '200':
           description: 'Release preview generated'
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
         '409':
           description: 'Release is blocked because the draft is unmaterialized, conflicting, or references missing primary revisions'
         '501':
