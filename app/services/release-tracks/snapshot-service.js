@@ -25,7 +25,6 @@ const registryRepo = require('../../repository/release-tracks/release-track-regi
 const dynamicRepo = require('../../repository/release-tracks/release-track-dynamic.repository');
 const modelFactory = require('../../models/release-tracks/model-factory');
 const logger = require('../../lib/logger');
-const versionUtils = require('../../lib/release-tracks/version-utils');
 const tierRevisionInvariant = require('../../lib/release-tracks/tier-revision-invariant');
 const primaryRevisionService = require('./primary-revision-service');
 const reconciliationService = require('./reconciliation-service');
@@ -86,32 +85,8 @@ async function mapWithConcurrency(items, concurrency, mapper) {
  * @param {string} trackId
  */
 async function syncRegistryCounters(trackId) {
-  const { data: snapshots } = await dynamicRepo.getAllSnapshots(trackId, {
-    projection: 'modified version',
-  });
-
-  const snapshotCount = snapshots.length;
-  const tagged = snapshots.filter((s) => s.version != null);
-  const taggedReleaseCount = tagged.length;
-
-  // Latest snapshot is first (sorted desc by modified)
-  const latestSnapshotModified = snapshots.length > 0 ? snapshots[0].modified : null;
-
-  const latestTaggedVersion = tagged.reduce(
-    (highest, snapshot) =>
-      !highest || versionUtils.compareVersions(snapshot.version, highest) > 0
-        ? snapshot.version
-        : highest,
-    null,
-  );
-
-  await registryRepo.updateByTrackId(trackId, {
-    snapshot_count: snapshotCount,
-    tagged_release_count: taggedReleaseCount,
-    latest_snapshot_modified: latestSnapshotModified,
-    latest_tagged_version: latestTaggedVersion,
-    updated_at: new Date(),
-  });
+  const counters = await dynamicRepo.getSnapshotCounters(trackId);
+  await registryRepo.updateByTrackId(trackId, { ...counters, updated_at: new Date() });
 }
 exports.syncRegistryCounters = syncRegistryCounters;
 
@@ -159,10 +134,11 @@ exports.findVirtualSnapshotDependents = findVirtualSnapshotDependents;
  * @param {string} reason - seal_reason enum value
  * @returns {Promise<Object>} The saved snapshot
  */
-async function saveSealedSnapshot(trackId, snapshotData, reason) {
+async function saveSealedSnapshot(trackId, snapshotData, reason, lease) {
   const manifestId = await contentManifestService.seal(snapshotData, { reason });
   let saved;
   try {
+    if (lease) await lease.assertOwned();
     saved = await dynamicRepo.saveSnapshot(trackId, {
       ...snapshotData,
       content_manifest_id: manifestId,
@@ -214,6 +190,13 @@ exports.createTrack = async function createTrack(data, options = {}) {
   const trackId = `release-track--${uuidv4()}`;
   const now = new Date();
   const trackType = data.type || 'standard';
+  if (data.snapshot_schedule?.draft_retention !== undefined) {
+    require('./draft-cleanup-service').validatePolicy(
+      data.snapshot_schedule.draft_retention,
+      data.actor,
+      trackType,
+    );
+  }
   if (data.alias) await assertAliasAvailable(data.alias);
 
   const initialSnapshot = {
@@ -238,11 +221,12 @@ exports.createTrack = async function createTrack(data, options = {}) {
     version_history: [],
   };
 
-  // Create collection + indexes, then persist the initial sealed snapshot
   await modelFactory.ensureIndexes(trackId);
-  const snapshot = await saveSealedSnapshot(trackId, initialSnapshot, 'track_creation');
+  let snapshot;
+  if (trackType !== 'virtual') {
+    snapshot = await saveSealedSnapshot(trackId, initialSnapshot, 'track_creation');
+  }
 
-  // Register in the central registry
   await registryRepo.create({
     track_id: trackId,
     type: trackType,
@@ -250,12 +234,26 @@ exports.createTrack = async function createTrack(data, options = {}) {
     alias: data.alias || undefined,
     description: data.description,
     latest_snapshot_modified: now,
-    snapshot_count: 1,
+    snapshot_count: snapshot ? 1 : 0,
     tagged_release_count: 0,
     created_at: now,
     updated_at: now,
     snapshot_schedule: trackType === 'virtual' ? data.snapshot_schedule : undefined,
   });
+  if (trackType === 'virtual') {
+    const { withReleaseLock } = require('./versioning-service');
+    snapshot = await withReleaseLock(trackId, async (lease) => {
+      await require('./draft-cleanup-service').findScheduledResult(
+        trackId,
+        data.scheduled_materialization,
+      );
+      await lease.assertOwned();
+      const created = await saveSealedSnapshot(trackId, initialSnapshot, 'track_creation', lease);
+      await require('./draft-cleanup-service').recordScheduledResult(created);
+      await syncRegistryCounters(trackId);
+      return created;
+    });
+  }
 
   logger.verbose(`SnapshotService: Created ${trackType} track "${data.name}" (${trackId})`);
   return snapshot;
@@ -290,6 +288,8 @@ exports.getTrackMetadata = async function getTrackMetadata(trackId) {
   return {
     alias: entry?.alias ?? null,
     snapshot_schedule: entry?.snapshot_schedule,
+    snapshot_count: entry?.snapshot_count,
+    tagged_release_count: entry?.tagged_release_count,
   };
 };
 
@@ -307,7 +307,8 @@ exports.getTrackMetadata = async function getTrackMetadata(trackId) {
  *
  * @param {string} trackId
  * @param {Object} options - { tagged?, limit, offset }
- * @returns {Promise<{data: Object[], pagination: Object}>}
+ * @returns {Promise<{data: Object[], pagination: Object, counts: Object,
+ *   latest_snapshot_modified: Date|null, latest_tagged_snapshot_modified: Date|null}>}
  * @throws {TrackNotFoundError} If the release track does not exist
  */
 exports.listSnapshots = async function listSnapshots(trackId, options) {
@@ -320,8 +321,15 @@ exports.listSnapshots = async function listSnapshots(trackId, options) {
   const statisticsByManifestId = await contentManifestService.getStatisticsByManifestIds(
     result.data.map((snapshot) => snapshot.content_manifest_id),
   );
+  const latestTaggedModified = (track.tagged_releases || []).reduce(
+    (latest, release) =>
+      !latest || release.snapshot_modified > latest ? release.snapshot_modified : latest,
+    null,
+  );
   return {
     ...result,
+    latest_snapshot_modified: track.latest_snapshot_modified ?? null,
+    latest_tagged_snapshot_modified: latestTaggedModified,
     data: result.data.map((snapshot) => {
       const common = {
         id: snapshot.id,
@@ -430,16 +438,24 @@ exports.cloneSnapshot = async function cloneSnapshot(
   overrides,
   options = {},
 ) {
-  if (sourceSnapshot.type === 'standard') {
-    const { withReleaseLock } = require('./versioning-service');
-    return withReleaseLock(trackId, () =>
-      cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options),
-    );
-  }
-  return cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options);
+  if (options.lease) return cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options);
+  const { withReleaseLock } = require('./versioning-service');
+  return withReleaseLock(trackId, (lease) =>
+    cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, { ...options, lease }),
+  );
 };
 
 async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options) {
+  await options.lease.assertOwned();
+  if (sourceSnapshot.type === 'virtual') {
+    const existing = await require('./draft-cleanup-service').findScheduledResult(
+      trackId,
+      overrides?.scheduled_materialization,
+    );
+    if (existing) return existing;
+    // Direct callers must not resurrect a source removed while acquiring the lock.
+    await exports.getSnapshotByModified(trackId, sourceSnapshot.modified);
+  }
   const clone = deepClone(sourceSnapshot);
   const hasSnapshotDescriptionOverride = Object.prototype.hasOwnProperty.call(
     overrides || {},
@@ -449,7 +465,10 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
   delete clone.publication;
   delete clone.bundle_id;
   delete clone.bundle_hashes;
-  clone.modified = new Date();
+  delete clone.release_event_id;
+  delete clone.draft_retention;
+  delete clone.draft_cleanup;
+  clone.modified = new Date(Math.max(Date.now(), new Date(sourceSnapshot.modified).getTime() + 1));
   clone.version = null; // clones are always drafts
   delete clone.scheduled_materialization;
 
@@ -477,38 +496,63 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
   clone.creation_cause = options.creationCause || CreationCause.Unknown;
   clone.creation_actor = creationActor(options.userAccountId);
   const normalized = tierRevisionInvariant.normalizeSnapshot(clone);
+  await options.lease.assertOwned();
+  const cleanupIntent =
+    normalized.snapshot.type === 'virtual' && options.retention
+      ? await require('./draft-cleanup-service').prepareRetention(
+          normalized.snapshot,
+          options.retention,
+          options.lease,
+        )
+      : null;
   let saved;
-  if (rewritesMembers || !normalized.snapshot.content_manifest_id) {
-    saved = await saveSealedSnapshot(
-      trackId,
-      normalized.snapshot,
-      options.sealReason || 'members_written',
-    );
-  } else {
-    saved = await dynamicRepo.saveSnapshot(trackId, normalized.snapshot);
-  }
+  try {
+    if (rewritesMembers || !normalized.snapshot.content_manifest_id) {
+      saved = await saveSealedSnapshot(
+        trackId,
+        normalized.snapshot,
+        options.sealReason || 'members_written',
+        options.lease,
+      );
+    } else {
+      saved = await dynamicRepo.saveSnapshot(trackId, normalized.snapshot);
+    }
 
-  if (saved.type === 'standard') {
-    // Materialization holds this same track's release lock until provenance
-    // is persisted, so this scan cannot miss a concurrently created dependent.
-    const virtualTracks = (await registryRepo.findAll({ type: 'virtual' })).data;
-    const referencedDrafts = await mapWithConcurrency(virtualTracks, 12, (track) =>
-      dynamicRepo.findResolvedComponentSnapshotIds(track.track_id, trackId),
-    );
-    const prunedDrafts = await dynamicRepo.deleteOlderDrafts(
-      trackId,
-      saved.modified,
-      referencedDrafts.flat(),
-    );
-    await contentManifestService.discardUnreferenced(
-      trackId,
-      prunedDrafts.map((snapshot) => snapshot.content_manifest_id),
-    );
-  }
-  await syncRegistryCounters(trackId);
+    if (saved.type === 'standard') {
+      // Materialization holds this same track's release lock until provenance
+      // is persisted, so this scan cannot miss a concurrently created dependent.
+      const virtualTracks = (await registryRepo.findAll({ type: 'virtual' })).data;
+      const referencedDrafts = await mapWithConcurrency(virtualTracks, 12, (track) =>
+        dynamicRepo.findResolvedComponentSnapshotIds(track.track_id, trackId),
+      );
+      const prunedDrafts = await dynamicRepo.deleteOlderDrafts(
+        trackId,
+        saved.modified,
+        referencedDrafts.flat(),
+      );
+      await contentManifestService.discardUnreferenced(
+        trackId,
+        prunedDrafts.map((snapshot) => snapshot.content_manifest_id),
+      );
+    }
+    await syncRegistryCounters(trackId);
 
-  // The clone (modified = now) is the track's new latest snapshot
-  await emitContentsChanged(trackId, saved);
+    // The clone (modified = now) is the track's new latest snapshot
+    await emitContentsChanged(trackId, saved);
+    if (saved.type === 'virtual') {
+      await require('./draft-cleanup-service').recordScheduledResult(saved);
+      saved = await require('./draft-cleanup-service').afterDraft(
+        saved,
+        options.lease,
+        cleanupIntent,
+      );
+    }
+  } catch (error) {
+    if (!cleanupIntent) throw error;
+    const persisted = saved || (await dynamicRepo.getSnapshotByModified(trackId, clone.modified));
+    if (!persisted) throw error;
+    return require('./draft-cleanup-service').failDraft(persisted, cleanupIntent, error);
+  }
 
   if (normalized.removed.length > 0) {
     logger.warn(
@@ -532,8 +576,11 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
  * @returns {Promise<Object>} The initial snapshot of the new track
  */
 exports.cloneTrack = async function cloneTrack(trackId, options) {
-  const source = await exports.getLatestSnapshot(trackId);
-  return _cloneToNewTrack(source, options);
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const source = await exports.getLatestSnapshot(trackId);
+    await lease.assertOwned();
+    return _cloneToNewTrack(source, { ...options, lease });
+  });
 };
 
 /**
@@ -545,8 +592,11 @@ exports.cloneTrack = async function cloneTrack(trackId, options) {
  * @returns {Promise<Object>} The initial snapshot of the new track
  */
 exports.cloneFromSnapshot = async function cloneFromSnapshot(trackId, modified, options) {
-  const source = await exports.getSnapshotByModified(trackId, modified);
-  return _cloneToNewTrack(source, options);
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const source = await exports.getSnapshotByModified(trackId, modified);
+    await lease.assertOwned();
+    return _cloneToNewTrack(source, { ...options, lease });
+  });
 };
 
 /**
@@ -561,6 +611,9 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
   delete clone.publication;
   delete clone.bundle_id;
   delete clone.bundle_hashes;
+  delete clone.release_event_id;
+  delete clone.draft_retention;
+  delete clone.draft_cleanup;
   clone.id = newTrackId;
   clone.creation_cause = CreationCause.TrackCloned;
   clone.creation_actor = creationActor(options.userAccountId);
@@ -585,7 +638,12 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
   );
 
   await modelFactory.ensureIndexes(newTrackId);
-  const saved = await saveSealedSnapshot(newTrackId, normalized.snapshot, 'track_clone');
+  const saved = await saveSealedSnapshot(
+    newTrackId,
+    normalized.snapshot,
+    'track_clone',
+    options.lease,
+  );
 
   await registryRepo.create({
     track_id: newTrackId,
@@ -631,29 +689,32 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
  */
 
 exports.updateMetadata = async function updateMetadata(trackId, updates, userId) {
-  const source = await exports.getLatestSnapshot(trackId);
-  const overrides = {};
-  if (updates.name !== undefined) overrides.name = updates.name;
-  if (updates.description !== undefined) overrides.description = updates.description;
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const source = await exports.getLatestSnapshot(trackId);
+    const overrides = {};
+    if (updates.name !== undefined) overrides.name = updates.name;
+    if (updates.description !== undefined) overrides.description = updates.description;
 
-  if (updates.alias !== undefined) {
-    if (updates.alias) await assertAliasAvailable(updates.alias, trackId);
-    await registryRepo.setAlias(trackId, updates.alias);
-  }
+    if (updates.alias !== undefined) {
+      if (updates.alias) await assertAliasAvailable(updates.alias, trackId);
+      await registryRepo.setAlias(trackId, updates.alias);
+    }
 
-  // Also update the registry name/description if changed
-  const registryUpdates = {};
-  if (updates.name !== undefined) registryUpdates.name = updates.name;
-  if (updates.description !== undefined) registryUpdates.description = updates.description;
-  if (Object.keys(registryUpdates).length > 0) {
-    registryUpdates.updated_at = new Date();
-    await registryRepo.updateByTrackId(trackId, registryUpdates);
-  }
+    // Also update the registry name/description if changed
+    const registryUpdates = {};
+    if (updates.name !== undefined) registryUpdates.name = updates.name;
+    if (updates.description !== undefined) registryUpdates.description = updates.description;
+    if (Object.keys(registryUpdates).length > 0) {
+      registryUpdates.updated_at = new Date();
+      await registryRepo.updateByTrackId(trackId, registryUpdates);
+    }
 
-  if (Object.keys(overrides).length === 0) return source;
-  return exports.cloneSnapshot(trackId, source, overrides, {
-    creationCause: CreationCause.MetadataUpdated,
-    userAccountId: userId,
+    if (Object.keys(overrides).length === 0) return source;
+    return exports.cloneSnapshot(trackId, source, overrides, {
+      creationCause: CreationCause.MetadataUpdated,
+      userAccountId: userId,
+      lease,
+    });
   });
 };
 
@@ -743,49 +804,51 @@ exports.getConfig = async function getConfig(trackId) {
  */
 
 exports.updateConfig = async function updateConfig(trackId, config, userId) {
-  const source = await exports.getLatestSnapshot(trackId);
-  const existing = source.config || {};
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const source = await exports.getLatestSnapshot(trackId);
+    const existing = source.config || {};
 
-  const mergedConfig = { ...existing };
+    const mergedConfig = { ...existing };
 
-  if (config.candidacy_threshold !== undefined)
-    mergedConfig.candidacy_threshold = config.candidacy_threshold;
-  if (config.auto_promote !== undefined) mergedConfig.auto_promote = config.auto_promote;
-  if (config.promotion_conflicts !== undefined) {
-    mergedConfig.promotion_conflicts = {
-      ...(existing.promotion_conflicts || {}),
-      ...config.promotion_conflicts,
-    };
-  }
-  if (config.member_sync !== undefined) {
-    const existingMemberSync = existing.member_sync || {};
-    mergedConfig.member_sync = {
-      ...existingMemberSync,
-      ...config.member_sync,
-    };
-    // Nested merge for supplant sub-object
-    if (config.member_sync.supplant !== undefined) {
-      mergedConfig.member_sync.supplant = {
-        ...(existingMemberSync.supplant || {}),
-        ...config.member_sync.supplant,
+    if (config.candidacy_threshold !== undefined)
+      mergedConfig.candidacy_threshold = config.candidacy_threshold;
+    if (config.auto_promote !== undefined) mergedConfig.auto_promote = config.auto_promote;
+    if (config.promotion_conflicts !== undefined) {
+      mergedConfig.promotion_conflicts = {
+        ...(existing.promotion_conflicts || {}),
+        ...config.promotion_conflicts,
       };
     }
-  }
-  if (config.publication !== undefined) {
-    const hasReleases = (source.version_history || []).length > 0;
-    mergedConfig.publication = publicationService.mergePublicationConfig(
-      existing.publication,
-      config.publication,
-      hasReleases,
-    );
-  }
+    if (config.member_sync !== undefined) {
+      const existingMemberSync = existing.member_sync || {};
+      mergedConfig.member_sync = {
+        ...existingMemberSync,
+        ...config.member_sync,
+      };
+      // Nested merge for supplant sub-object
+      if (config.member_sync.supplant !== undefined) {
+        mergedConfig.member_sync.supplant = {
+          ...(existingMemberSync.supplant || {}),
+          ...config.member_sync.supplant,
+        };
+      }
+    }
+    if (config.publication !== undefined) {
+      const hasReleases = (source.version_history || []).length > 0;
+      mergedConfig.publication = publicationService.mergePublicationConfig(
+        existing.publication,
+        config.publication,
+        hasReleases,
+      );
+    }
 
-  return exports.cloneSnapshot(
-    trackId,
-    source,
-    { config: mergedConfig },
-    { creationCause: CreationCause.ConfigurationUpdated, userAccountId: userId },
-  );
+    return exports.cloneSnapshot(
+      trackId,
+      source,
+      { config: mergedConfig },
+      { creationCause: CreationCause.ConfigurationUpdated, userAccountId: userId, lease },
+    );
+  });
 };
 
 // =============================================================================
@@ -872,7 +935,12 @@ exports.reconstructManifest = async function reconstructManifest(trackId, modifi
  * @param {string} trackId
  * @throws {TrackNotFoundError} If the track does not exist in the registry
  */
-exports.deleteTrack = async function deleteTrack(trackId) {
+exports.deleteTrack = async function deleteTrack(trackId, lease) {
+  if (!lease) {
+    return require('./versioning-service').withReleaseLock(trackId, (heldLease) =>
+      exports.deleteTrack(trackId, heldLease),
+    );
+  }
   const registry = await registryRepo.findByTrackId(trackId);
   if (!registry) {
     // A previous delete may have removed the registry only after dropping the
@@ -881,8 +949,21 @@ exports.deleteTrack = async function deleteTrack(trackId) {
     throw new TrackNotFoundError(trackId);
   }
 
+  if (registry.type === 'virtual') {
+    let cursor;
+    for (;;) {
+      await lease.assertOwned();
+      const scheduled = await dynamicRepo.getScheduledSnapshotBatch(trackId, cursor);
+      if (!scheduled.length) break;
+      for (const snapshot of scheduled) {
+        await require('./draft-cleanup-service').recordScheduledResult(snapshot);
+      }
+      cursor = scheduled.at(-1).modified;
+    }
+  }
+  await lease.assertOwned();
   await dynamicRepo.dropCollection(trackId);
-  await contentManifestService.discardTrack(trackId);
+  await contentManifestService.discardTrack(trackId, () => lease.assertOwned());
   await registryRepo.deleteByTrackId(trackId);
 
   // Remove all backrefs to the deleted track
@@ -959,7 +1040,7 @@ exports.convertReleaseToDraft = async function convertReleaseToDraft(trackId, mo
     // composition resolution, notes, and immutable creation provenance.
     await dynamicRepo.updateSnapshot(trackId, snapshot.modified, {
       $set: { version: null },
-      $unset: { publication: '', bundle_id: '', bundle_hashes: '' },
+      $unset: { publication: '', bundle_id: '', bundle_hashes: '', release_event_id: '' },
     });
     draft = snapshot;
   }
@@ -1031,6 +1112,7 @@ exports.deleteSnapshot = async function deleteSnapshot(trackId, modified) {
       snapshot_modified: new Date(snapshot.modified).toISOString(),
     });
   }
+  await require('./draft-cleanup-service').recordScheduledResult(snapshot);
 
   await dynamicRepo.deleteSnapshot(trackId, modified);
   await contentManifestService.discardUnreferenced(trackId, [snapshot.content_manifest_id]);

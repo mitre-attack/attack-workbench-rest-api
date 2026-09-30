@@ -22,6 +22,19 @@ const snapshotScheduleDefinition = {
     type: String,
     validate: validateCron,
   },
+  draft_retention: {
+    type: new mongoose.Schema(
+      {
+        max_drafts: {
+          type: Number,
+          default: null,
+          validate: (value) => value == null || (Number.isSafeInteger(value) && value > 0),
+        },
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  },
   dates: { type: [Date], default: undefined },
 };
 const snapshotScheduleSchema = new mongoose.Schema(snapshotScheduleDefinition, { _id: false });

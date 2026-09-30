@@ -6,6 +6,7 @@ const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
 const dynamicRepo = require('../../../repository/release-tracks/release-track-dynamic.repository');
+const registryRepo = require('../../../repository/release-tracks/release-track-registry.repository');
 const {
   ReleaseTrackContentManifestEntry,
 } = require('../../../models/release-tracks/release-track-content-manifest-model');
@@ -130,6 +131,22 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
       staged: [stagedEntry(1, standardLatestModified), stagedEntry(2, standardLatestModified)],
       candidates: [candidateEntry(3, standardLatestModified)],
     });
+    await registryRepo.updateByTrackId(standardTrack.id, {
+      latest_snapshot_modified: standardLatestModified,
+      snapshot_count: 3,
+    });
+    await registryRepo.replaceTaggedReleases(
+      standardTrack.id,
+      [
+        {
+          snapshot_modified: standardTaggedModified,
+          version: '1.0',
+          tagged_at: standardTaggedModified,
+          tagged_by: 'snapshot-history-test',
+        },
+      ],
+      '1.0',
+    );
 
     const virtualCreated = new Date(virtualTrack.modified);
     const virtualTaggedModified = new Date(virtualCreated.getTime() + 1000);
@@ -176,6 +193,22 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
         },
       ],
     });
+    await registryRepo.updateByTrackId(virtualTrack.id, {
+      latest_snapshot_modified: virtualTaggedModified,
+      snapshot_count: 2,
+    });
+    await registryRepo.replaceTaggedReleases(
+      virtualTrack.id,
+      [
+        {
+          snapshot_modified: virtualTaggedModified,
+          version: '1.0',
+          tagged_at: virtualTaggedModified,
+          tagged_by: 'snapshot-history-test',
+        },
+      ],
+      '1.0',
+    );
   });
 
   async function createTrack(name, type) {
@@ -232,6 +265,11 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
       limit: 50,
       offset: 0,
     });
+    expect(response.body.counts).toEqual({ tagged: 1, drafts: 2, total: 3 });
+    expect(response.body.latest_snapshot_modified).toBe(standardLatestModified.toISOString());
+    expect(response.body.latest_tagged_snapshot_modified).toBe(
+      standardTaggedModified.toISOString(),
+    );
     expect(response.body.data).toHaveLength(3);
     expect(response.body.data[0]).toMatchObject({
       id: standardTrack.id,
@@ -285,6 +323,9 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
     const response = await get(`/api/release-tracks/${virtualTrack.id}/snapshots?tagged=true`);
 
     expect(response.body.pagination.total).toBe(1);
+    expect(response.body.counts).toEqual({ tagged: 1, drafts: 0, total: 1 });
+    expect(response.body.latest_snapshot_modified).toBe(response.body.data[0].modified);
+    expect(response.body.latest_tagged_snapshot_modified).toBe(response.body.data[0].modified);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0]).toMatchObject({
       id: virtualTrack.id,
@@ -325,6 +366,9 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
       limit: 1,
       offset: 0,
     });
+    expect(tagged.body.counts).toEqual({ tagged: 1, drafts: 0, total: 1 });
+    expect(tagged.body.latest_snapshot_modified).toBe(standardLatestModified.toISOString());
+    expect(tagged.body.latest_tagged_snapshot_modified).toBe(standardTaggedModified.toISOString());
     expect(tagged.body.data.map((snapshot) => snapshot.version)).toEqual(['1.0']);
 
     const untagged = await get(
@@ -335,8 +379,120 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
       limit: 1,
       offset: 1,
     });
+    expect(untagged.body.counts).toEqual({ tagged: 0, drafts: 2, total: 2 });
+    expect(untagged.body.latest_snapshot_modified).toBe(standardLatestModified.toISOString());
+    expect(untagged.body.latest_tagged_snapshot_modified).toBe(
+      standardTaggedModified.toISOString(),
+    );
     expect(untagged.body.data).toHaveLength(1);
     expect(untagged.body.data[0].version).toBeNull();
+  });
+
+  it('retains full matching counts on partial and off-end pages', async function () {
+    const partial = await get(`/api/release-tracks/${standardTrack.id}/snapshots?limit=1&offset=1`);
+    expect(partial.body.counts).toEqual({ tagged: 1, drafts: 2, total: 3 });
+    expect(partial.body.pagination).toEqual({ total: 3, limit: 1, offset: 1 });
+    expect(partial.body.data.map((snapshot) => snapshot.modified)).toEqual([
+      standardTaggedModified.toISOString(),
+    ]);
+
+    for (const [filter, counts] of [
+      ['', { tagged: 1, drafts: 2, total: 3 }],
+      ['&tagged=true', { tagged: 1, drafts: 0, total: 1 }],
+      ['&tagged=false', { tagged: 0, drafts: 2, total: 2 }],
+    ]) {
+      const response = await get(
+        `/api/release-tracks/${standardTrack.id}/snapshots?limit=1&offset=10${filter}`,
+      );
+      expect(response.body.data).toEqual([]);
+      expect(response.body.counts).toEqual(counts);
+      expect(response.body.pagination).toEqual({ total: counts.total, limit: 1, offset: 10 });
+      expect(response.body.latest_snapshot_modified).toBe(standardLatestModified.toISOString());
+      expect(response.body.latest_tagged_snapshot_modified).toBe(
+        standardTaggedModified.toISOString(),
+      );
+    }
+  });
+
+  it('reports no releases for a draft-only track without losing its latest identity', async function () {
+    const track = await createTrack('History Draft Only', 'virtual');
+    const all = await get(`/api/release-tracks/${track.id}/snapshots`);
+    expect(all.body.counts).toEqual({ tagged: 0, drafts: 1, total: 1 });
+    expect(all.body.latest_tagged_snapshot_modified).toBeNull();
+
+    const releases = await get(`/api/release-tracks/${track.id}/snapshots?tagged=true`);
+    expect(releases.body.data).toEqual([]);
+    expect(releases.body.counts).toEqual({ tagged: 0, drafts: 0, total: 0 });
+    expect(releases.body.pagination.total).toBe(0);
+    expect(releases.body.latest_snapshot_modified).toBe(track.modified);
+    expect(releases.body.latest_tagged_snapshot_modified).toBeNull();
+  });
+
+  it('uses chronological release identities on historical pages of a release-only track', async function () {
+    const track = await createTrack('History Releases Only', 'standard');
+    await dynamicRepo.updateSnapshot(track.id, track.modified, { $set: { version: '9.0' } });
+    const newerModified = new Date(new Date(track.modified).getTime() + 1000);
+    await dynamicRepo.saveSnapshot(track.id, {
+      ...snapshotBase(track),
+      modified: newerModified,
+      version: '1.0',
+    });
+    await registryRepo.updateByTrackId(track.id, {
+      latest_snapshot_modified: newerModified,
+      snapshot_count: 2,
+    });
+    // The newest snapshot comes first and has the lower version: neither the
+    // final ledger entry nor the highest semantic version identifies Latest.
+    await registryRepo.replaceTaggedReleases(
+      track.id,
+      [
+        {
+          snapshot_modified: newerModified,
+          version: '1.0',
+          tagged_at: newerModified,
+          tagged_by: 'snapshot-history-test',
+        },
+        {
+          snapshot_modified: track.modified,
+          version: '9.0',
+          tagged_at: track.modified,
+          tagged_by: 'snapshot-history-test',
+        },
+      ],
+      '9.0',
+    );
+
+    const releases = await get(
+      `/api/release-tracks/${track.id}/snapshots?tagged=true&limit=1&offset=1`,
+    );
+    expect(releases.body.data.map((snapshot) => snapshot.version)).toEqual(['9.0']);
+    expect(releases.body.counts).toEqual({ tagged: 2, drafts: 0, total: 2 });
+    expect(releases.body.pagination.total).toBe(2);
+    expect(releases.body.latest_snapshot_modified).toBe(newerModified.toISOString());
+    expect(releases.body.latest_tagged_snapshot_modified).toBe(newerModified.toISOString());
+
+    const drafts = await get(`/api/release-tracks/${track.id}/snapshots?tagged=false`);
+    expect(drafts.body.data).toEqual([]);
+    expect(drafts.body.counts).toEqual({ tagged: 0, drafts: 0, total: 0 });
+    expect(drafts.body.pagination.total).toBe(0);
+    expect(drafts.body.latest_snapshot_modified).toBe(newerModified.toISOString());
+    expect(drafts.body.latest_tagged_snapshot_modified).toBe(newerModified.toISOString());
+  });
+
+  it('returns zero counts and null identities for an empty track history', async function () {
+    const track = await createTrack('History Empty', 'virtual');
+    await dynamicRepo.deleteSnapshot(track.id, track.modified);
+    await registryRepo.updateByTrackId(track.id, {
+      latest_snapshot_modified: null,
+      snapshot_count: 0,
+    });
+
+    const response = await get(`/api/release-tracks/${track.id}/snapshots?limit=1&offset=10`);
+    expect(response.body.data).toEqual([]);
+    expect(response.body.counts).toEqual({ tagged: 0, drafts: 0, total: 0 });
+    expect(response.body.pagination).toEqual({ total: 0, limit: 1, offset: 10 });
+    expect(response.body.latest_snapshot_modified).toBeNull();
+    expect(response.body.latest_tagged_snapshot_modified).toBeNull();
   });
 
   it('retrieves the latest snapshot from the canonical endpoint', async function () {
@@ -357,6 +513,8 @@ describe('GET /api/release-tracks/:id/snapshots', function () {
     await get(`/api/release-tracks/${standardTrack.id}/snapshots?limit=0`, 400);
     await get(`/api/release-tracks/${standardTrack.id}/snapshots?limit=201`, 400);
     await get(`/api/release-tracks/${standardTrack.id}/snapshots?offset=-1`, 400);
+    await get(`/api/release-tracks/${standardTrack.id}/snapshots?versions=all`, 400);
+    await get(`/api/release-tracks/${standardTrack.id}/snapshots?include=members`, 400);
   });
 
   it('returns 404 when the release track does not exist', async function () {
