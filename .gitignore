@@ -1,6 +1,13 @@
 # A place to store artifacts during local development (scripts, datasets, dotenv files, etc.)
 .nocommit/**/*
 
+# Local planning and handoff logs; never commit or force-add these files.
+/TODO.md
+/FRONTEND_TODO.md
+# Keep the retired documentation paths from being recreated.
+/docs/developer/TODO.md
+/docs/developer/FRONTEND_TODO.md
+
 # Machine-specific agent configuration (copy AGENTS.local.example.md to create)
 AGENTS.local.md
 

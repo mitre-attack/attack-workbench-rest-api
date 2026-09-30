@@ -440,6 +440,18 @@ paths:
   /api/config/allowed-values:
     $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1allowed-values'
 
+  /api/config/allowed-values/catalog:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1allowed-values~1catalog'
+
+  /api/config/allowed-values/validate:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1allowed-values~1validate'
+
+  /api/config/allowed-values/rules:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1allowed-values~1rules'
+
+  /api/config/allowed-values/rules/{propertyName}/{domainName}:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1allowed-values~1rules~1{propertyName}~1{domainName}'
+
   /api/config/organization-identity:
     $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1organization-identity'
 

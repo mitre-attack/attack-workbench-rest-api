@@ -33,6 +33,7 @@ Architecture, patterns, and implementation details for contributors.
 - [Build Information](developer/build-information.md): Build metadata provenance, runtime configuration, and frontend integration
 - [Data Quality Query Design](developer/data-quality-reports.md): Duplicate-report memory amplification, query optimization, and remaining response-size limits
 - [Data Model](developer/data-model.md): Database schema and STIX object structure
+- [Allowed Values Model](developer/data-model.md#runtime-allowed-values-configuration): Schema catalog, initialization, persistence, and invalid settings
 - [Event Bus Architecture](developer/event-bus-architecture.md): Event-driven architecture for cross-document dependencies
 - [Lifecycle Hooks Guide](developer/lifecycle-hooks-guide.md): Service lifecycle hooks pattern
 - [Cross-Service Reads Pattern](developer/cross-service-reads-pattern.md): Cross-service communication patterns
@@ -44,10 +45,6 @@ Architecture, patterns, and implementation details for contributors.
 
 ### Release Tracks (Internals)
 
-- [Implementation Backlog](developer/TODO.md): Active release-track work and
-  completed implementation records
-- [Frontend Handoff](developer/FRONTEND_TODO.md): Backend contract changes
-  requiring downstream Angular updates
 - [Entities](developer/release-tracks/entities.md): Database schemas and data models
 - [Snapshot Creation Causes](developer/release-tracks/snapshot-creation-causes.md): Persisted creation-cause enum, standard/virtual operation mapping, and historical fallback
 - [Sealed Content Manifests](developer/release-tracks/sealed-content-manifests.md): Why every snapshot seals its bill of materials, how the collection object is projected, and publication inheritance
@@ -65,6 +62,7 @@ Architecture, patterns, and implementation details for contributors.
 Configuration, deployment, and identity provider setup.
 
 - [Configuration](admin/configuration.md): Complete configuration guide (environment variables, JSON files)
+- [Allowed Values Administration](admin/configuration.md#allowed-values): Initial values, ADM versions and upgrades, adding choices, and invalid settings
 - [Automation Run Audit Trail](admin/automation-runs.md): How to inspect migration and scheduler audit records
 - [Virtual Track Schedules](admin/virtual-track-schedules.md): UTC execution, restart recovery, retries, and observability
 - [Release-Track Membership Reconciliation](admin/release-track-reconciliation.md): Inspect and repair durable object-backref protection failures

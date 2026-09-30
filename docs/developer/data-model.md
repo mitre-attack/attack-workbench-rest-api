@@ -77,6 +77,88 @@ The Mongoose discriminator capability supports storing multiple object types in 
 
 The `__t` property is created and managed by Mongoose to distinguish between the different types of objects stored in the `attackObjects` collection.
 
+### Runtime Allowed Values Configuration
+
+`AllowedValuesConfiguration` is a singleton MongoDB document with
+`_id: "allowed-values"`. It stores property/domain `rules` keys separately from
+value rows, so a configured group can remain empty. Each row has an ObjectId,
+object type, property, domain, value, and enabled state. This is application
+configuration, not STIX content or object history.
+
+#### Catalog and file dependencies
+
+`app/lib/allowed-values-catalog.js` builds the catalog when its module loads:
+
+- The bundled `app/config/allowed-values.json` registers the supported
+  object/property pairs and initial rule keys. Its values supply suggestions
+  for non-enum fields.
+- `getSchema` in `app/lib/validation-schemas.js` supplies the installed ADM
+  partial object schemas. The catalog reads enum choices from Zod and checks
+  each candidate in its object-type/domain context. Software must satisfy both
+  tool and malware schemas; related-asset sectors use their nested context.
+- Data-source/component strings use ADM's custom validator. Seed suggestions
+  are examples, not an exhaustive list of permissible strings.
+- `admVersion` comes from the installed ADM package's `package.json`, alongside
+  the schemas used for validation. `/catalog` returns both the version and
+  definitions; the frontend displays that version and uses those definitions.
+
+The catalog is immutable for the process lifetime. Upgrading the installed
+package requires restarting the backend to rebuild it; reload the UI to fetch
+the new catalog. Runtime settings are read from MongoDB, not cached with it.
+
+The bundled JSON remains a dependency on an initialized database:
+`retrieveAllowedValues` also uses its object/property/domain layout and ordering
+to construct the nested dropdown response. `ALLOWED_VALUES_PATH` overrides only
+the file read for initial values, not these bundled metadata uses. Do not remove
+the bundled file on the assumption that seeding is its only role.
+
+#### Initialization and writes
+
+`checkSystemConfiguration` calls the Allowed Values service during startup.
+If the singleton is absent, the service reads the configured seed file,
+validates all scopes and values, and inserts the configuration with atomic
+`$setOnInsert`. Existing configuration is not reseeded. For legacy documents
+missing rule keys, an aggregation update combines initial keys with persisted
+row scopes while retaining the rows.
+
+Creation requires an absent rule key and adds its key and values in one update.
+Replacement requires an existing key and filters/replaces that group's rows
+inside MongoDB. Concurrent saves to different groups retain both changes;
+duplicate creation has one winner. No multi-document transactions are required.
+
+Every option, including disabled options, must pass ADM field and contextual
+validation before a write. Duplicate object-type/value combinations are rejected.
+General STIX validation flags and Validation Bypasses do not participate in
+these checks. `/validate` offers the same candidate check without persistence;
+create and update still validate their own requests.
+
+#### Reads and invalid legacy settings
+
+`projectRules` groups saved rows by property/domain, combining equal value/state
+pairs across object types. On every read it separates compliant `values` from
+`invalidValues`, which carry rejection reasons. The dropdown response excludes
+invalid or disabled rows.
+
+This is the entire quarantine mechanism: no rows are moved, no quarantine flag
+is stored, and no stored enabled flag is changed. An ADM upgrade can therefore
+change how a retained row is classified. The admin editor omits invalid rows
+from its replacement payload and warns before saving; that save removes them.
+Existing STIX objects are not modified.
+
+#### Extending supported choices
+
+For an existing enum property, a new ADM enum member is discovered from the
+upgraded backend package; it does not also need a JSON entry. Add it to the seed
+only if new configurations should enable it by default. Existing databases still
+need an administrator to enable new, unconfigured choices. Formatted values can
+be added without a library change when the current ADM validator accepts them.
+
+A new property/object-type pair is different: register it in Workbench, confirm
+the schema mapping and editor support, and retain ADM validation. The admin
+workflow does not create arbitrary schema properties. See the
+[operator procedures](../admin/configuration.md#allowed-values) for initialization,
+adding values, ADM upgrades, and API usage.
+
 ## Sample Objects
 
 ### Technique Object Example
