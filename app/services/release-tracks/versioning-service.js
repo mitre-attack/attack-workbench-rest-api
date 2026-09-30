@@ -18,6 +18,7 @@ const contentManifestService = require('./content-manifest-service');
 const publicationService = require('./publication-service');
 const bundleHashService = require('./bundle-hash-service');
 const registryRepo = require('../../repository/release-tracks/release-track-registry.repository');
+const draftCleanupService = require('./draft-cleanup-service');
 const uuid = require('uuid');
 const logger = require('../../lib/logger');
 const {
@@ -95,18 +96,85 @@ function virtualReleaseChanges(previousSnapshot, draftSnapshot) {
 }
 
 /**
- * Capture the tagged component versions frozen into a materialized virtual
- * draft. Track IDs are stable provenance keys; component names are descriptive
- * metadata and may change or collide.
+ * Capture the component versions frozen into a materialized virtual draft,
+ * using null for draft sources. Track IDs are stable provenance keys;
+ * component names are descriptive metadata and may change or collide.
  */
 function virtualComponentVersions(snapshot) {
   return Object.fromEntries(
     (snapshot.composition_resolution?.component_snapshots || []).map((component) => [
       component.track_id,
-      component.resolved_version,
+      component.resolved_version ?? null,
     ]),
   );
 }
+
+/**
+ * Calculate prospective membership independently of version allocation and
+ * publication. Callers must resolve staged selectors before planning.
+ */
+function planMembership(sourceSnapshot) {
+  if (
+    sourceSnapshot.type === 'standard' &&
+    (sourceSnapshot.staged || []).some((entry) => revisionReference.isLatest(entry.object_modified))
+  ) {
+    throw new TypeError('Standard release planning requires resolved staged revisions');
+  }
+
+  const normalized = tierRevisionInvariant.normalizeSnapshot(sourceSnapshot);
+  const snapshot = normalized.snapshot;
+  const staged = snapshot.type === 'standard' ? snapshot.staged || [] : [];
+  const existingMembers = snapshot.members || [];
+  let mergedMembers = existingMembers;
+  let blockingError;
+
+  if (staged.length > 0) {
+    const incoming = staged.map(({ object_ref, object_modified }) => ({
+      object_ref,
+      object_modified,
+    }));
+    const policy = snapshot.config?.promotion_conflicts?.staged_to_members || 'abort';
+
+    try {
+      mergedMembers = conflictResolution.applyConflictPolicy(
+        existingMembers,
+        incoming,
+        policy,
+      ).merged;
+    } catch (err) {
+      if (!(err instanceof ReleaseConflictError)) throw err;
+      blockingError = err;
+    }
+  }
+
+  return { normalized, snapshot, staged, mergedMembers, blockingError };
+}
+
+async function resolveReleaseInput(snapshot, latestByObjectRef) {
+  const releaseInput =
+    snapshot.type === 'standard'
+      ? {
+          ...snapshot,
+          staged: await revisionReference.resolveEntries(snapshot.staged || [], latestByObjectRef),
+        }
+      : snapshot;
+  await primaryRevisionService.assertStoredEntries([
+    ...(releaseInput.members || []),
+    ...(releaseInput.staged || []),
+  ]);
+  return releaseInput;
+}
+
+/**
+ * Return the exact members a standard draft would release, without allocating
+ * a version, checking prior publication, or changing the source snapshot.
+ */
+exports.planPreviewMembers = async function planPreviewMembers(snapshot, latestByObjectRef) {
+  const input = await resolveReleaseInput(snapshot, latestByObjectRef);
+  const plan = planMembership(input);
+  if (plan.blockingError) throw plan.blockingError;
+  return plan.mergedMembers;
+};
 
 /**
  * Build the complete release plan without reading or writing external state.
@@ -136,15 +204,8 @@ function planRelease(
         'Create a persisted draft with POST /api/release-tracks/:id/virtual/snapshots/create before previewing or releasing it',
     });
   }
-  if (
-    sourceSnapshot.type === 'standard' &&
-    (sourceSnapshot.staged || []).some((entry) => revisionReference.isLatest(entry.object_modified))
-  ) {
-    throw new TypeError('Standard release planning requires resolved staged revisions');
-  }
-
-  const normalized = tierRevisionInvariant.normalizeSnapshot(sourceSnapshot);
-  const snapshot = normalized.snapshot;
+  const { normalized, snapshot, staged, mergedMembers, blockingError } =
+    planMembership(sourceSnapshot);
   const releaseModified =
     sourceSnapshot.type === 'standard'
       ? new Date(Math.max(now.getTime(), new Date(sourceSnapshot.modified).getTime() + 1))
@@ -164,29 +225,6 @@ function planRelease(
       ? tierCounts(previousTaggedSnapshot)
       : { members_count: 0, quarantine_count: 0 }
     : tierCounts(snapshot);
-  const staged = snapshot.type === 'standard' ? snapshot.staged || [] : [];
-  const existingMembers = snapshot.members || [];
-  let mergedMembers = existingMembers;
-  let blockingError;
-
-  if (staged.length > 0) {
-    const incoming = staged.map(({ object_ref, object_modified }) => ({
-      object_ref,
-      object_modified,
-    }));
-    const policy = snapshot.config?.promotion_conflicts?.staged_to_members || 'abort';
-
-    try {
-      mergedMembers = conflictResolution.applyConflictPolicy(
-        existingMembers,
-        incoming,
-        policy,
-      ).merged;
-    } catch (err) {
-      if (!(err instanceof ReleaseConflictError)) throw err;
-      blockingError = err;
-    }
-  }
 
   const additionalOps = {};
   for (const tier of normalized.changedTiers) {
@@ -304,26 +342,12 @@ async function planLoadedSnapshot(trackId, snapshot, options) {
       throw new AlreadyReleasedError(existingRelease.version);
     }
   }
-  const [versionHistory, previousTaggedSnapshot, resolvedStaged] = await Promise.all([
+  const [versionHistory, previousTaggedSnapshot, releaseInput] = await Promise.all([
     releaseHistoryService.getTrackWideVersionHistory(trackId),
     snapshot.type === 'virtual'
       ? dynamicRepo.getLatestTaggedSnapshotBefore(trackId, snapshot.modified)
       : Promise.resolve(null),
-    snapshot.type === 'standard'
-      ? revisionReference.resolveEntries(snapshot.staged || [])
-      : Promise.resolve(snapshot.staged || []),
-  ]);
-  const releaseInput =
-    snapshot.type === 'standard'
-      ? {
-          ...snapshot,
-          staged: resolvedStaged,
-        }
-      : snapshot;
-
-  await primaryRevisionService.assertStoredEntries([
-    ...(releaseInput.members || []),
-    ...(releaseInput.staged || []),
+    resolveReleaseInput(snapshot),
   ]);
 
   const plan = planRelease(
@@ -344,6 +368,9 @@ async function planLoadedSnapshot(trackId, snapshot, options) {
       snapshot,
       plan.plannedSnapshot.members,
     );
+  }
+  if (snapshot.type === 'virtual') {
+    plan.summary.draft_squash = await draftCleanupService.previewSquash(trackId, snapshot);
   }
   return plan;
 }
@@ -379,7 +406,7 @@ async function refreshReleaseArtifacts(tagged) {
 }
 exports.refreshReleaseArtifacts = refreshReleaseArtifacts;
 
-async function commitPlan(plan) {
+async function commitPlan(plan, lease) {
   if (plan.blockingError) throw plan.blockingError;
 
   const source = plan.sourceSnapshot;
@@ -402,9 +429,11 @@ async function commitPlan(plan) {
   }
   setOps.publication = await publicationService.freezePublication(source);
   setOps.bundle_id = `bundle--${uuid.v4()}`;
+  if (source.type === 'virtual') setOps.release_event_id = plan.releaseEventId || uuid.v4();
 
   let tagged;
   try {
+    await lease.assertOwned();
     if (source.type === 'standard') {
       const releaseSnapshot = { ...plan.plannedSnapshot, ...setOps };
       delete releaseSnapshot._id;
@@ -436,6 +465,7 @@ async function commitPlan(plan) {
   }
 
   const withArtifacts = await refreshReleaseArtifacts(tagged);
+  await lease.assertOwned();
 
   await releaseHistoryService.reconcileTaggedReleases(plan.trackId);
   if (source.type === 'standard') {
@@ -472,8 +502,22 @@ async function withReleaseLock(trackId, operation) {
     });
   }
 
+  const lease = {
+    async assertOwned() {
+      const renewed = await registryRepo.renewReleaseLock(
+        trackId,
+        token,
+        new Date(Date.now() - RELEASE_LOCK_TIMEOUT_MS),
+      );
+      if (!renewed) {
+        throw new ReleaseConflictError('The release-track lifecycle lease was lost', {
+          track_id: trackId,
+        });
+      }
+    },
+  };
   try {
-    return await operation();
+    return await operation(lease);
   } finally {
     try {
       await registryRepo.releaseReleaseLock(trackId, token);
@@ -508,15 +552,45 @@ exports.planReleaseByModified = async function planReleaseByModified(
   return planLoadedSnapshot(trackId, snapshot, options);
 };
 
+async function releaseLocked(trackId, loadPlan, options) {
+  if (options.squash_drafts) draftCleanupService.assertAdmin(options.actor);
+  return withReleaseLock(trackId, async (lease) => {
+    const plan = await loadPlan();
+    const intent = options.squash_drafts
+      ? await draftCleanupService.beginSquash(plan, options, lease)
+      : null;
+    if (intent) plan.releaseEventId = intent.event_id;
+    let released;
+    try {
+      released = await commitPlan(plan, lease);
+    } catch (error) {
+      if (intent) throw await draftCleanupService.failRelease(intent, error);
+      throw error;
+    }
+    if (!intent) return released;
+    intent.cleanup = {
+      kind: 'squash',
+      eligible_count: intent.request.eligible_count,
+      deleted_count: 0,
+      protected_count: 0,
+      cursor: null,
+      pending_batch: [],
+      release_committed: true,
+      publication_complete: true,
+    };
+    return { ...released, draft_cleanup: await draftCleanupService.runCleanup(intent, lease) };
+  });
+}
+
 exports.releaseLatest = async function releaseLatest(trackId, options = {}) {
-  return withReleaseLock(trackId, async () =>
-    commitPlan(await exports.planLatestRelease(trackId, options)),
-  );
+  return releaseLocked(trackId, () => exports.planLatestRelease(trackId, options), options);
 };
 
 exports.releaseByModified = async function releaseByModified(trackId, modified, options = {}) {
-  return withReleaseLock(trackId, async () =>
-    commitPlan(await exports.planReleaseByModified(trackId, modified, options)),
+  return releaseLocked(
+    trackId,
+    () => exports.planReleaseByModified(trackId, modified, options),
+    options,
   );
 };
 

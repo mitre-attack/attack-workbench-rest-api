@@ -6,13 +6,31 @@ This document tracks new database schemas, interfaces, etc.; as well as changes 
 
 | Collection                           | Purpose                                                                                                                                                                                                           | Written by                                                                                                | Growth and retention                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `releaseTrackRegistry`               | One document per track: name, type, denormalized counters, the tagged-release catalogue (`tagged_releases`), the release lock, and virtual schedules. The index that maps a track to its own snapshot collection. | Track create/delete, every snapshot write (counters), release commit and conversion to draft (catalogue). | One document per track.                                                                                      |
-| `release-track--<uuid>`              | The track's snapshots: one active rolling draft, a preserved source draft per tagged standard release, and every tagged release; every materialized draft plus releases for a virtual track.                      | Snapshot service and release commit.                                                                      | Standard tracks grow by two snapshots per release plus one active draft; virtual tracks by materializations. |
+| `releaseTrackRegistry` | Track identity, counters, tagged catalogue, lifecycle lock, and live virtual schedule with cron-only nested retention. | Track creation/deletion, snapshot lifecycle and schedule updates. | One document per track. |
+| `release-track--<uuid>` | Standard rolling drafts, preserved release sources, virtual-pinned source drafts and tags; virtual drafts and releases. | Snapshot service and release commit. | Virtual drafts can be bounded by count retention or explicit release-time squash; tagged snapshots are never pruned. |
 | `releaseTrackContentManifests`       | The sealed bill of materials each snapshot references (`content_manifest_id`). Several snapshots share one manifest when their member sets are identical.                                                         | Sealed whenever members are written; discarded when no snapshot references it.                            | Bounded by member-changing writes, not by snapshot count.                                                    |
 | `releaseTrackContentManifestEntries` | One exact-revision pointer per object a manifest emits or depends on. The `(object_ref, object_modified)` index is what protects referenced revisions from deletion.                                              | With its manifest.                                                                                        | Roughly members + relationships + a few supporting objects per manifest.                                     |
 | `releaseTrackReconciliations`        | Outstanding backref reconciliation work only: a record is created before the `workspace.release_tracks` listeners run and deleted when they succeed, so anything present is pending or failed and needs repair.   | Every snapshot write.                                                                                     | Normally empty.                                                                                              |
-| `releaseTrackAuditEvents`            | Audit trail for administrator-only track deletion, release conversion to draft, and release retagging (`delete_track`, `convert_release_to_draft` (legacy: `delete_release`), `retag_release`).                   | Those operations.                                                                                         | Empty until an administrator performs one of those operations.                                               |
-| `virtualTrackScheduleOccurrences`    | Durable claims for scheduled virtual materialization (cron or dated schedules) so restarts and duplicate delivery execute each occurrence once.                                                                   | The scheduler.                                                                                            | One record per scheduled occurrence; empty when no virtual track has a schedule.                             |
+| `releaseTrackAuditEvents` | Destructive audit and bounded cleanup intent/progress for deletion, conversion, retag, `draft_retention`, and `draft_squash`. | Destructive operations and cleanup recovery. | Durable audit records; cleanup results are discoverable independently of snapshot survival. |
+| `virtualTrackScheduleOccurrences` | Ownership-fenced claims and monotonic `snapshot_modified` materialization receipts. | Scheduler and scheduled snapshot lifecycle. | One record per track/time, retained after snapshot cleanup; also covers API-originated occurrence metadata. |
+
+Retention is `{ max_drafts: null | positive safe integer }`, supplied either on
+the manual materialization request or inside the live cron `snapshot_schedule`.
+There is no global registry retention policy. Workbench virtual responses
+project the schedule plus registry `snapshot_count` and `tagged_release_count`
+for paginated clients; these are not historical snapshot content.
+
+Retention audit intents persist their `source` (`manual` or `recurring`), applied
+`max_drafts`, and original cutoff. Manual retries use that fixed request policy;
+recurring retries additionally honor the currently enabled cron policy. Legacy
+intents lacking these fields cannot select further drafts, but storage repair
+remains available.
+
+A server-controlled `release_event_id` binds release-time cleanup to the original
+tagging event, independently of mutable version labels and reusable virtual
+snapshot timestamps. Cleanup progress belongs to its audit record, not the
+released manifest or version-history content. See [Deletion Guardrails](deletion-guardrails.md)
+and the [API lifecycle contracts](../../user/release-tracks/api-reference.md#virtual-draft-retention).
 
 Removed by the sealed-manifest work: the former `releaseTrackGraphManifests`
 and `releaseTrackGraphManifestEntries` collections (renamed in place by the
@@ -393,7 +411,7 @@ Virtual release tracks compute their contents by aggregating objects from compon
     component_tracks: [
       {
         track_id: "release-track--groups-monthly",
-        resolution_strategy: "latest_tagged",  // "latest_tagged" | "specific_version" | "specific_snapshot"
+        resolution_strategy: "latest_tagged",  // "latest_tagged" | "latest_preview" | "specific_version" | "specific_snapshot"
         priority: 1,  // Always required and unique (lower number = higher priority)
 
         // Optional: filters to limit which objects are included
@@ -617,9 +635,11 @@ on the resulting snapshot and projected into track-list and snapshot-history
 responses. Snapshot clones clear inherited occurrence metadata unless the
 mutation explicitly supplies a replacement.
 
-The track-local unique index on `scheduled_for`, together with the durable
-`virtualTrackScheduleOccurrences` claim record, makes duplicate delivery and
-restart recovery idempotent. Failed occurrences remain retryable.
+The track-local unique index prevents duplicate surviving scheduled snapshots.
+The occurrence ledger also retains a monotonic materialization receipt after
+cleanup, so missing snapshots do not make completed work executable again.
+Unmaterialized failures remain retryable; stale claim owners cannot overwrite a
+new worker's completion. See [Deletion Guardrails](deletion-guardrails.md).
 
 **Key Differences from Standard Tracks:**
 
@@ -627,30 +647,30 @@ restart recovery idempotent. Failed occurrences remain retryable.
 2. **Two-Tier System**: Only `members` and `quarantine` (no `candidates` or `staged` tiers)
 3. **Composition Rules**: Defines which component tracks to aggregate and how
 4. **Composition Resolution**: Immutable metadata about how snapshot was computed
-5. **Sync from Members Only**: Always pulls from component tracks' `members` tier (never staged or candidates)
+5. **Effective Membership**: Published sources contribute members; `latest_preview` drafts contribute prospective membership (members plus staged changes under source conflict rules, never candidates)
 6. **No Workflow States**: No work-in-progress, awaiting-review, or reviewed states
 7. **Scheduled Snapshots**: Can auto-generate snapshots on schedule
 8. **Component Version Tracking**: Version history records which component versions were included
 
 **Virtual Track Constraints:**
 
-- Can only reference **tagged snapshots** from component tracks (not drafts)
-- Can only sync from component tracks' **`members` tier** (released objects only)
+- Select published snapshots or the newest standard snapshot with `latest_preview`
+- Preview drafts through standard release membership planning; never mutate the source or include candidates
 - Can only compose from **standard release tracks** (not other virtual tracks - no nesting allowed)
 - Is purely compositional and has no `native_members` or second membership
   authority; aggregate-specific content belongs in another standard component
   track
 - Snapshots are created **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
-- Component tracks must exist and have at least one tagged release
+- Component tracks must exist; selected source snapshot eligibility is checked at materialization
 - Each component track must have a unique **priority** value (no duplicates)
 - Priority is a required non-negative integer for every component, regardless
   of deduplication strategy
 - Component IDs and priorities are validated before initial virtual-track
   persistence as well as during composition updates and materialization
 - Snapshot schedules are strict and mode-discriminated: `manual` accepts only
-  `mode`, `cron` requires only a five-field `cron` expression, and `dates`
-  requires only a nonempty `dates` array
+  `mode`, `cron` requires a five-field `cron` expression and accepts optional
+  nested `draft_retention`, and `dates` requires only a nonempty `dates` array
 - Standard tracks reject `snapshot_schedule`; virtual `cron` and `dates`
   schedules execute through the global scheduler
 - `filters.object_types` uses the canonical Workbench STIX type names from
@@ -668,12 +688,15 @@ restart recovery idempotent. Failed occurrences remain retryable.
   `version_history[].component_versions`. This is an object keyed by immutable
   component `track_id`, not display name. It records the frozen materialization
   inputs even when a component has newer releases by the time the virtual draft
-  is tagged. Standard release history entries omit the field
+  is tagged. Draft components record `null`; tagged components record their
+  version string. Standard release history entries omit the field
 - Composition request objects are strict; unknown composition, component,
   filter, and deduplication keys return `400 Bad Request`
 - Selector fields form a discriminated request contract:
-  - `latest_tagged` rejects `version` and `snapshot`
+  - `latest_tagged` and `latest_preview` reject `version` and `snapshot`
   - `specific_version` requires `version` and rejects `snapshot`
   - `specific_snapshot` requires `snapshot` and rejects `version`
 - Quarantine promotion selects an exact revision in a new draft and preserves
   the source snapshot's immutable `composition_resolution`
+- Retired `latest_draft` is read-only historical composition/provenance, not an
+  active request strategy or an alias for preview behavior

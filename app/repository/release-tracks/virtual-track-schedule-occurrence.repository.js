@@ -1,7 +1,8 @@
 'use strict';
 
+const { randomUUID } = require('node:crypto');
 const VirtualTrackScheduleOccurrence = require('../../models/release-tracks/virtual-track-schedule-occurrence-model');
-const { DatabaseError } = require('../../exceptions');
+const { DatabaseError, ReleaseConflictError } = require('../../exceptions');
 
 class VirtualTrackScheduleOccurrenceRepository {
   async register(trackId, scheduleMode, scheduledFor) {
@@ -22,6 +23,49 @@ class VirtualTrackScheduleOccurrenceRepository {
     } catch (err) {
       throw new DatabaseError(err);
     }
+  }
+
+  async getMaterializationReceipt(trackId, scheduledFor) {
+    try {
+      return await VirtualTrackScheduleOccurrence.findOne({
+        track_id: trackId,
+        scheduled_for: scheduledFor,
+      })
+        .lean()
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
+  async recordMaterialization(trackId, scheduledMaterialization, snapshotModified) {
+    const { schedule_mode: scheduleMode, scheduled_for: scheduledFor } = scheduledMaterialization;
+    await this.register(trackId, scheduleMode, scheduledFor);
+    let receipt;
+    try {
+      receipt = await VirtualTrackScheduleOccurrence.findOneAndUpdate(
+        {
+          track_id: trackId,
+          scheduled_for: scheduledFor,
+          $or: [{ snapshot_modified: null }, { snapshot_modified: snapshotModified }],
+        },
+        { $set: { snapshot_modified: snapshotModified } },
+        { new: true, lean: true },
+      ).exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+    if (receipt) return receipt;
+
+    const existing = await this.getMaterializationReceipt(trackId, scheduledFor);
+    throw new ReleaseConflictError('Scheduled occurrence already has a different materialization', {
+      details: {
+        track_id: trackId,
+        scheduled_for: scheduledFor,
+        snapshot_modified: existing?.snapshot_modified,
+        requested_snapshot_modified: snapshotModified,
+      },
+    });
   }
 
   async findDue(now) {
@@ -57,6 +101,7 @@ class VirtualTrackScheduleOccurrenceRepository {
           $set: {
             status: 'running',
             claimed_at: now,
+            claim_token: randomUUID(),
             claim_expires_at: claimExpiresAt,
             next_retry_at: null,
             finished_at: null,
@@ -71,42 +116,61 @@ class VirtualTrackScheduleOccurrenceRepository {
     }
   }
 
-  async complete(trackId, scheduledFor, snapshotModified) {
-    return this._finish(trackId, scheduledFor, {
-      status: 'completed',
-      snapshot_modified: snapshotModified,
-      finished_at: new Date(),
-      claim_expires_at: null,
-      next_retry_at: null,
-      last_error: null,
-    });
+  async complete(claimed) {
+    return this._finish(
+      claimed,
+      { snapshot_modified: { $ne: null } },
+      {
+        status: 'completed',
+        finished_at: new Date(),
+        claim_expires_at: null,
+        next_retry_at: null,
+        last_error: null,
+      },
+    );
   }
 
-  async fail(trackId, scheduledFor, error, nextRetryAt) {
-    return this._finish(trackId, scheduledFor, {
-      status: 'failed',
-      finished_at: new Date(),
-      claim_expires_at: null,
-      next_retry_at: nextRetryAt,
-      last_error: error,
-    });
+  async fail(claimed, error, nextRetryAt) {
+    // A saved result remains a receipt even when its audit needs retrying.
+    return this._finish(
+      claimed,
+      {},
+      {
+        status: 'failed',
+        finished_at: new Date(),
+        claim_expires_at: null,
+        next_retry_at: nextRetryAt,
+        last_error: error,
+      },
+    );
   }
 
-  async skip(trackId, scheduledFor, reason) {
-    return this._finish(trackId, scheduledFor, {
-      status: 'skipped',
-      finished_at: new Date(),
-      claim_expires_at: null,
-      next_retry_at: null,
-      last_error: { message: reason },
-    });
+  async skip(claimed, reason) {
+    return this._finish(
+      claimed,
+      { snapshot_modified: null },
+      {
+        status: 'skipped',
+        finished_at: new Date(),
+        claim_expires_at: null,
+        next_retry_at: null,
+        last_error: { message: reason },
+      },
+    );
   }
 
-  async _finish(trackId, scheduledFor, updates) {
+  async _finish(claimed, conditions, updates) {
+    if (!claimed?.claim_token) return null;
     try {
       return await VirtualTrackScheduleOccurrence.findOneAndUpdate(
-        { track_id: trackId, scheduled_for: scheduledFor },
-        { $set: updates },
+        {
+          track_id: claimed.track_id,
+          scheduled_for: claimed.scheduled_for,
+          status: 'running',
+          claim_token: claimed.claim_token,
+          ...conditions,
+        },
+        { $set: { ...updates, claim_token: null } },
         { new: true, lean: true },
       ).exec();
     } catch (err) {

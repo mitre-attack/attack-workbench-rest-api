@@ -455,6 +455,18 @@ GET /api/release-tracks/:id/snapshots
 Filtering occurs before pagination, so `pagination.total` is the total number
 of snapshots matching `tagged`, not the total number in the track.
 
+The response also includes `counts: { tagged, drafts, total }`. All three counts
+use the same `tagged` filter before pagination: `counts.total` equals
+`pagination.total` and `counts.tagged + counts.drafts`. They remain query-wide
+when the requested page is partial or empty. Thus `tagged=true` always reports
+zero drafts, and `tagged=false` always reports zero tagged releases.
+
+`latest_snapshot_modified` and `latest_tagged_snapshot_modified` are unfiltered
+track identities, not the first row of the selected page. They are nullable ISO
+timestamps; the tagged identity is chronological rather than the highest semantic
+version. Clients use them to mark the actual latest snapshot and gate latest-only
+actions while refreshing filtered/paginated history.
+
 Every summary contains `id`, `type`, `modified`, `version`, `name`, the
 track-level `description` (when set), `snapshot_description` (when the snapshot
 has user-authored notes), `members_count`, the opaque `content_manifest_id`
@@ -513,10 +525,17 @@ Inapplicable count keys are omitted rather than returned as zero.
     }
   ],
   "pagination": {
-    "total": 47,
+    "total": 1,
     "limit": 50,
     "offset": 0
-  }
+  },
+  "counts": {
+    "tagged": 1,
+    "drafts": 0,
+    "total": 1
+  },
+  "latest_snapshot_modified": "2024-01-15T16:20:00.000Z",
+  "latest_tagged_snapshot_modified": "2024-01-15T16:20:00.000Z"
 }
 ```
 
@@ -659,7 +678,7 @@ The virtual release response records the materialized component provenance in
 ```
 
 Keys are immutable component track IDs and values are the tagged versions
-stored in the selected draft's `composition_resolution`. The server does not
+or `null` for draft components stored in the selected draft's `composition_resolution`. The server does not
 look up the components' current releases, so advancing a component after
 materialization does not rewrite the virtual release's provenance. Standard
 release history entries omit `component_versions`.
@@ -1372,7 +1391,7 @@ multiple standard component tracks based on configurable rules.
 - Compute contents only from standard component tracks; virtual-track nesting
   is rejected
 - Are purely compositional and cannot own native members
-- Only reference **tagged snapshots** from component tracks (never drafts)
+- Reference **tagged snapshots** or explicitly selected **active drafts**
 - Create snapshots **manually or on schedule** (never event-driven)
 - All snapshots start as **drafts** and must be explicitly tagged
 - Support **resolution strategies** to control which component versions are included
@@ -1381,9 +1400,165 @@ multiple standard component tracks based on configurable rules.
 
 1. `latest_tagged` - Always use the most recent tagged snapshot from component
 2. `specific_version` - Pin to a specific semantic version (e.g., "5.0")
-3. `specific_snapshot` - Pin to a specific snapshot by timestamp
+3. `specific_snapshot` - Pin to a specific tagged snapshot by timestamp
+4. `latest_preview` - Use the newest standard snapshot's prospective release membership
+
+`latest_preview` accepts drafts and tagged snapshots. Draft input contributes
+members plus staged changes through the standard release membership planner,
+including dynamic revision resolution and source conflict policies. Tagged input
+contributes published members. Candidates are excluded. The source is not tagged
+or mutated, and standard release version allocation/publication is not performed.
+Filters and cross-component deduplication run after source membership planning;
+blocking source conflicts return `409` with the source track ID and conflicts.
+
+Published and pinned strategies remain members-only. Preview provenance records
+the exact source snapshot timestamp and `resolved_version: null` for a draft, or
+the actual version for a tagged source. `total_objects_in_source` counts planned
+preview members before filters, not just the source draft's stored members.
+Later changes cannot rewrite the frozen virtual materialization.
+
+New composition requests reject retired `latest_draft`. Existing saved rules
+must be explicitly changed to a supported strategy before materialization.
+Historical composition/provenance retains its original label and contents.
 
 See [virtual-tracks.md](./virtual-tracks.md) for complete documentation.
+
+### Virtual Draft Retention
+
+Retention has two independent, administrator-controlled triggers. Both count
+untagged snapshots across the whole virtual track, regardless of creation cause;
+tags and protected snapshots remain excluded from deletion.
+
+**Ad-hoc policy:** pass a one-shot limit when explicitly creating a draft:
+
+```http
+POST /api/release-tracks/:id/virtual/snapshots/create
+Content-Type: application/json
+
+{ "description": "Reviewed composition", "draft_retention": { "max_drafts": 10 } }
+```
+
+Omitting `draft_retention`, or setting `max_drafts` to `null`, means no retention
+for this operation. The policy is not saved and never inherits or changes the
+recurring schedule's policy. A supplied policy requires an administrator.
+
+**Recurring policy:** save a limit inside the cron schedule:
+
+```http
+PUT /api/release-tracks/:id/virtual/schedule
+Content-Type: application/json
+
+{ "mode": "cron", "cron": "0 * * * *", "draft_retention": { "max_drafts": 10 } }
+```
+
+Only trusted scheduler cron execution applies this saved policy. Manual
+materialization never inherits it, and dated schedules do not use it. Clients
+cannot activate it by supplying `scheduled_materialization` provenance. The
+policy can also be nested in `snapshot_schedule` when creating a virtual track.
+
+Counts must be positive safe integers; missing/null limits disable cleanup.
+The `manual` and `dates` schedule shapes reject retention fields. Changing a
+cron retention policy requires an administrator; editors can change timing while
+preserving that policy, or switch away from recurring mode. Saving only the
+schedule/policy creates no draft and deletes nothing immediately.
+
+Configuration, metadata, composition and quarantine updates never trigger
+retention. Cleanup still runs only after successful materialization. Manual
+cleanup retries preserve the approved request limit and original cutoff;
+recurring retries also honor the current saved policy, stopping further deletion
+if it is disabled or the schedule changes away from cron.
+
+The former global policy, top-level track-creation field, and
+`PUT /virtual/draft-retention` endpoint are retired. Existing root/global settings
+are inert; configure the recurring policy explicitly. Legacy cleanup intents
+without trigger/limit provenance may repair already-deleted storage but cannot
+select additional drafts.
+
+### Release-Time Draft Squash
+
+The existing summary release preview includes virtual-only `draft_squash`:
+
+```json
+{
+  "draft_squash": {
+    "lower_bound": null,
+    "upper_bound": "2026-09-23T10:00:00.000Z",
+    "eligible_count": 3,
+    "protected_count": 0,
+    "fingerprint": "opaque-preview-fingerprint"
+  }
+}
+```
+
+An administrator can explicitly opt into cleanup when tagging the exact
+previewed draft:
+
+```http
+POST /api/release-tracks/:id/snapshots/:modified/release
+Content-Type: application/json
+
+{ "increment": "minor", "squash_drafts": true, "squash_fingerprint": "opaque-preview-fingerprint" }
+```
+
+Use the actual preview fingerprint. A changed selection returns `409` before
+tagging; fetch a fresh preview rather than retrying blindly. Omitted/false squash
+retains ordinary tagging behavior, including editor/team-lead access. True is
+virtual-only and administrator-only. Both latest and exact release endpoints
+accept the option, but the UI uses the exact previewed timestamp.
+
+Cleanup removes only eligible untagged snapshots strictly after the preceding
+tagged snapshot and strictly before the selected snapshot, ordered by `modified`,
+not `tagged_at` or version magnitude. With no preceding tag, all strictly earlier
+eligible drafts are considered. Every tagged snapshot and every newer snapshot
+is preserved. Release content, its manifest and composition provenance are not
+merged or rewritten. Deleted history is not restored by release-to-draft conversion.
+
+### Inspect or Retry Draft Cleanup
+
+Creation, opted-in release, and retry responses can include an operation-only
+`draft_cleanup` result:
+
+```json
+{
+  "operation_id": "97508a36-62cf-4a72-9ed6-49f2690d3609",
+  "status": "failed",
+  "kind": "squash",
+  "eligible_count": 3,
+  "deleted_count": 1,
+  "protected_count": 0,
+  "target_modified": "2026-09-23T10:00:00.000Z",
+  "release_committed": true,
+  "error": "Cleanup could not finish"
+}
+```
+
+`status` is `pending`, `completed`, or `failed`; `kind` is `retention` or
+`squash`. `release_committed` applies to squash; it is omitted if a store failure
+prevents determining the release outcome. A successful release with failed
+cleanup remains a successful release response with a failed cleanup result.
+Interrupted publication may return structured `500` with top-level
+`operation_id`, `release_committed` when known, and `draft_cleanup`.
+
+```http
+GET /api/release-tracks/:id/virtual/draft-cleanup
+POST /api/release-tracks/:id/virtual/draft-cleanup/:operationId/retry
+```
+
+GET returns `{ "data": [...] }`, up to 25 recent pending/failed operations, and
+requires ordinary read access. POST takes `{}`, requires an administrator, and
+returns the cleanup result. It resumes an existing intent; it cannot authorize
+arbitrary new deletion or implicitly tag a draft. Normal repeated release POST
+still rejects an already-tagged snapshot.
+
+Each cleanup invocation processes at most ten 100-snapshot pages. Large histories
+can return `pending`; retry the same operation until complete. Repair is bounded
+by the original intent and current protections. Disabling retention prevents
+further candidate selection but does not prevent repairing already-deleted
+storage. Shared manifests survive while referenced, and underlying STIX objects
+are not cleanup targets.
+
+For the safety rationale and failure examples, see
+[Deletion Guardrails](../../developer/release-tracks/deletion-guardrails.md).
 
 ### Create Virtual Track
 
@@ -1455,7 +1630,7 @@ by the resolved component snapshot.
 is enabled. Its shape depends on `mode`:
 
 - `manual` accepts only `{ "mode": "manual" }`;
-- `cron` requires a five-field `cron` expression and rejects `dates`;
+- `cron` requires a five-field `cron` expression, accepts optional `draft_retention`, and rejects `dates`;
 - `dates` requires at least one ISO timestamp and rejects `cron`.
 
 Unknown schedule properties return `400 Bad Request`. Standard tracks also
@@ -1474,8 +1649,8 @@ snapshot, and timestamp-selected snapshot GET requests.
 Composition, component, filter, and deduplication objects are strict. Unknown
 keys, including the incorrect singular `filters.domain`, return
 `400 Bad Request`. Component selectors are also strategy-specific:
-`latest_tagged` rejects `version` and `snapshot`; `specific_version` requires
-only `version`; and `specific_snapshot` requires only `snapshot`.
+`latest_tagged` and `latest_preview` reject `version` and `snapshot`;
+`specific_version` requires only `version`; `specific_snapshot` requires only `snapshot`.
 Every component requires a unique, non-negative integer `priority`; lower
 numbers have higher priority. When composition is supplied during creation,
 each referenced track must already exist and must be a standard track. Virtual
@@ -1613,7 +1788,7 @@ readiness marker for those shared release operations.
 
 Each resulting `members` and `quarantine` entry contains an exact
 `(object_ref, object_modified)` pair. Virtual materialization preserves exact
-revisions already frozen in the selected tagged component snapshots. It also
+revisions already frozen in the selected tagged or active-draft component snapshots. It also
 resolves any unresolved legacy component entry before persistence. The virtual
 snapshot never stores `"latest"` and does not inherit a standard component's
 `track_latest` member-sync behavior.

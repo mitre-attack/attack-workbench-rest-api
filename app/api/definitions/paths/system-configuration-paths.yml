@@ -23,7 +23,11 @@ paths:
       summary: 'Get the list of domain-specific allowed values'
       operationId: 'config-get-allowed-values'
       description: |
-        This endpoint gets a list of domain-specific allowed values for certain properties.
+        Returns enabled, ADM-compliant runtime values in the existing nested shape.
+        Configured field/domain tuples remain present even when empty. Invalid legacy
+        settings are excluded regardless of validation flags or bypass rules.
+        Changes are visible without restarting the API; existing STIX objects are not changed.
+        Existing visitor-or-higher and read-only service access is unchanged.
       tags:
         - 'System Configuration'
       responses:
@@ -35,6 +39,162 @@ paths:
                 type: array
                 items:
                   $ref: '../components/system-configuration.yml#/components/schemas/allowed-values'
+
+  /api/config/allowed-values/rules:
+    get:
+      summary: 'List runtime allowed-value rules'
+      operationId: 'config-list-allowed-value-rules'
+      description: |
+        Administrator only. Returns one rule per configured propertyName/domainName,
+        across object types, including persistent empty rules. Object types come from
+        the backend ADM catalog. Equal value and enabled pairs are grouped; differing
+        enabled states remain disjoint variants. Invalid legacy options appear only
+        in invalidValues with reasons, not in selectable values.
+      tags:
+        - 'System Configuration'
+      responses:
+        '200':
+          description: 'Configured rules with ADM-compliant enabled and disabled options, plus quarantined legacy options.'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-rule'
+        '401':
+          description: 'Authentication or administrator role required.'
+    post:
+      summary: 'Create an allowed-value property/domain rule'
+      operationId: 'config-create-allowed-value-rule'
+      description: |
+        Administrator only. Creates a previously unconfigured catalog-supported group.
+        Enabled and disabled options must conform to the installed backend ADM.
+        Empty rules persist. Concurrent creation of the same group has one winner.
+        General validation flags and validation bypass rules do not disable these checks.
+      tags:
+        - 'System Configuration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-rule-create'
+      responses:
+        '201':
+          description: 'Created configured rule.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-rule'
+        '400':
+          description: 'Invalid ADM property, domain, scope, or value.'
+        '401':
+          description: 'Authentication or administrator role required.'
+        '409':
+          description: 'Rule already exists, or overlapping duplicate option.'
+
+  /api/config/allowed-values/catalog:
+    get:
+      summary: 'Get the authoritative backend ADM allowed-values catalog'
+      operationId: 'config-get-allowed-value-catalog'
+      description: |
+        Administrator only. Lists all ADM-permitted domains for the original supported
+        object/property pairs, not arbitrary ADM fields. Enum choices come directly
+        from installed schemas and formatted suggestions are validated seed values.
+        Identity uses the stix domain. Includes installed ADM version.
+      tags:
+        - 'System Configuration'
+      responses:
+        '200':
+          description: 'ADM-supported definitions, including unconfigured groups.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-catalog'
+        '401':
+          description: 'Authentication or administrator role required.'
+
+  /api/config/allowed-values/validate:
+    post:
+      summary: 'Validate an allowed value without changing configuration'
+      operationId: 'config-validate-allowed-value'
+      description: |
+        Administrator only. Applies the same unconditional ADM scope and value checks
+        as final writes and returns the trimmed value. The group need not be configured.
+      tags:
+        - 'System Configuration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-validate'
+      responses:
+        '200':
+          description: 'Validated, trimmed value.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [value]
+                properties:
+                  value:
+                    type: string
+        '400':
+          description: 'Invalid ADM property, domain, scope, or value.'
+        '401':
+          description: 'Authentication or administrator role required.'
+
+  /api/config/allowed-values/rules/{propertyName}/{domainName}:
+    parameters:
+      - name: propertyName
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: domainName
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+    put:
+      summary: 'Replace the complete option set for an allowed-value rule'
+      operationId: 'config-replace-allowed-value-rule'
+      description: |
+        Administrator only. Atomically replaces only this property/domain group's
+        values, retaining unrelated rules even during concurrent saves. The rule
+        must already be configured; each enabled or disabled option requires a nonempty
+        ADM-valid trimmed value, a boolean enabled state, and distinct supported objectTypes.
+        The same value cannot occur more than once for an object type, including disabled
+        options. Disjoint variants are allowed. Empty values clear the rule without
+        removing it. Saving also replaces any quarantined legacy options.
+        ADM checks cannot be disabled by general validation flags or bypass rules.
+      tags:
+        - 'System Configuration'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-rule-replace'
+      responses:
+        '200':
+          description: 'Full updated rule, including all supported object types.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/allowed-value-rule'
+        '400':
+          description: 'Invalid request body, unsupported rule, or ADM-invalid value or scope.'
+        '401':
+          description: 'Authentication or administrator role required.'
+        '404':
+          description: 'The catalog-supported rule has not been configured.'
+        '409':
+          description: 'A value is repeated for the same object type within this rule.'
 
   /api/config/organization-identity:
     get:

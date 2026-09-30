@@ -9,8 +9,8 @@ const CreationCause = require('../../lib/release-tracks/snapshot-creation-causes
 // snapshot creation via resolution of component tracks.
 //
 // Virtual tracks aggregate content from multiple standard tracks by:
-//   1. Resolving each component track to a specific tagged snapshot
-//   2. Collecting members from each resolved snapshot
+//   1. Resolving each component track to its selected standard snapshot
+//   2. Planning draft preview members or collecting published members
 //   3. Applying per-component filters (object_types and domains)
 //   4. Deduplicating across all components
 //   5. Persisting the result as a new draft snapshot
@@ -19,6 +19,7 @@ const CreationCause = require('../../lib/release-tracks/snapshot-creation-causes
 // =============================================================================
 
 const snapshotService = require('./snapshot-service');
+const draftCleanup = require('./draft-cleanup-service');
 const primaryRevisionService = require('./primary-revision-service');
 const dynamicRepo = require('../../repository/release-tracks/release-track-dynamic.repository');
 const registryRepo = require('../../repository/release-tracks/release-track-registry.repository');
@@ -33,6 +34,7 @@ const {
   TrackNotFoundError,
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
+  ReleaseConflictError,
   NotFoundError,
 } = require('../../exceptions');
 
@@ -127,8 +129,7 @@ exports.validateComposition = async function validateComposition(composition) {
 };
 
 /**
- * Resolve a component track to a specific tagged snapshot based on its
- * resolution strategy.
+ * Resolve a component track to a snapshot based on its resolution strategy.
  *
  * @param {Object} component - A component_tracks entry
  * @returns {Promise<Object>} The resolved snapshot document
@@ -142,6 +143,10 @@ async function resolveComponentSnapshot(component) {
       snapshot = await dynamicRepo.getLatestTaggedSnapshot(component.track_id);
       break;
 
+    case 'latest_preview':
+      snapshot = await dynamicRepo.getLatestSnapshot(component.track_id);
+      break;
+
     case 'specific_version':
       snapshot = await dynamicRepo.getSnapshotByVersion(component.track_id, component.version);
       break;
@@ -149,6 +154,12 @@ async function resolveComponentSnapshot(component) {
     case 'specific_snapshot':
       snapshot = await dynamicRepo.getSnapshotByModified(component.track_id, component.snapshot);
       break;
+
+    case 'latest_draft':
+      throw new BadRequestError({
+        message: `Component track '${component.track_id}' uses retired strategy latest_draft`,
+        details: 'Update composition to explicitly choose latest_preview or latest_tagged',
+      });
 
     default:
       throw new BadRequestError({
@@ -160,8 +171,8 @@ async function resolveComponentSnapshot(component) {
     throw new NoTaggedSnapshotsError(component.track_id);
   }
 
-  // For specific_snapshot strategy, the snapshot may be a draft — validate it's tagged
-  if (snapshot.version == null) {
+  // Explicit snapshot selection remains tagged-only.
+  if (component.resolution_strategy !== 'latest_preview' && snapshot.version == null) {
     throw new NoTaggedSnapshotsError(component.track_id);
   }
 
@@ -278,11 +289,10 @@ async function hydrateDomains(componentTracks, resolutions) {
  * component data. The virtual snapshot itself never persists a moving ref.
  *
  * @param {Array<Object>} resolutions
+ * @param {Map<string, Promise<Date>>} latestByObjectRef
  * @returns {Promise<Array<Object>>}
  */
-async function lockComponentMemberRevisions(resolutions) {
-  const latestByObjectRef = new Map();
-
+async function lockComponentMemberRevisions(resolutions, latestByObjectRef) {
   const resolveLatest = (objectRef) => {
     if (!latestByObjectRef.has(objectRef)) {
       latestByObjectRef.set(objectRef, objectResolver.resolveLatestModified(objectRef));
@@ -340,7 +350,29 @@ async function resolveComposition(snapshot, registryMap) {
   const resolvedComponentSnapshots = await Promise.all(
     componentTracks.map((component) => resolveComponentSnapshot(component)),
   );
-  const resolutions = await lockComponentMemberRevisions(resolvedComponentSnapshots);
+  const latestByObjectRef = new Map();
+  const resolutions = await lockComponentMemberRevisions(
+    resolvedComponentSnapshots,
+    latestByObjectRef,
+  );
+  const { planPreviewMembers } = require('./versioning-service');
+  for (let i = 0; i < componentTracks.length; i++) {
+    if (
+      componentTracks[i].resolution_strategy !== 'latest_preview' ||
+      resolutions[i].version != null
+    ) {
+      continue;
+    }
+    try {
+      resolutions[i].members = await planPreviewMembers(resolutions[i], latestByObjectRef);
+    } catch (err) {
+      if (!(err instanceof ReleaseConflictError)) throw err;
+      throw new ReleaseConflictError(
+        `Component track '${componentTracks[i].track_id}' cannot preview staged membership: ${err.message}`,
+        { track_id: componentTracks[i].track_id, conflicts: err.conflicts },
+      );
+    }
+  }
   const domainsByVersion = await hydrateDomains(componentTracks, resolutions);
 
   for (let i = 0; i < componentTracks.length; i++) {
@@ -375,7 +407,7 @@ async function resolveComposition(snapshot, registryMap) {
       track_name: registry.name,
       track_type: registry.type,
       resolved_snapshot_id: resolvedSnapshot.modified,
-      resolved_version: resolvedSnapshot.version,
+      resolved_version: resolvedSnapshot.version ?? null,
       strategy_used: component.resolution_strategy,
       filters_applied: component.filters || undefined,
       total_objects_in_source: totalObjectsInSource,
@@ -439,30 +471,37 @@ exports.updateComposition = async function updateComposition(
   userId,
   options = {},
 ) {
-  const source = await snapshotService.getLatestSnapshot(trackId);
-  assertVirtualTrack(source);
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const existing = await require('./draft-cleanup-service').findScheduledResult(
+      trackId,
+      options.scheduledMaterialization,
+    );
+    if (existing) return existing;
+    const source = await snapshotService.getLatestSnapshot(trackId);
+    assertVirtualTrack(source);
 
-  // Validate all component tracks
-  await validateComponentTracks(composition.component_tracks);
+    // Validate all component tracks
+    await validateComponentTracks(composition.component_tracks);
 
-  const snapshot = await snapshotService.cloneSnapshot(
-    trackId,
-    source,
-    {
-      composition,
-      members: [],
-      quarantine: [],
-      composition_resolution: null,
-      scheduled_materialization: options.scheduledMaterialization,
-    },
-    { creationCause: CreationCause.CompositionUpdated, userAccountId: userId },
-  );
+    const snapshot = await snapshotService.cloneSnapshot(
+      trackId,
+      source,
+      {
+        composition,
+        members: [],
+        quarantine: [],
+        composition_resolution: null,
+        scheduled_materialization: options.scheduledMaterialization,
+      },
+      { creationCause: CreationCause.CompositionUpdated, userAccountId: userId, lease },
+    );
 
-  logger.verbose(
-    `VirtualTrackService: Updated composition for track "${trackId}" ` +
-      `(${composition.component_tracks.length} component track(s))`,
-  );
-  return snapshot;
+    logger.verbose(
+      `VirtualTrackService: Updated composition for track "${trackId}" ` +
+        `(${composition.component_tracks.length} component track(s))`,
+    );
+    return snapshot;
+  });
 };
 
 /**
@@ -472,33 +511,46 @@ exports.updateComposition = async function updateComposition(
  *
  * @param {string} trackId
  * @param {Object} schedule
+ * @param {Object} actor
  * @returns {Promise<{snapshot_schedule: Object}>}
  */
-exports.updateSchedule = async function updateSchedule(trackId, schedule) {
-  const registry = await registryRepo.findByTrackId(trackId);
-  if (!registry) {
-    throw new TrackNotFoundError(trackId);
-  }
-  if (registry.type !== 'virtual') {
-    throw new BadRequestError({
-      message: 'This operation is only available for virtual release tracks',
-      details: `Track ${trackId} is a ${registry.type} track`,
-    });
-  }
-
-  const updated = await registryRepo.setSnapshotSchedule(trackId, schedule);
-  logger.verbose(
-    `VirtualTrackService: Updated snapshot schedule for track "${trackId}" to ${schedule.mode}`,
-  );
-  return { snapshot_schedule: updated.snapshot_schedule };
+exports.updateSchedule = async function updateSchedule(trackId, schedule, actor) {
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const registry = await registryRepo.findByTrackId(trackId);
+    if (!registry) {
+      throw new TrackNotFoundError(trackId);
+    }
+    if (registry.type !== 'virtual') {
+      throw new BadRequestError({
+        message: 'This operation is only available for virtual release tracks',
+        details: `Track ${trackId} is a ${registry.type} track`,
+      });
+    }
+    const previousMaximum =
+      registry.snapshot_schedule?.mode === 'cron'
+        ? (registry.snapshot_schedule.draft_retention?.max_drafts ?? null)
+        : null;
+    if (
+      schedule.mode === 'cron' &&
+      (schedule.draft_retention?.max_drafts ?? null) !== previousMaximum
+    ) {
+      draftCleanup.assertAdmin(actor);
+    }
+    await lease.assertOwned();
+    const updated = await registryRepo.setSnapshotSchedule(trackId, schedule);
+    logger.verbose(
+      `VirtualTrackService: Updated snapshot schedule for track "${trackId}" to ${schedule.mode}`,
+    );
+    return { snapshot_schedule: updated.snapshot_schedule };
+  });
 };
 
 /**
  * Create a new virtual snapshot by resolving the composition rules.
  *
  * For each component track:
- *   1. Resolve to a tagged snapshot via the configured strategy
- *   2. Extract and filter members
+ *   1. Resolve the selected standard snapshot via the configured strategy
+ *   2. Plan preview membership for drafts, then filter the resolved members
  * Then deduplicate across all components and persist a new draft snapshot.
  *
  * @param {string} trackId
@@ -506,82 +558,121 @@ exports.updateSchedule = async function updateSchedule(trackId, schedule) {
  * @returns {Promise<Object>} The new snapshot with composition_resolution metadata
  */
 exports.createVirtualSnapshot = async function createVirtualSnapshot(trackId, options = {}) {
-  const scheduledFor = options.scheduledMaterialization?.scheduled_for;
-  if (scheduledFor) {
-    const existing = await dynamicRepo.getSnapshotByScheduledMaterialization(trackId, scheduledFor);
-    if (existing) return existing;
-  }
-
-  const source = await snapshotService.getLatestSnapshot(trackId);
-  assertVirtualTrack(source);
-
-  const composition = source.composition;
-  if (!composition || !composition.component_tracks || composition.component_tracks.length === 0) {
-    throw new BadRequestError({
-      message: 'Cannot create virtual snapshot: no component tracks configured',
-      details: 'Update the composition before creating a snapshot',
-    });
-  }
-
-  // Hold component release locks from resolution through persistence. Rollback
-  // cannot pass its dependency scan while a new dependent is being created.
-  // Sorted acquisition and fail-fast conflicts also release partial lock sets.
-  const componentIds = [
-    ...new Set(composition.component_tracks.map((entry) => entry.track_id)),
-  ].sort();
-  const { withReleaseLock } = require('./versioning-service');
-  async function withComponentLocks(index) {
-    if (index === componentIds.length) return materialize();
-    return withReleaseLock(componentIds[index], () => withComponentLocks(index + 1));
-  }
-  return withComponentLocks(0);
-
-  async function materialize() {
-    // Validate component tracks
-    const registryMap = await validateComponentTracks(composition.component_tracks);
-
-    // Resolve composition
-    const { members, quarantined, compositionResolution } = await resolveComposition(
-      source,
-      registryMap,
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    // Only an internal scheduler option can select recurring policy. Public
+    // occurrence metadata is an idempotency receipt, never cleanup authority.
+    const manualPolicy =
+      options.draft_retention !== undefined
+        ? draftCleanup.validatePolicy(options.draft_retention, options.actor, 'virtual')
+        : null;
+    let retention = null;
+    if (options.useRecurringRetention === true) {
+      const registry = await registryRepo.findByTrackId(trackId, 'snapshot_schedule');
+      const schedule = registry?.snapshot_schedule;
+      if (schedule?.mode === 'cron' && schedule.draft_retention?.max_drafts != null) {
+        retention = {
+          source: 'recurring',
+          policy: schedule.draft_retention,
+          actor: { kind: 'system' },
+        };
+      }
+    } else if (manualPolicy?.max_drafts != null) {
+      retention = { source: 'manual', policy: manualPolicy, actor: options.actor };
+    }
+    const scheduledFor = options.scheduledMaterialization?.scheduled_for;
+    const existing = await require('./draft-cleanup-service').findScheduledResult(
+      trackId,
+      options.scheduledMaterialization,
     );
-    await primaryRevisionService.assertStoredEntries([...members, ...quarantined]);
+    if (existing) return existing;
 
-    // Build overrides for the new snapshot
-    const overrides = {
-      members,
-      quarantine: quarantined,
-      composition_resolution: compositionResolution,
-      scheduled_materialization: options.scheduledMaterialization,
-      snapshot_description: options.description,
-    };
+    const source = await snapshotService.getLatestSnapshot(trackId);
+    assertVirtualTrack(source);
 
-    let snapshot;
-    try {
-      snapshot = await snapshotService.cloneSnapshot(trackId, source, overrides, {
-        creationCause: options.scheduledMaterialization
-          ? CreationCause.ScheduledSnapshot
-          : CreationCause.ManualSnapshot,
-        userAccountId:
-          options.userAccountId || (options.scheduledMaterialization ? 'system' : undefined),
+    const composition = source.composition;
+    if (
+      !composition ||
+      !composition.component_tracks ||
+      composition.component_tracks.length === 0
+    ) {
+      throw new BadRequestError({
+        message: 'Cannot create virtual snapshot: no component tracks configured',
+        details: 'Update the composition before creating a snapshot',
       });
-    } catch (err) {
-      if (!scheduledFor || !(err instanceof DuplicateIdError)) throw err;
-
-      const existing = await dynamicRepo.getSnapshotByScheduledMaterialization(
-        trackId,
-        scheduledFor,
-      );
-      if (!existing) throw err;
-      snapshot = existing;
     }
 
-    logger.verbose(
-      `VirtualTrackService: Created virtual snapshot for track "${trackId}" ` +
-        `(${members.length} members, ${quarantined.length} quarantined)`,
-    );
-    return snapshot;
-  }
+    // Hold component release locks from resolution through persistence. Rollback
+    // cannot pass its dependency scan while a new dependent is being created.
+    // Sorted acquisition and fail-fast conflicts also release partial lock sets.
+    const componentIds = [
+      ...new Set(composition.component_tracks.map((entry) => entry.track_id)),
+    ].sort();
+    const { withReleaseLock } = require('./versioning-service');
+    const componentLeases = [];
+    async function withComponentLocks(index) {
+      if (index === componentIds.length) return materialize();
+      return withReleaseLock(componentIds[index], (componentLease) => {
+        componentLeases.push(componentLease);
+        return withComponentLocks(index + 1);
+      });
+    }
+    return withComponentLocks(0);
+
+    async function materialize() {
+      // Validate component tracks
+      const registryMap = await validateComponentTracks(composition.component_tracks);
+
+      // Resolve composition
+      const { members, quarantined, compositionResolution } = await resolveComposition(
+        source,
+        registryMap,
+      );
+      await primaryRevisionService.assertStoredEntries([...members, ...quarantined]);
+      const materializationLease = {
+        async assertOwned() {
+          await lease.assertOwned();
+          for (const componentLease of componentLeases) await componentLease.assertOwned();
+        },
+      };
+
+      // Build overrides for the new snapshot
+      const overrides = {
+        members,
+        quarantine: quarantined,
+        composition_resolution: compositionResolution,
+        scheduled_materialization: options.scheduledMaterialization,
+        snapshot_description: options.description,
+      };
+
+      let snapshot;
+      try {
+        snapshot = await snapshotService.cloneSnapshot(trackId, source, overrides, {
+          lease: materializationLease,
+          retention,
+          creationCause: options.scheduledMaterialization
+            ? CreationCause.ScheduledSnapshot
+            : CreationCause.ManualSnapshot,
+          userAccountId:
+            options.userAccountId || (options.scheduledMaterialization ? 'system' : undefined),
+        });
+      } catch (err) {
+        if (!scheduledFor || !(err instanceof DuplicateIdError)) throw err;
+
+        const existing = await dynamicRepo.getSnapshotByScheduledMaterialization(
+          trackId,
+          scheduledFor,
+        );
+        if (!existing) throw err;
+        snapshot = existing;
+      }
+
+      logger.verbose(
+        `VirtualTrackService: Created virtual snapshot for track "${trackId}" ` +
+          `(${members.length} members, ${quarantined.length} quarantined)`,
+      );
+      return snapshot;
+    }
+  });
 };
 
 /**
@@ -601,48 +692,50 @@ exports.promoteQuarantinedObject = async function promoteQuarantinedObject(
   selection,
   userId,
 ) {
-  const source = await snapshotService.getLatestSnapshot(trackId);
-  assertVirtualTrack(source);
+  return require('./versioning-service').withReleaseLock(trackId, async (lease) => {
+    const source = await snapshotService.getLatestSnapshot(trackId);
+    assertVirtualTrack(source);
 
-  const selectedTime = new Date(selection.object_modified).getTime();
-  const selected = (source.quarantine || []).find(
-    (entry) =>
-      entry.object_ref === selection.object_ref &&
-      new Date(entry.object_modified).getTime() === selectedTime,
-  );
+    const selectedTime = new Date(selection.object_modified).getTime();
+    const selected = (source.quarantine || []).find(
+      (entry) =>
+        entry.object_ref === selection.object_ref &&
+        new Date(entry.object_modified).getTime() === selectedTime,
+    );
 
-  if (!selected) {
-    throw new NotFoundError({
-      details:
-        `Revision '${selection.object_modified}' of '${selection.object_ref}' ` +
-        `was not found in the latest snapshot's quarantine tier`,
-    });
-  }
+    if (!selected) {
+      throw new NotFoundError({
+        details:
+          `Revision '${selection.object_modified}' of '${selection.object_ref}' ` +
+          `was not found in the latest snapshot's quarantine tier`,
+      });
+    }
 
-  const members = (source.members || [])
-    .filter((entry) => entry.object_ref !== selected.object_ref)
-    .concat({
-      object_ref: selected.object_ref,
-      object_modified: selected.object_modified,
-    });
-  const quarantine = (source.quarantine || []).filter(
-    (entry) => entry.object_ref !== selected.object_ref,
-  );
-  await primaryRevisionService.assertStoredEntries([...members, ...quarantine]);
+    const members = (source.members || [])
+      .filter((entry) => entry.object_ref !== selected.object_ref)
+      .concat({
+        object_ref: selected.object_ref,
+        object_modified: selected.object_modified,
+      });
+    const quarantine = (source.quarantine || []).filter(
+      (entry) => entry.object_ref !== selected.object_ref,
+    );
+    await primaryRevisionService.assertStoredEntries([...members, ...quarantine]);
 
-  const snapshot = await snapshotService.cloneSnapshot(
-    trackId,
-    source,
-    {
-      members,
-      quarantine,
-    },
-    { creationCause: CreationCause.QuarantinePromoted, userAccountId: userId },
-  );
+    const snapshot = await snapshotService.cloneSnapshot(
+      trackId,
+      source,
+      {
+        members,
+        quarantine,
+      },
+      { creationCause: CreationCause.QuarantinePromoted, userAccountId: userId, lease },
+    );
 
-  logger.verbose(
-    `VirtualTrackService: Promoted quarantined revision "${selected.object_ref}" ` +
-      `at ${new Date(selected.object_modified).toISOString()} in track "${trackId}"`,
-  );
-  return snapshot;
+    logger.verbose(
+      `VirtualTrackService: Promoted quarantined revision "${selected.object_ref}" ` +
+        `at ${new Date(selected.object_modified).toISOString()} in track "${trackId}"`,
+    );
+    return snapshot;
+  });
 };

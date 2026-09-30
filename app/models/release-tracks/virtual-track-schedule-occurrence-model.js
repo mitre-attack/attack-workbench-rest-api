@@ -24,9 +24,11 @@ const virtualTrackScheduleOccurrenceSchema = new mongoose.Schema(
     },
     attempt_count: { type: Number, required: true, default: 0 },
     claimed_at: { type: Date, default: null },
+    claim_token: { type: String, default: null },
     claim_expires_at: { type: Date, default: null },
     next_retry_at: { type: Date, default: null },
     finished_at: { type: Date, default: null },
+    // Durable, write-once receipt: retained even when the snapshot is removed.
     snapshot_modified: { type: Date, default: null },
     last_error: { type: mongoose.Schema.Types.Mixed, default: null },
   },

@@ -122,7 +122,7 @@ const componentTrackDefinition = {
   },
   resolution_strategy: {
     type: String,
-    enum: ['latest_tagged', 'specific_version', 'specific_snapshot'],
+    enum: ['latest_tagged', 'latest_preview', 'specific_version', 'specific_snapshot'],
     required: true,
   },
   priority: {
@@ -172,10 +172,24 @@ const componentSnapshotResolutionDefinition = {
   resolved_snapshot_id: { type: Date, required: true },
   resolved_version: {
     type: String,
-    required: true,
+    required: function () {
+      return !['latest_preview', 'latest_draft'].includes(this.strategy_used);
+    },
+    default: null,
     validate: validateVersion,
   },
-  strategy_used: { type: String, required: true },
+  strategy_used: {
+    type: String,
+    // Historical members-only draft resolutions retain their original strategy.
+    enum: [
+      'latest_tagged',
+      'latest_preview',
+      'latest_draft',
+      'specific_version',
+      'specific_snapshot',
+    ],
+    required: true,
+  },
   filters_applied: { type: componentTrackFiltersSchema, default: undefined },
   total_objects_in_source: { type: Number, required: true },
   objects_after_filter: { type: Number, required: true },
@@ -360,12 +374,11 @@ const versionHistoryEntryDefinition = {
     candidates_count: { type: Number },
     quarantine_count: { type: Number },
   },
-  // Virtual tracks only: immutable component track ID → tagged version.
+  // Virtual tracks only: immutable component track ID → version (null for drafts).
   component_versions: {
     type: Map,
     of: {
       type: String,
-      required: true,
       validate: validateVersion,
     },
     default: undefined,
@@ -428,6 +441,8 @@ const releaseTrackSnapshotDefinition = {
   publication: { type: frozenPublicationSchema },
   bundle_id: { type: String },
   bundle_hashes: { type: bundleHashesSchema },
+  // Identifies the original release event across retags, but not rollback/release cycles.
+  release_event_id: { type: String },
   creation_actor: {
     type: new mongoose.Schema(
       {

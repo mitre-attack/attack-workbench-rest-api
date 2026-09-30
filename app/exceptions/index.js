@@ -335,6 +335,15 @@ class ReleaseTrackReconciliationError extends CustomError {
   }
 }
 
+class ReleasePublicationError extends CustomError {
+  constructor(options) {
+    super(
+      'Release publication did not complete; inspect or retry the existing cleanup operation',
+      options,
+    );
+  }
+}
+
 class ReleaseTrackAuditError extends CustomError {
   constructor(trackId, auditEventId, options = {}) {
     super('Release-track audit recording could not be finalized', {
@@ -487,6 +496,7 @@ module.exports = {
   ReleaseContentIntegrityError,
   ReleaseTrackReconciliationError,
   ReleaseTrackAuditError,
+  ReleasePublicationError,
   NoTaggedSnapshotsError,
   InvalidComponentTypeError,
   VirtualSnapshotNotMaterializedError,

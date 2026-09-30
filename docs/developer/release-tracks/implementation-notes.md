@@ -204,7 +204,7 @@ Virtual-only operations are deliberately scoped beneath
   rules, empty members/quarantine tiers, and
   `composition_resolution: null`. Clearing all three prevents a materialized
   result from surviving a change to the rules that produced it.
-- `POST /virtual/snapshots/create` resolves tagged component snapshots and
+- `POST /virtual/snapshots/create` resolves published or preview component snapshots and
   persists the concrete members, quarantine, and immutable
   `composition_resolution`.
 - Every persisted member and quarantine entry uses an exact
@@ -215,19 +215,47 @@ Virtual-only operations are deliberately scoped beneath
   moving reference.
 - `member_sync.strategy = track_latest` applies only to standard tracks. New
   object revisions may update a component's newer candidate/staged draft, but
-  they cannot rewrite the members of the tagged component snapshot selected
-  during virtual materialization or an already-persisted virtual snapshot.
+  they cannot rewrite the members of the component snapshot selected during
+  virtual materialization or an already-persisted virtual snapshot.
 - `POST /virtual/quarantine/promote` clones the latest virtual snapshot,
   selects one exact quarantined revision for members, and removes all
   quarantined alternatives for that object.
 
 Composition input uses strict Zod objects at the composition, component,
 filter, and deduplication levels. Components form a discriminated union on
-`resolution_strategy`: `latest_tagged` accepts no selector,
+`resolution_strategy`: `latest_tagged` and `latest_preview` accept no selector,
 `specific_version` requires only `version`, and `specific_snapshot` requires
 only `snapshot`. This prevents misspelled filters or irrelevant selectors from
 being silently stripped before persistence. The same schema is used for
 initial virtual-track creation and composition updates.
+
+`latest_preview` resolves the newest standard snapshot regardless of tag state.
+For a draft, `versioning-service.planPreviewMembers` shares `resolveReleaseInput`
+and `planMembership` with standard release planning: resolve exact revisions,
+normalize tiers and apply the source's staged-to-members conflict policy. It
+does not allocate versions, freeze publication, reject already-released source
+drafts, or write source snapshots. Tagged inputs contribute published members
+without incorporating staged entries.
+
+This planning occurs before component filters/domain hydration and virtual
+deduplication. A blocking source conflict returns `409` with the component
+`track_id` and standard conflict details. Source counts describe planned
+membership; stored source members can still be empty. Candidates are excluded.
+Existing `latest_tagged`, `specific_version` and `specific_snapshot` continue to
+select published members only.
+
+The active request enum rejects retired `latest_draft`; it is not an alias.
+Read-only stored composition and provenance schemas retain the historical token
+so existing members-only results remain truthful and releasable. Saved rules
+must be explicitly replaced before rematerialization. No nightly-data migration
+silently opts existing operators into staged content.
+
+Standard clone save/prune and virtual materialization share the existing release
+lock; contention returns `409 Conflict`. See [Deletion Guardrails](deletion-guardrails.md)
+for the concurrency rationale. Pruning retains every source snapshot named by
+persisted virtual provenance, including historical virtual drafts. Once the last
+dependent disappears, the next standard clone can prune the source if no other
+retention rule protects it.
 
 Component `priority` is always required, even when the selected deduplication
 strategy does not inspect it. Zod rejects duplicate component IDs and
@@ -339,13 +367,14 @@ planned snapshot, and the commit path tags that snapshot in place.
 Virtual release planning also derives
 `version_history[].component_versions` directly from the selected draft's
 immutable `composition_resolution.component_snapshots`. The property is a
-component track ID to tagged `MAJOR.MINOR` version map. It deliberately does
-not query the component tracks at preview or commit time: a component can
-advance after virtual materialization without changing the provenance of the
-already-frozen draft. Standard release history entries omit the virtual-only
-property. Mongoose validates every map value with the shared release-version
-validator and requires every persisted component resolution to identify its
-tagged `resolved_version`.
+component track ID to tagged `MAJOR.MINOR` version or `null` map. It deliberately
+does not query the component tracks at preview or commit time: a component can
+advance after materialization without changing the already-frozen provenance.
+Standard release history entries omit the property. Mongoose validates string
+values with the shared release-version validator. Component resolutions require
+a tagged `resolved_version` for tagged strategies. `latest_preview` records
+`null` for a draft or the actual version for a tagged source. Historical
+`latest_draft` provenance continues to permit its original null version.
 
 Standard release commit assigns a fresh timestamp, stores
 `release_source_modified`, and inserts the tagged clone while retaining the
@@ -371,9 +400,10 @@ and a list response.
 
 `release-track-dynamic.repository.getSnapshotSummaries` performs tagged-state
 filtering, descending timestamp ordering, pagination, and tier counts in
-MongoDB. It projects counts with `$size` rather than hydrating the potentially
-large tier arrays. The filter is applied to both the data query and
-`countDocuments`, making `pagination.total` the filtered total.
+MongoDB. A metadata-only grouping computes filtered `counts.tagged`,
+`counts.drafts`, and `counts.total` before pagination. The page query projects
+tier counts with `$size` only for its bounded result, rather than hydrating every
+snapshot's potentially large arrays. `pagination.total` equals `counts.total`.
 
 The service shapes projected counts according to `snapshot.type`:
 
@@ -392,6 +422,15 @@ against `releaseTrackContentManifestEntries`, grouped by `manifest_id` and
 match, and shared manifests are counted once. The service fills zero-valued
 categories for empty manifests. This keeps history latency to one additional
 bounded query rather than one query per snapshot.
+
+The history service also projects unfiltered `latest_snapshot_modified` and
+`latest_tagged_snapshot_modified` from the registry metadata it already reads.
+The latter uses the newest catalogue snapshot timestamp, not highest semantic
+version or tagging time. Filtered pages therefore retain correct latest-only
+action identities. The frontend polls this lightweight history plus outstanding
+cleanup while Releases is visible; it does not poll full member/configuration
+payloads. Visibility/focus and tab entry refresh immediately, while edits,
+dialogs, mutations and active requests pause background refresh.
 
 ## Integrating with the Event-Driven Architecture
 

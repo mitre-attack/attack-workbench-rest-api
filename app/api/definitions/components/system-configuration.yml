@@ -63,6 +63,165 @@ components:
               type: string
               example: 'Linux'
 
+    allowed-value-option:
+      type: object
+      additionalProperties: false
+      required: [value, enabled, objectTypes]
+      properties:
+        value:
+          type: string
+          minLength: 1
+          description: Trimmed, case-sensitive value accepted by the installed backend ADM for every selected object type and domain, even when disabled.
+        enabled:
+          type: boolean
+        objectTypes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Supported object types to which this option applies.
+          items:
+            type: string
+            minLength: 1
+
+    allowed-value-rule:
+      type: object
+      additionalProperties: false
+      required: [propertyName, domainName, objectTypes, values, invalidValues]
+      properties:
+        propertyName:
+          type: string
+          example: x_mitre_platforms
+        domainName:
+          type: string
+          example: enterprise-attack
+        objectTypes:
+          type: array
+          uniqueItems: true
+          description: All ADM-supported object types for this property/domain, including those with no options.
+          items:
+            type: string
+        values:
+          type: array
+          description: Equal value and enabled pairs are grouped across object types.
+          items:
+            $ref: '#/components/schemas/allowed-value-option'
+        invalidValues:
+          type: array
+          description: Persisted legacy options rejected by the installed ADM. Never offered as dropdown choices; saving replaces these along with the rule.
+          items:
+            $ref: '#/components/schemas/allowed-value-invalid-option'
+
+    allowed-value-rule-replace:
+      type: object
+      additionalProperties: false
+      required: [values]
+      properties:
+        values:
+          type: array
+          description: Complete replacement option set. An empty array clears the rule.
+          items:
+            $ref: '#/components/schemas/allowed-value-option'
+
+    allowed-value-invalid-option:
+      type: object
+      additionalProperties: false
+      required: [value, enabled, objectTypes, reason]
+      properties:
+        value:
+          type: string
+        enabled:
+          type: boolean
+        objectTypes:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+
+    allowed-value-definition:
+      type: object
+      additionalProperties: false
+      required: [propertyName, domainName, objectTypes, valueType, choices, description]
+      properties:
+        propertyName:
+          type: string
+        domainName:
+          type: string
+        objectTypes:
+          type: array
+          items:
+            type: string
+        valueType:
+          type: string
+          enum: [enum, formatted]
+        choices:
+          type: array
+          description: ADM enum choices, or validated seed suggestions for formatted fields. Each choice lists its valid object types.
+          items:
+            type: object
+            required: [value, objectTypes]
+            additionalProperties: false
+            properties:
+              value:
+                type: string
+              objectTypes:
+                type: array
+                items:
+                  type: string
+        description:
+          type: string
+
+    allowed-value-catalog:
+      type: object
+      additionalProperties: false
+      required: [admVersion, rules]
+      properties:
+        admVersion:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/allowed-value-definition'
+
+    allowed-value-rule-create:
+      type: object
+      additionalProperties: false
+      required: [propertyName, domainName, values]
+      properties:
+        propertyName:
+          type: string
+          minLength: 1
+        domainName:
+          type: string
+          minLength: 1
+        values:
+          type: array
+          description: Initial ADM-valid options. Empty arrays create a persistent empty rule.
+          items:
+            $ref: '#/components/schemas/allowed-value-option'
+
+    allowed-value-validate:
+      type: object
+      additionalProperties: false
+      required: [propertyName, domainName, objectTypes, value]
+      properties:
+        propertyName:
+          type: string
+          minLength: 1
+        domainName:
+          type: string
+          minLength: 1
+        objectTypes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+        value:
+          type: string
+          minLength: 1
+
     organization-identity:
       type: object
       properties:

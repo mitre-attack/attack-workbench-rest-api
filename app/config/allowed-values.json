@@ -112,7 +112,7 @@
         "domains": [
           {
             "domainName": "enterprise-attack",
-            "allowedValues": ["Administrator", "root", "SYSTEM", "User", "Remote Desktop Users"]
+            "allowedValues": ["Administrator", "root", "SYSTEM", "User"]
           }
         ]
       },

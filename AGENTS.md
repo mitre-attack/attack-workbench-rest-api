@@ -15,11 +15,11 @@ before searching the filesystem for any of the resources below.
   API), `attack-workbench-deployment` (Docker Compose configs),
   `attack-workbench-taxii-server`. Use them when you need consumer or
   deployment context.
-- **ADM (ATT&CK Data Model)** — this API validates STIX objects against the
-  published `@mitre-attack/attack-data-model` package. A local checkout of the
-  ADM source (`src/schemas/{sdo,sro,smo,common}`) is the authoritative
-  reference for STIX shapes: valid enum values, required fields, refinements.
-  Consult it when authoring payloads, especially for regression tests.
+- **ADM (ATT&CK Data Model)** — the installed
+  `@mitre-attack/attack-data-model` package determines runtime validation.
+  Consult its Zod schemas when authoring payloads and regression tests.
+  A local source checkout is useful for investigation; check its version
+  against the installed package before treating its shapes as current.
 - **Bruno API collection** — manual smoke-test requests maintained outside
   this repo (see Bruno section below).
 
@@ -95,10 +95,12 @@ Tests use `mongodb-memory-server` — no external MongoDB or env setup needed.
 
 ## Task workflow
 
-1. **Plan in a committable scratchpad**: track multi-step work as checkboxes in
-   `docs/developer/TODO.md` so progress survives context-window resets and
-   sessions. Check items off as they complete. Throwaway artifacts (notes,
-   datasets, one-off scripts) go in `.nocommit/` (gitignored).
+1. **Keep working notes local**: use the gitignored root `TODO.md` for plans
+   and `FRONTEND_TODO.md` for temporary frontend handoffs. Create them only
+   when needed; a fresh clone need not contain either file. Never stage or
+   force-add them, recreate planning logs under `docs/`, or link published
+   documentation to local notes. Other scratch artifacts (scripts, datasets,
+   session notes) belong in `.nocommit/` (gitignored).
 2. **Definition of done** — a task is complete only when it includes:
    - implementation,
    - regression tests (see below),
@@ -106,8 +108,10 @@ Tests use `mongodb-memory-server` — no external MongoDB or env setup needed.
      with `npm run test:file -- <path>` while iterating, then run the **full**
      `npm test` suite — all of it must pass before the task is done,
    - OpenAPI spec updates for any API-surface change,
-   - documentation updates (`docs/user/**` = what the behavior *is*;
-     `docs/developer/**` = why/how, including how behavior evolved),
+   - documentation of current behavior in `docs/user/**` and `docs/admin/**`,
+     and contracts/design decisions in `docs/developer/**`; keep task checklists,
+     execution transcripts, test-run tallies, and proposed commit messages in
+     local notes or the final response, not tracked documentation,
    - Bruno collection updates for any API-surface change,
    - a proposed conventional commit message.
 3. **Commits**: conventional commits are enforced (commitlint +
