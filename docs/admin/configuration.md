@@ -622,8 +622,73 @@ Paths to additional configuration and data files.
 
 **Allowed Values:**
 
-The allowed values file defines valid enum values for STIX object properties (platforms, permissions, etc.).
-See `app/config/allowed-values.json` for the schema.
+`app/config/allowed-values.json` supplies the original supported object/property
+pairs and initial dropdown choices. The installed backend ADM Zod schemas define
+permissible values and domains; the file is not an independent validity whitelist.
+On first startup, the file selected by `ALLOWED_VALUES_PATH` is validated before
+MongoDB insertion. Invalid custom seeds fail without partially initializing
+configuration. Subsequent startups preserve the persisted configuration.
+
+The corrected defaults contain 192 values across 25 original scopes and six
+object types, grouped into 15 initial property/domain rules. `Remote Desktop
+Users` was removed from effective permissions because ADM rejects it there; it
+remains available for required permissions. The current backend ADM 4.11.7
+catalog supports 20 property/domain definitions across 32 object-type scopes.
+Additional supported scopes can be configured without inventing schema fields.
+
+Open **Dashboard → Admin → Allowed Values**, immediately below **Validation
+Bypasses**. **Add New Property** guides an administrator through property, domain
+and object type, approved values, and review. An already-configured
+property/domain opens its existing editor rather than creating a duplicate.
+Editing uses one object-type selector and a searchable approved-value checklist.
+Check/uncheck controls enabled state; Remove clears that type's setting.
+Other object types retain their configurations. Formatted data-source/component
+names require **Validate and add** approval before they enter the draft.
+
+Saving applies the complete rule atomically; cancel discards the draft. Empty
+configured rules persist. Changing the seed file after initialization does not
+overwrite administrator choices.
+
+| Endpoint | Access | Behavior |
+| --- | --- | --- |
+| `GET /api/config/allowed-values` | Existing visitor-or-higher/read-only-service access | Original nested response, containing enabled values only; empty fields remain present |
+| `GET /api/config/allowed-values/catalog` | Administrator | Backend `admVersion` and supported definitions with domains, object types, enum/format kind, choices, and description |
+| `GET /api/config/allowed-values/rules` | Administrator | Configured rules containing valid `values` and quarantined `invalidValues` with reasons |
+| `POST /api/config/allowed-values/rules` | Administrator | Create `{ propertyName, domainName, values }` within the ADM catalog; returns `201` |
+| `PUT /api/config/allowed-values/rules/{propertyName}/{domainName}` | Administrator | Atomically replace a configured rule using `{ values: [{ value, enabled, objectTypes }] }`; returns the updated rule |
+| `POST /api/config/allowed-values/validate` | Administrator | Validate `{ propertyName, domainName, objectTypes, value }` without saving; returns `{ value }` with the trimmed value |
+
+Retrieve a rule before editing it. PUT replaces its **entire** set, so retain
+every option and object-type scope you want to keep. Each option has a nonempty,
+trimmed, case-sensitive `value`, a boolean `enabled`, and at least one distinct
+supported `objectTypes` entry. Both enabled and disabled values must satisfy
+the actual ADM field schema and its domain/object-type refinements. Software
+choices must satisfy both tool and malware schemas. Data-source strings use
+ADM's format validator rather than an invented finite enum.
+
+The same value may have separate enabled states in disjoint object-type scopes.
+Overlapping scope/value duplicates or duplicate property/domain creation return
+`409`. Invalid ADM values, unsupported scopes, and malformed bodies return
+`400`; replacing an unconfigured supported rule returns `404`. Validation
+failure leaves configuration unchanged. Concurrent saves to different groups
+retain both changes; concurrent creation of one group has a single winner.
+
+This grouped API replaces the original per-entry management endpoints; clients
+must use the rules endpoints. The enabled-only dropdown endpoint is unchanged.
+
+Editors fetch current enabled choices when opened. Existing selections remain
+visible without becoming selectable again after removal; existing stored objects
+are not rewritten. Allowed Values checks are unconditional: neither general ADM
+validation switches nor validation bypass rules can permit invalid options.
+The frontend consumes the backend catalog instead of maintaining a second enum
+list or relying on its independently versioned ADM package.
+
+Legacy invalid options are quarantined on reads: never offered in dropdowns,
+returned in administrator `invalidValues` warnings, and retained in raw storage
+until the administrator saves that rule. Startup does not re-read the seed file
+or fail because of such legacy data. The existing legacy collection-bundle ICS
+data-source filter also reads this configuration, so changing its allowed
+choices can affect that export projection.
 
 **Static Marking Definitions:**
 

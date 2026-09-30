@@ -77,6 +77,48 @@ The Mongoose discriminator capability supports storing multiple object types in 
 
 The `__t` property is created and managed by Mongoose to distinguish between the different types of objects stored in the `attackObjects` collection.
 
+### Runtime Allowed Values Configuration
+
+`AllowedValuesConfiguration` is a separate singleton configuration document
+with `_id: "allowed-values"`, persisted property/domain `rules` keys, and embedded
+value rows containing an ObjectId, object type, property, domain, value, and
+enabled state. It is not STIX content and is not included in object histories.
+
+Startup validates a fresh configured seed against ADM, then initializes it with
+an atomic `_id`-keyed `$setOnInsert`. Existing databases are not reseeded. A
+predicate-guarded aggregation update adds missing rule keys to legacy singleton
+documents using the initial groups plus persisted row scopes; it retains all
+value rows, including disabled or invalid legacy settings.
+
+Creation atomically requires that the rule key is absent, then adds its key and
+values. Replacement requires an existing key and filters/replaces only that
+group's rows inside MongoDB. Concurrent different-group saves retain both
+changes; duplicate creation has one winner. Empty configurations retain their
+keys. No multi-document transactions are needed on standalone MongoDB.
+
+`app/lib/allowed-values-catalog.js` uses the existing ADM `getSchema` integration
+and its partial object schemas. It restricts configurable object/property pairs
+to the original seed file, derives domains from ADM, and enumerates choices
+from Zod enum schemas. Candidate values also pass contextual domain/object-type
+validation; software requires both tool and malware approval. Related-asset
+sectors are validated in their nested schema context. Data-source/component
+strings use ADM's custom validator rather than a copied regex or finite list.
+Only immutable schema metadata is cached, never mutable administrator settings.
+
+The backend catalog and `/validate` endpoint are authoritative for the frontend,
+avoiding drift between its ADM dependency and the backend's. All configuration
+writes, including disabled options and fresh seeds, enforce these checks
+regardless of general validation flags or bypass rules. Reads partition legacy
+rows into compliant `values` and quarantined `invalidValues`; the original
+nested dropdown endpoint includes only compliant enabled values.
+
+Management still groups by property/domain, coalescing equal value/state pairs
+across object types without widening applicability. Administrators can create
+and replace configured groups; additional ADM-valid catalog groups are not
+automatically seeded. Saving a group removes any warned-about invalid settings
+as part of its complete replacement, without touching STIX objects.
+See [configuration](../admin/configuration.md#configuration-files) for the API.
+
 ## Sample Objects
 
 ### Technique Object Example

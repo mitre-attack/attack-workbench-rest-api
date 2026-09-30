@@ -1,6 +1,6 @@
 'use strict';
 
-const fs = require('fs');
+const allowedValuesService = require('./allowed-values-service');
 const config = require('../../config/config');
 const systemConfigurationRepository = require('../../repository/system-configurations-repository');
 const userAccountsService = require('./user-accounts-service');
@@ -22,7 +22,6 @@ const {
 class SystemConfigurationService extends BaseService {
   constructor() {
     super(null, systemConfigurationRepository);
-    this._allowedValues = null;
   }
 
   /**
@@ -46,12 +45,7 @@ class SystemConfigurationService extends BaseService {
    * Returns allowed values for system configuration
    */
   async retrieveAllowedValues() {
-    if (this._allowedValues) {
-      return this._allowedValues;
-    }
-    const data = await fs.promises.readFile(config.configurationFiles.allowedValues);
-    this._allowedValues = JSON.parse(data);
-    return this._allowedValues;
+    return allowedValuesService.retrieveAllowedValues();
   }
 
   /**

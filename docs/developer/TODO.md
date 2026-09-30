@@ -1,5 +1,99 @@
 # Release Track TODOs
 
+## Runtime Allowed Values
+
+- [x] Create paired `feat/runtime-allowed-values` worktrees from `next`.
+- [x] Persist the configured allowed-values catalog with one-time enabled seeds.
+- [x] Add administrator-only value creation, deletion, and enabled-state updates.
+- [x] Add the frontend Allowed Values table and navigation below Validation Bypasses.
+- [x] Verify enabled-only dropdown hydration and preservation of existing selections.
+- [x] Run focused regressions, full backend tests, and a real browser smoke check.
+- [x] Update existing operator/developer documentation and Bruno requests.
+
+Grouped-rule revision:
+
+- [x] Consolidate the catalog into one rule per property/domain.
+- [x] Replace individual-entry CRUD with atomic complete-rule updates.
+- [x] Add a single editor for all values, preserving object-type applicability.
+- [x] Verify grouped-rule regressions and browser editing; update API clients/docs.
+
+ADM-constrained workflow revision:
+
+- [x] Add guided creation for supported ADM-valid property/domain scopes.
+- [x] Derive permissible values from installed ADM Zod schemas.
+- [x] Enforce ADM compliance in seeds, API writes, validation, and dropdown reads.
+- [x] Replace per-value scope controls with a scope-first approved-value checklist.
+- [x] Preserve existing settings while quarantining legacy invalid choices.
+- [x] Verify browser creation/editing and backend rejection; update docs and clients.
+
+ADM workflow verification:
+
+- Runtime ADM 4.11.7 yields 20 definitions / 32 scopes; the 15 initial configured
+  groups retain 192 valid seed values. Corrected the incompatible effective
+  permission default without changing valid required permissions.
+- Focused Allowed Values plus system-configuration API suites: 35 passing.
+  OpenAPI 2, configuration 22, middleware 29, scheduler 10, and backend lint pass.
+- Frontend complete suite: 169 files / 443 tests passing; feature-local lint
+  passes. Browser verified the Add New Property button, compact four-step wizard,
+  creation of an enterprise asset-sector rule, approved checklists, structured
+  invalid-input rejection and valid-input saving, per-type preservation, and
+  visible quarantine/explicit removal of an invalid legacy option.
+- Live API rejects non-ADM effective permissions when enabled or disabled and
+  leaves configuration unchanged. General validation flags/bypasses cannot
+  exempt these checks; regression coverage includes invalid seeds, legacy key
+  migration, empty new rules, and concurrent duplicate creation.
+- Full backend run remains non-green: 1075 API tests passed, with two unexpected
+  404 failures in virtual-determinism and parallel-relationships. Both affected
+  suites pass together in isolation (14 cases). No test was suppressed or
+  unrelated production code changed.
+- Updated OpenAPI, existing usage/operator/model docs, and Bruno catalog/create/
+  validate requests. Temporary smoke servers stopped and launcher removed.
+- Final `npm run build` passes after restoring the normal frontend API URL.
+
+Grouped-rule verification:
+
+- Grouped API regressions: 10 passing; exact seeds, persisted scope/state,
+  whole-set replacement, empty rules, duplicate rejection, authorization, and
+  concurrent updates to distinct rules are covered.
+- Frontend: 169 files / 438 tests pass; build and grouped-component lint pass.
+- Browser: 15 rows total at the default page size of 25; precisely one enterprise
+  platform row. Verified cancel isolation, adding two values in one save,
+  disabling PRE without widening its applicability, removing Windows, retaining
+  all unrelated rules, and enabled-only dropdown projection for all four
+  applicable object types.
+- Removed the obsolete entry management API and Bruno requests; no storage
+  migration is required. Updated user/operator/developer documentation.
+- Backend lint passes; OpenAPI (2), configuration (22), middleware (29), and
+  scheduler (10) stages pass. Complete backend runs are not clean: repeated runs
+  on Node 22 and 24 produced changing 404/socket/timeout failures in data-source,
+  release-track, software, organization-identity, and domain-report specs.
+  All those specs pass in isolation (19, 33, and 22 cases across three runs);
+  grouped-rule regressions pass throughout. No unrelated test was altered or
+  failure suppressed. The intermittent full-suite issue remains unresolved.
+- Temporary smoke servers were stopped, the launcher removed, and the frontend
+  API URL restored before the successful build.
+
+Initial per-entry implementation verification:
+
+- Backend focused Allowed Values regressions: 9 passing. Complete `npm test`:
+  OpenAPI 2, configuration 22, API 1070, middleware 29, scheduler 10 passing.
+  Backend lint passes. The initial concurrent-request `ECONNRESET` did not recur
+  in the isolated regression or complete suite.
+- Frontend complete suite: 168 files, 434 tests passing; `npm run build` passes.
+  New admin components and selection regression pass targeted lint. Full
+  frontend lint reports 249 errors and 41 warnings; the `next` baseline reports
+  250 errors and 41 warnings.
+- Live browser smoke against an isolated MongoDB/API: add, search, disable,
+  re-enable, confirm deletion, and sidebar placement below Validation Bypasses.
+  A real technique editor offered only enabled runtime platforms. A complete API
+  restart retained both a deleted seed and a disabled seed.
+- Temporary server/database files were removed and the local API URL restored.
+
+Proposed commit messages:
+
+- Backend: `feat(config): persist administrator-managed allowed values`
+- Frontend: `feat(admin): add runtime allowed values management`
+
 ## Duplicate relationship report memory (2026-09-10)
 
 - [x] Trace dashboard request and identify historical endpoint fan-out.
