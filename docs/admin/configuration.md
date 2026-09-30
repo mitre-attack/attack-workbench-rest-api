@@ -29,6 +29,8 @@ JSON configuration files, or a combination of both.
     - [Validation](#validation)
     - [Collection Indexes](#collection-indexes)
     - [Configuration Files](#configuration-files)
+      - [Allowed Values](#allowed-values)
+      - [Static Marking Definitions](#static-marking-definitions)
     - [ATT\&CK Specific](#attck-specific)
   - [Additional Resources](#additional-resources)
 
@@ -378,8 +380,8 @@ JSON_CONFIG_PATH=./config.json
 
 See sample configurations:
 
-- [collection-manager-oidc-keycloak.json](../resources/sample-configurations/collection-manager-oidc-keycloak.json)
-- [collection-manager-oidc-okta.json](../resources/sample-configurations/collection-manager-oidc-okta.json)
+- [collection-manager-oidc-keycloak.json](../../resources/sample-configurations/collection-manager-oidc-keycloak.json)
+- [collection-manager-oidc-okta.json](../../resources/sample-configurations/collection-manager-oidc-okta.json)
 
 #### Challenge API Key
 
@@ -430,7 +432,7 @@ JSON_CONFIG_PATH=./config.json
 }
 ```
 
-See sample: [test-service-challenge-apikey.json](../resources/sample-configurations/test-service-challenge-apikey.json)
+See sample: [test-service-challenge-apikey.json](../../resources/sample-configurations/test-service-challenge-apikey.json)
 
 #### Basic API Key
 
@@ -477,7 +479,7 @@ JSON_CONFIG_PATH=./config.json
 }
 ```
 
-See sample: [navigator-basic-apikey.json](../resources/sample-configurations/navigator-basic-apikey.json)
+See sample: [navigator-basic-apikey.json](../../resources/sample-configurations/navigator-basic-apikey.json)
 
 #### Multiple Service Authentication Methods
 
@@ -519,7 +521,7 @@ You can enable multiple service authentication methods simultaneously:
 }
 ```
 
-See sample: [multiple-apikey-services.json](../resources/sample-configurations/multiple-apikey-services.json)
+See sample: [multiple-apikey-services.json](../../resources/sample-configurations/multiple-apikey-services.json)
 
 ### Scheduler
 
@@ -617,80 +619,154 @@ Paths to additional configuration and data files.
 | Option                            | Environment Variable                 | JSON Path                                           | Type   | Default                                          | Description                                      |
 |-----------------------------------|--------------------------------------|-----------------------------------------------------|--------|--------------------------------------------------|--------------------------------------------------|
 | JSON Config Path                  | `JSON_CONFIG_PATH`                   | `configurationFiles.jsonConfigFile`                 | string | *(empty)*                                        | Path to JSON configuration file                  |
-| Allowed Values Path               | `ALLOWED_VALUES_PATH`                | `configurationFiles.allowedValues`                  | string | `./app/config/allowed-values.json`               | Path to allowed values configuration             |
+| Allowed Values Path               | `ALLOWED_VALUES_PATH`                | `configurationFiles.allowedValues`                  | string | `./app/config/allowed-values.json`               | Seed values used when Allowed Values configuration does not yet exist |
 | Static Marking Definitions Path   | `WB_REST_STATIC_MARKING_DEFS_PATH`   | `configurationFiles.staticMarkingDefinitionsPath`   | string | `./app/lib/default-static-marking-definitions/`  | Directory containing static marking definitions  |
 
-**Allowed Values:**
+#### Allowed Values
 
-`app/config/allowed-values.json` supplies the original supported object/property
-pairs and initial dropdown choices. The installed backend ADM Zod schemas define
-permissible values and domains; the file is not an independent validity whitelist.
-On first startup, the file selected by `ALLOWED_VALUES_PATH` is validated before
-MongoDB insertion. Invalid custom seeds fail without partially initializing
-configuration. Subsequent startups preserve the persisted configuration.
+Allowed Values controls which choices appear in object editors. Administrators
+manage one configuration per property/domain at **Dashboard → Admin → Allowed
+Values**, below **Validation Bypasses**.
 
-The corrected defaults contain 192 values across 25 original scopes and six
-object types, grouped into 15 initial property/domain rules. `Remote Desktop
-Users` was removed from effective permissions because ADM rejects it there; it
-remains available for required permissions. The current backend ADM 4.11.7
-catalog supports 20 property/domain definitions across 32 object-type scopes.
-Additional supported scopes can be configured without inventing schema fields.
+The three sources have different responsibilities:
 
-Open **Dashboard → Admin → Allowed Values**, immediately below **Validation
-Bypasses**. **Add New Property** guides an administrator through property, domain
-and object type, approved values, and review. An already-configured
-property/domain opens its existing editor rather than creating a duplicate.
-Editing uses one object-type selector and a searchable approved-value checklist.
-Check/uncheck controls enabled state; Remove clears that type's setting.
-Other object types retain their configurations. Formatted data-source/component
-names require **Validate and add** approval before they enter the draft.
+| Source | Responsibility |
+| --- | --- |
+| Installed backend ADM package | Determines permissible values and object-type/domain constraints through its Zod schemas |
+| Bundled `app/config/allowed-values.json` | Registers supported object/property pairs, supplies initial groups and values, and provides suggestions for formatted fields and the dropdown response structure |
+| MongoDB | Stores the administrator's configured values and enabled states |
 
-Saving applies the complete rule atomically; cancel discards the draft. Empty
-configured rules persist. Changing the seed file after initialization does not
-overwrite administrator choices.
+##### Initialization and the JSON file
 
-| Endpoint | Access | Behavior |
-| --- | --- | --- |
-| `GET /api/config/allowed-values` | Existing visitor-or-higher/read-only-service access | Original nested response, containing enabled values only; empty fields remain present |
-| `GET /api/config/allowed-values/catalog` | Administrator | Backend `admVersion` and supported definitions with domains, object types, enum/format kind, choices, and description |
-| `GET /api/config/allowed-values/rules` | Administrator | Configured rules containing valid `values` and quarantined `invalidValues` with reasons |
-| `POST /api/config/allowed-values/rules` | Administrator | Create `{ propertyName, domainName, values }` within the ADM catalog; returns `201` |
-| `PUT /api/config/allowed-values/rules/{propertyName}/{domainName}` | Administrator | Atomically replace a configured rule using `{ values: [{ value, enabled, objectTypes }] }`; returns the updated rule |
-| `POST /api/config/allowed-values/validate` | Administrator | Validate `{ propertyName, domainName, objectTypes, value }` without saving; returns `{ value }` with the trimmed value |
+When the backend starts and no Allowed Values configuration exists in MongoDB,
+it reads the file selected by `ALLOWED_VALUES_PATH` (the bundled file by default).
+It validates the complete seed against ADM before inserting it, with all seeded
+values enabled. An invalid seed fails initialization without a partial insert.
 
-Retrieve a rule before editing it. PUT replaces its **entire** set, so retain
-every option and object-type scope you want to keep. Each option has a nonempty,
-trimmed, case-sensitive `value`, a boolean `enabled`, and at least one distinct
-supported `objectTypes` entry. Both enabled and disabled values must satisfy
-the actual ADM field schema and its domain/object-type refinements. Software
-choices must satisfy both tool and malware schemas. Data-source strings use
-ADM's format validator rather than an invented finite enum.
+If configuration already exists, startup preserves it: additions, disabled
+values, and removals are not reset from the seed. Older configuration documents
+receive missing rule keys without restoring removed values.
 
-The same value may have separate enabled states in disjoint object-type scopes.
-Overlapping scope/value duplicates or duplicate property/domain creation return
-`409`. Invalid ADM values, unsupported scopes, and malformed bodies return
-`400`; replacing an unconfigured supported rule returns `404`. Validation
-failure leaves configuration unchanged. Concurrent saves to different groups
-retain both changes; concurrent creation of one group has a single winner.
+**The bundled JSON file is still required after initialization.** The backend
+loads it for supported-property registration, initial rule keys, formatted-value
+suggestions, and the nested dropdown response structure and ordering.
+`ALLOWED_VALUES_PATH` replaces the source of initial values; it does not replace
+that bundled registration. Editing seed values does not update an existing
+database, but editing the bundled object/property structure can change what
+Workbench exposes. Use the admin UI or API for runtime configuration.
 
-This grouped API replaces the original per-entry management endpoints; clients
-must use the rules endpoints. The enabled-only dropdown endpoint is unchanged.
+##### Managing a configuration
 
-Editors fetch current enabled choices when opened. Existing selections remain
-visible without becoming selectable again after removal; existing stored objects
-are not rewritten. Allowed Values checks are unconditional: neither general ADM
-validation switches nor validation bypass rules can permit invalid options.
-The frontend consumes the backend catalog instead of maintaining a second enum
-list or relying on its independently versioned ADM package.
+**Add New Property** guides the administrator through property, domain and object
+type, permitted values, and review. If the property/domain already exists, open
+its editor instead of creating a duplicate. This configures a supported field;
+it does not define a new STIX schema property.
 
-Legacy invalid options are quarantined on reads: never offered in dropdowns,
-returned in administrator `invalidValues` warnings, and retained in raw storage
-until the administrator saves that rule. Startup does not re-read the seed file
-or fail because of such legacy data. The existing legacy collection-bundle ICS
-data-source filter also reads this configuration, so changing its allowed
-choices can affect that export projection.
+In **Edit values**, select one object type, then use the searchable checklist:
 
-**Static Marking Definitions:**
+- Check a value to enable it; uncheck it to retain it as disabled.
+- Remove a value to clear its setting for that object type.
+- Switch object types without discarding the other types' settings.
+- Save the complete draft or cancel without changing configuration.
+
+For data-source/component names, enter the two names separately and choose
+**Validate and add**. The value enters the draft only after ADM accepts its
+format. Pending input must be validated or cleared before saving.
+
+An empty configuration persists and offers no choices. These operations do not
+rewrite existing ATT&CK objects or change their validation requirements.
+
+##### Adding values
+
+A value does not generally need to be added to both ADM and the JSON file:
+
+| Situation | ADM change | JSON change | Operator action |
+| --- | --- | --- | --- |
+| ADM already permits the value, but it is not configured or enabled | None | None | Enable it in the relevant property/domain and object-type scope, then save |
+| The value is a new enum member that ADM rejects | Required | Only if it should be a default for new configurations | Upgrade the backend ADM package, then enable the value through the UI |
+| A new data-source/component string satisfies ADM's existing format validator | None | None | Use Validate and add, then save |
+
+For a new enum member:
+
+1. Add support to the appropriate ADM schema, including any scope constraints,
+   and publish a package release.
+2. Update the backend's dependency and lockfile to resolve that release.
+3. Rebuild and redeploy the backend, or restart it after installing the updated
+   dependency in a source deployment.
+4. Reload the Allowed Values page and confirm its **Backend ADM** version.
+5. Enable the newly available value for the intended scope and save.
+
+Changing ADM's GitHub source alone does not change a running Workbench. New enum
+members without saved settings are not enabled automatically. The Allowed
+Values UI reads the server catalog, so it does not need a matching frontend ADM
+dependency upgrade for this workflow.
+
+Add a value to the JSON seed only when it should start enabled in a newly
+initialized configuration. That edit does not update existing installations.
+Adding an unsupported property/object-type pair is a separate Workbench code
+and registration change, not an operator value addition.
+
+##### ADM version and enforcement
+
+`GET /api/config/allowed-values/catalog` returns `admVersion` from the installed
+backend `@mitre-attack/attack-data-model` package's `package.json`. It is not the
+dependency range, the frontend's ADM version, or the ATT&CK specification
+version. The page and dialogs display it alongside choices derived from that
+same installed package.
+
+Both enabled and disabled configuration values must pass ADM validation.
+General validation switches and Validation Bypasses cannot exempt them.
+Enum choices come from ADM; data-source strings use its format validator.
+Software choices must be valid for both tool and malware objects.
+
+##### Legacy invalid settings
+
+A stored setting may be invalid under the current ADM because an earlier
+implementation accepted it or an ADM upgrade changed the schema.
+*Quarantine* means retaining that setting while excluding it from use:
+
+- The backend evaluates stored settings on reads; there is no quarantine
+  collection or persisted quarantine flag.
+- Invalid settings never populate dropdowns, even if stored as enabled.
+- The admin response lists them in `invalidValues`, with rejection reasons.
+- The editor warns that saving replaces the configuration without those
+  invalid settings. Merely opening the editor does not delete them.
+
+Startup does not reject an existing configuration because it contains legacy
+invalid settings. If a later ADM version accepts a retained setting again, its
+stored enabled state applies; quarantine is not a permanent disable operation.
+None of this changes existing STIX objects.
+
+##### API
+
+All management endpoints require an administrator. The dropdown endpoint retains
+visitor-or-higher and read-only service access.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/config/allowed-values` | Enabled, ADM-compliant choices in the existing nested object/property/domain format, including empty scopes |
+| `GET /api/config/allowed-values/catalog` | Backend ADM version, supported scopes, choices, validation kind, and descriptions |
+| `GET /api/config/allowed-values/rules` | Configured groups, compliant `values`, and legacy `invalidValues` warnings |
+| `POST /api/config/allowed-values/rules` | Create `{ propertyName, domainName, values }`; returns `201` |
+| `PUT /api/config/allowed-values/rules/{propertyName}/{domainName}` | Replace a configured group's complete `{ values }` set |
+| `POST /api/config/allowed-values/validate` | Check `{ propertyName, domainName, objectTypes, value }` without saving; return the trimmed `{ value }` |
+
+Each option in `values` has `{ value, enabled, objectTypes }`: a nonempty trimmed
+string, a boolean, and distinct supported object types. Values are case-sensitive.
+The same value may have different enabled states in disjoint object-type scopes.
+
+PUT replaces the entire group, so retain every option and scope you intend to
+keep. Creating or saving a rule validates its values independently of
+`/validate`. Invalid values, scopes, or bodies return `400`; a supported but
+unconfigured PUT target returns `404`; duplicate creation or overlapping
+scope/value entries return `409`. Validation failure leaves configuration
+unchanged. Saves to different groups do not overwrite each other.
+
+Object editors fetch current choices when opened. The legacy collection-bundle
+ICS data-source filter also uses this configuration, so changing its choices
+can affect that export projection.
+
+#### Static Marking Definitions
 
 Directory containing JSON files with STIX marking definitions that are automatically loaded into the system on startup.
 
@@ -724,5 +800,5 @@ ATT&CK-specific configuration values.
 ## Additional Resources
 
 - [Authentication Documentation](./authentication/README.md)
-- [Sample Configurations](../resources/sample-configurations/)
-- [Template Environment File](../template.env)
+- [Sample Configurations](../../resources/sample-configurations/)
+- [Template Environment File](../../template.env)

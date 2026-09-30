@@ -4,3 +4,7 @@ npm-debug.log
 
 app/tests
 local-only
+
+# Local developer logs
+/TODO.md
+/FRONTEND_TODO.md
