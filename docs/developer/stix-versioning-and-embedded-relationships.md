@@ -400,19 +400,26 @@ if (data.stix?.id) {
 const oldDataSourceRef = previousVersion?.stix?.x_mitre_data_source_ref;
 const newDataSourceRef = data.stix?.x_mitre_data_source_ref;
 
-// Detect changes
-if (oldDataSourceRef && !newDataSourceRef) {
-  this._removedDataSourceRef = oldDataSourceRef;  // Reference removed
-}
+// Keep per-revision deltas in the invocation's options, not on the singleton.
+const key = `${data.stix.id}:${new Date(data.stix.modified).getTime()}`;
+options._removedDataSourceRefs ??= new Map();
+options._removedDataSourceRefs.set(
+  key,
+  oldDataSourceRef && oldDataSourceRef !== newDataSourceRef ? oldDataSourceRef : null,
+);
 ```
 
 **In `DataComponentsService.afterCreate()`:**
 ```javascript
-// Emit removed event for old reference
-if (this._removedDataSourceRef) {
+const key = `${createdDocument.stix.id}:${new Date(createdDocument.stix.modified).getTime()}`;
+const removedRef = options._removedDataSourceRefs?.get(key);
+options._removedDataSourceRefs?.delete(key);
+// After confirming this revision is latest, emit the removed reference.
+if (removedRef) {
   await EventBus.emit('x-mitre-data-component::data-source-removed', {
     dataComponentId: createdDocument.stix.id,
-    dataSourceId: this._removedDataSourceRef
+    dataSourceId: removedRef,
+    options,
   });
 }
 ```
@@ -544,7 +551,7 @@ Only create DS1 snapshots when its `embedded_relationships` actually change.
 2. **Detect version changes in `beforeCreate`**
    - Fetch previous latest version
    - Compare old vs new values
-   - Store change tracking in instance variables
+   - Keep change tracking in invocation-scoped context, never mutable singleton service fields
 
 3. **Emit events for both added and removed relationships**
    - Don't assume POST only adds relationships
@@ -577,6 +584,43 @@ The design prioritizes **operational performance** over **historical queryabilit
 If you find yourself frequently needing complete historical relationship graphs, consider implementing Option 2 (separate relationship history collection). But for now, this is a **reasonable and well-documented design choice**.
 
 ---
+
+## Lifecycle integrity
+
+Authoring retirement checks are derived from latest STIX revisions, not the
+denormalized workspace cache. Latest selection precedes lifecycle filtering:
+an old active SRO does not block after its newest revision is deprecated.
+Inbound domain references on inactive source objects still block SDO deprecation.
+Attribution, marking, and release-inventory fields are outside this graph.
+
+SDO deprecation excludes existing active `subtechnique-of` and `revoked-by` SROs
+from blockers in both directions and leaves their revisions unchanged. The
+frontend likewise excludes them from its cascade and final blocker check, even
+when an older API includes them. This does not exempt embedded references or
+ordinary SROs. Explicit retirement of any SRO, including either preserved type,
+remains permitted, even with inactive endpoints. The active-SRO authoring guard
+is separate: only `revoked-by` may be authored with inactive endpoints; preserving
+an existing `subtechnique-of` does not permit creating one. Dedicated revocation
+planning and preservation semantics are unchanged.
+
+`domain-references.js` extracts nested `_ref` / `_refs` fields and compares
+reference-bearing records, preserving analytic log-source name/channel context.
+`lifecycle-service.js` uses the same extraction for preflight blockers, final
+authoring validation, embedded revocation plans, and affected-cache reconciliation.
+Required lifecycle events dispatch new revisions and cache writes to owning
+services. Imports bypass authoring policy without altering source STIX.
+
+`preserveRelationships=true` creates source/replacement revisions rather than
+editing historical STIX in place. Scalar conflicts and inactive referrers fail
+preflight. Reconciliation retains the revoked original's declared outgoing refs;
+it does not treat inactivity as disappearance.
+
+The graph write lock spans validation and persistence, including nested event
+work, to prevent relationship creation racing endpoint retirement. It serializes
+local writers and excludes other API workers through MongoDB. This lock is not
+a multi-document transaction; unexpected persistence errors can leave completed
+earlier writes. See [operator recovery](../admin/configuration.md#stix-graph-write-exclusion)
+and the [public lifecycle contract](../user/revoke-workflow.md).
 
 ## Related Documentation
 

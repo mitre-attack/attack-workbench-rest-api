@@ -721,6 +721,10 @@ async function checkDuplicateCollection(importedCollection, options) {
  * @returns {Promise<Object>} The imported collection
  */
 module.exports = async function importBundle(collection, data, options) {
+  const graphWriteLock = require('../../../lib/graph-write-lock');
+  if (!graphWriteLock.isHeld()) {
+    return graphWriteLock.run(() => importBundle(collection, data, options));
+  }
   const referenceImportResults = {
     uniqueReferences: 0,
     duplicateReferences: 0,

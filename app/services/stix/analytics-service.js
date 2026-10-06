@@ -76,6 +76,12 @@ class AnalyticsService extends BaseService {
         const analytic = await analyticsRepository.retrieveLatestByStixId(analyticId);
 
         if (!analytic) {
+          if (options?.requireReferences) {
+            throw new Exceptions.NotFoundError({
+              objectType: 'x-mitre-analytic',
+              objectId: analyticId,
+            });
+          }
           logger.warn(
             `AnalyticsService: Could not find analytic ${analyticId} to add inbound relationship`,
           );
@@ -122,7 +128,7 @@ class AnalyticsService extends BaseService {
         // import path; the bundle is the source of truth for stix content.
         // The framework freeze above would throw here if this gate were
         // missing — that's intentional.
-        if (!options?.import) {
+        if (!options?.import && !options?.requireReferences) {
           if (!analytic.stix.external_references) {
             analytic.stix.external_references = [];
           }
@@ -144,6 +150,7 @@ class AnalyticsService extends BaseService {
 
         await analyticsRepository.saveDocument(analytic);
       } catch (error) {
+        if (options?.requireReferences) throw error;
         logger.error(
           `AnalyticsService: Error handling analytics-referenced for ${analyticId}:`,
           error,
@@ -163,18 +170,26 @@ class AnalyticsService extends BaseService {
    * @returns {Promise<void>}
    */
   static async handleAnalyticsRemoved(payload) {
-    const { detectionStrategyId, analyticIds } = payload;
+    const { detectionStrategyId, analyticIds, options } = payload;
 
     for (const analyticId of analyticIds) {
       try {
         const analytic = await analyticsRepository.retrieveLatestByStixId(analyticId);
 
         if (!analytic) {
+          if (options?.requireReferences) {
+            throw new Exceptions.NotFoundError({
+              objectType: 'x-mitre-analytic',
+              objectId: analyticId,
+            });
+          }
           logger.warn(
             `AnalyticsService: Could not find analytic ${analyticId} to remove inbound relationship`,
           );
           continue;
         }
+
+        if (options?.import) deepFreezeStix(analytic);
 
         if (analytic.workspace?.embedded_relationships) {
           // Remove inbound embedded_relationship
@@ -193,7 +208,7 @@ class AnalyticsService extends BaseService {
         }
 
         // Update external_references (remove URL since no parent)
-        if (analytic.stix?.external_references) {
+        if (!options?.import && !options?.requireReferences && analytic.stix?.external_references) {
           // Remove existing ATT&CK external references
           analytic.stix.external_references = removeAttackExternalReferences(
             analytic.stix.external_references,
@@ -214,6 +229,7 @@ class AnalyticsService extends BaseService {
 
         await analyticsRepository.saveDocument(analytic);
       } catch (error) {
+        if (options?.requireReferences) throw error;
         logger.error(
           `AnalyticsService: Error handling analytics-removed for ${analyticId}:`,
           error,
@@ -271,8 +287,22 @@ class AnalyticsService extends BaseService {
     }
 
     // Build outbound embedded_relationships for data component references
-    const dataComponentRefs =
-      data.stix?.x_mitre_log_source_references?.map((ref) => ref.x_mitre_data_component_ref) || [];
+    const dataComponentRefs = [
+      ...new Set(
+        data.stix?.x_mitre_log_source_references?.map((ref) => ref.x_mitre_data_component_ref) ||
+          [],
+      ),
+    ];
+    const oldRefs = new Set(
+      previousVersion?.stix?.x_mitre_log_source_references?.map(
+        (ref) => ref.x_mitre_data_component_ref,
+      ) || [],
+    );
+    options._removedDataComponentRefs ??= new Map();
+    options._removedDataComponentRefs.set(
+      `${data.stix.id}:${new Date(data.stix.modified).getTime()}`,
+      [...oldRefs].filter((ref) => !dataComponentRefs.includes(ref)),
+    );
 
     // Preserve non-data-component relationships from the previous persisted version when POST
     // is creating a new version. Client payloads often omit server-managed workspace metadata.
@@ -281,7 +311,8 @@ class AnalyticsService extends BaseService {
       data.workspace.embedded_relationships ||
       [];
     const existingNonDataComponentRels = baselineEmbeddedRelationships.filter(
-      (rel) => !rel.stix_id?.startsWith('x-mitre-data-component--'),
+      (rel) =>
+        !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-data-component--')),
     );
     data.workspace.embedded_relationships = [...existingNonDataComponentRels];
 
@@ -323,11 +354,22 @@ class AnalyticsService extends BaseService {
    * @returns {Promise<void>}
    */
   async afterCreate(createdDocument, options) {
-    // Extract data component IDs from x_mitre_log_source_references
-    const dataComponentRefs =
-      createdDocument.stix?.x_mitre_log_source_references?.map(
-        (ref) => ref.x_mitre_data_component_ref,
-      ) || [];
+    const key = `${createdDocument.stix.id}:${new Date(createdDocument.stix.modified).getTime()}`;
+    const removedRefs = options._removedDataComponentRefs?.get(key) || [];
+    options._removedDataComponentRefs?.delete(key);
+    const latest = await this.repository.retrieveLatestByStixId(createdDocument.stix.id);
+    if (
+      new Date(latest.stix.modified).getTime() !== new Date(createdDocument.stix.modified).getTime()
+    ) {
+      return;
+    }
+    const dataComponentRefs = [
+      ...new Set(
+        createdDocument.stix?.x_mitre_log_source_references?.map(
+          (ref) => ref.x_mitre_data_component_ref,
+        ) || [],
+      ),
+    ];
 
     if (dataComponentRefs.length > 0) {
       logger.info(
@@ -335,12 +377,25 @@ class AnalyticsService extends BaseService {
         { stixId: createdDocument.stix.id, dataComponentIds: dataComponentRefs },
       );
 
-      await EventBus.emit('x-mitre-analytic::data-components-referenced', {
-        analyticId: createdDocument.stix.id,
-        analytic: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
-        dataComponentIds: dataComponentRefs,
-        options,
-      });
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-analytic::data-components-referenced',
+        {
+          analyticId: createdDocument.stix.id,
+          analytic: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
+          dataComponentIds: dataComponentRefs,
+          options,
+        },
+      );
+    }
+    if (removedRefs.length > 0) {
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-analytic::data-components-removed',
+        {
+          analyticId: createdDocument.stix.id,
+          dataComponentIds: removedRefs,
+          options,
+        },
+      );
     }
   }
 
@@ -370,12 +425,17 @@ class AnalyticsService extends BaseService {
     }
 
     // Validate that all referenced data components exist and build outbound relationships
-    const newDataComponentRefs =
-      data.stix?.x_mitre_log_source_references?.map((ref) => ref.x_mitre_data_component_ref) || [];
+    const newDataComponentRefs = [
+      ...new Set(
+        data.stix?.x_mitre_log_source_references?.map((ref) => ref.x_mitre_data_component_ref) ||
+          [],
+      ),
+    ];
 
     // Preserve existing non-data-component embedded relationships (e.g., inbound from detection strategies)
     const existingNonDataComponentRels = (data.workspace.embedded_relationships || []).filter(
-      (rel) => !rel.stix_id?.startsWith('x-mitre-data-component--'),
+      (rel) =>
+        !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-data-component--')),
     );
 
     // Build new outbound embedded relationships for data components
@@ -406,19 +466,6 @@ class AnalyticsService extends BaseService {
       ...existingNonDataComponentRels,
       ...dataComponentEmbeddedRels,
     ];
-
-    // Detect changes in data component references for event emission
-    const oldDataComponentRefs =
-      existingDocument.stix?.x_mitre_log_source_references?.map(
-        (ref) => ref.x_mitre_data_component_ref,
-      ) || [];
-
-    this._addedDataComponentRefs = newDataComponentRefs.filter(
-      (ref) => !oldDataComponentRefs.includes(ref),
-    );
-    this._removedDataComponentRefs = oldDataComponentRefs.filter(
-      (ref) => !newDataComponentRefs.includes(ref),
-    );
 
     // Check if embedded_relationships changed (specifically inbound detection strategy relationships)
     const oldEmbeddedRels = existingDocument.workspace?.embedded_relationships || [];
@@ -459,13 +506,22 @@ class AnalyticsService extends BaseService {
    * Emits domain events for added/removed data component references
    *
    * @param {Object} updatedDocument - The updated analytic document
-   * @param {Object} _previousDocument - The previous version of the analytic (unused)
+   * @param {Object} previousDocument - The previous version of the analytic
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
-  async afterUpdate(updatedDocument, _previousDocument) {
-    const addedRefs = this._addedDataComponentRefs || [];
-    const removedRefs = this._removedDataComponentRefs || [];
+  async afterUpdate(updatedDocument, previousDocument) {
+    const oldRefs = new Set(
+      previousDocument.stix?.x_mitre_log_source_references?.map(
+        (ref) => ref.x_mitre_data_component_ref,
+      ) || [],
+    );
+    const newRefs = new Set(
+      updatedDocument.stix?.x_mitre_log_source_references?.map(
+        (ref) => ref.x_mitre_data_component_ref,
+      ) || [],
+    );
+    const addedRefs = [...newRefs].filter((ref) => !oldRefs.has(ref));
+    const removedRefs = [...oldRefs].filter((ref) => !newRefs.has(ref));
 
     // Emit event for newly referenced data components
     if (addedRefs.length > 0) {
@@ -493,10 +549,6 @@ class AnalyticsService extends BaseService {
         dataComponentIds: removedRefs,
       });
     }
-
-    // Clean up instance variables
-    delete this._addedDataComponentRefs;
-    delete this._removedDataComponentRefs;
   }
 
   /**

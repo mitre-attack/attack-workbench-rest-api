@@ -53,6 +53,10 @@ class TechniquesService extends BaseService {
    * @param {string[]} payload.domains - The tactic's x_mitre_domains (e.g. ['enterprise-attack'])
    */
   static async handleTacticShortnameChanged(payload) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => TechniquesService.handleTacticShortnameChanged(payload));
+    }
     const { tacticId, oldShortname, newShortname, domains = [], createNewVersion } = payload;
 
     // Convert the tactic's domains to kill chain names so we only update
@@ -259,6 +263,10 @@ class TechniquesService extends BaseService {
    * @returns {Object} The newly created subtechnique version
    */
   async convertToSubtechnique(stixId, data, options = {}) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.convertToSubtechnique(stixId, data, options));
+    }
     // Lazy-load to avoid circular dependency
     const relationshipsRepository = require('../../repository/relationships-repository');
 
@@ -296,6 +304,16 @@ class TechniquesService extends BaseService {
     if (!parentTechnique) {
       throw new BadRequestError({
         details: `Parent technique with ATT&CK ID ${data.parentTechniqueAttackId} not found`,
+      });
+    }
+    const lifecycle = require('./lifecycle-service');
+    if (lifecycle.inactive(technique) || lifecycle.inactive(parentTechnique)) {
+      const { LifecycleConflictError } = require('../../exceptions');
+      throw new LifecycleConflictError('Subtechnique conversion requires active endpoints', {
+        code: 'inactive_reference',
+        references: [technique, parentTechnique]
+          .filter(lifecycle.inactive)
+          .map((doc) => doc.stix.id),
       });
     }
 
@@ -391,6 +409,10 @@ class TechniquesService extends BaseService {
    * @returns {Object} The newly created technique version
    */
   async convertToTechnique(stixId, options = {}) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.convertToTechnique(stixId, options));
+    }
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }

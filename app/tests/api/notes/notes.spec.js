@@ -53,6 +53,27 @@ describe('Notes API', function () {
 
     // Log into the app
     passportCookie = await login.loginAnonymous(app);
+
+    const timestamp = new Date().toISOString();
+    const target = await request(app)
+      .post('/api/techniques')
+      .send({
+        workspace: { workflow: { state: 'work-in-progress' } },
+        stix: {
+          type: 'attack-pattern',
+          spec_version: '2.1',
+          name: 'Note reference target',
+          created: timestamp,
+          modified: timestamp,
+          x_mitre_domains: ['enterprise-attack'],
+          x_mitre_is_subtechnique: false,
+          x_mitre_platforms: ['Windows'],
+        },
+      })
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(201);
+    initialObjectData.stix.object_refs = [target.body.stix.id];
   });
 
   it('GET /api/notes should return an empty array of notes', async function () {

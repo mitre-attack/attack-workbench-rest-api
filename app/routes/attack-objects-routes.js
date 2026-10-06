@@ -16,4 +16,12 @@ router
     attackObjectsController.retrieveAll,
   );
 
+router
+  .route('/attack-objects/:stixId/deprecation-check')
+  .get(
+    authn.authenticate,
+    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
+    attackObjectsController.deprecationCheck,
+  );
+
 module.exports = router;

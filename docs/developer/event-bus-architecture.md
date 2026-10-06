@@ -244,16 +244,16 @@ Where `{type}` is the STIX type (e.g., `attack-pattern`, `x-mitre-analytic`, `x-
 
 1. **DetectionStrategiesService.beforeCreate(data)**
    - Detect change: `oldRefs = []`, `newRefs = ['x-mitre-analytic--123']`
-   - Store: `this._addedAnalyticRefs = ['x-mitre-analytic--123']`
+   - Keep removal deltas in invocation options keyed by STIX ID and modified timestamp; never on the singleton service
    - Rebuild outbound embedded_relationships for new refs
    - Update `data.workspace.embedded_relationships`
 
 2. **BaseService.create()** - Persist the new revision
 
 3. **DetectionStrategiesService.afterCreate(createdDocument)**
-   - If `_addedAnalyticRefs` not empty:
-     - Emit `x-mitre-detection-strategy::analytics-referenced`
-   - Clean up: `delete this._addedAnalyticRefs`
+   - Confirm the saved revision is latest; a historical import must not change current backlinks
+   - Emit `x-mitre-detection-strategy::analytics-referenced` for current references
+   - Consume this revision's invocation-scoped removal delta
 
 4. **BaseService.emitCreatedEvent()** - Emit `x-mitre-detection-strategy::created`
 
@@ -269,13 +269,13 @@ Where `{type}` is the STIX type (e.g., `attack-pattern`, `x-mitre-analytic`, `x-
 
 1. **DetectionStrategiesService.beforeCreate(...)**
    - Detect change: `removedRefs = ['x-mitre-analytic--123']`
-   - Store: `this._removedAnalyticRefs = ['x-mitre-analytic--123']`
+   - Store `removedRefs` in invocation options under this revision's ID/timestamp key
    - Rebuild outbound embedded_relationships (now empty)
 
 2. **BaseService.create()** - Persist the new revision
 
 3. **DetectionStrategiesService.afterCreate(...)**
-   - If `_removedAnalyticRefs` not empty:
+   - If the saved revision is latest and its invocation-scoped removal delta is nonempty:
      - Emit `x-mitre-detection-strategy::analytics-removed`
        ```javascript
        {
@@ -283,7 +283,7 @@ Where `{type}` is the STIX type (e.g., `attack-pattern`, `x-mitre-analytic`, `x-
          analyticIds: ['x-mitre-analytic--123']
        }
        ```
-   - Clean up: `delete this._removedAnalyticRefs`
+   - Remove this revision's delta from the invocation context
 
 4. **AnalyticsService** listener receives event
    - For each analyticId:

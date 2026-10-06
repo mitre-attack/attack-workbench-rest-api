@@ -475,7 +475,7 @@ paths:
             type: string
         - name: preserveRelationships
           in: query
-          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deprecation.'
+          description: 'Preserve active ordinary SROs by cloning onto the active latest replacement (except subtechnique-of); retire originals as new deprecated revisions. Also substitute inbound domain embedded references and merge outgoing references without losing replacement values. Scalar conflicts or inactive referrers fail before writes; unexpected persistence failures are not transactional.'
           schema:
             type: boolean
             default: false
@@ -512,4 +512,4 @@ paths:
         '404':
           description: 'The technique or revoking object was not found.'
         '409':
-          description: 'The technique is already revoked.'
+          description: 'Already revoked, inactive or stale replacement, embedded-reference conflict, inactive referrer, or concurrent graph write.'

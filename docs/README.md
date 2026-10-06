@@ -10,7 +10,8 @@ This directory contains supplementary technical documentation for the ATT&CK Wor
 Guides for consumers of the REST API — endpoints, workflows, and terminology.
 
 - [Build Information](user/build-information.md): Inspect the running REST API release and build provenance
-- [Revoke Workflow](user/revoke-workflow.md): How to revoke ATT&CK objects via the API
+- [Deprecation Workflow](user/deprecation-workflow.md): Blocking-reference retirement, frontend ordering, preserved hierarchy/replacement links, and explicit embedded-reference resolution
+- [Revocation Workflow](user/revoke-workflow.md): Frontend/backend responsibilities, SRO and embedded-reference preservation, replacement constraints, and failure handling
 - [Data Quality Reports](user/data-quality-reports.md): Missing LinkById, parallel relationship, and domain consistency reports under `/api/reports`
 
 ### Release Tracks
