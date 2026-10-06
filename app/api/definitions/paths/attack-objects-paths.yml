@@ -1,4 +1,82 @@
 paths:
+  /api/attack-objects/{stixId}/deprecation-check:
+    get:
+      summary: Check current relationship blockers before deprecation
+      operationId: attack-object-deprecation-check
+      description: |
+        Authenticated authoritative latest-STIX graph preflight. Active latest SROs other
+        than subtechnique-of and revoked-by, and current domain embedded references in
+        either direction, block SDO deprecation, including inbound references from inactive
+        objects. Existing subtechnique-of and revoked-by SROs are preserved unchanged in
+        either direction. Historical revisions, retired SROs, attribution, markings and
+        collection inventory are excluded. Explicit retirement of any SRO itself always
+        returns empty blockers, including the two preserved types. These deprecation
+        exemptions do not change new relationship authoring guards or revocation workflows.
+        A successful check is not a write
+        authorization: POST rechecks under shared graph-write serialization and returns
+        409 with code deprecation_blocked and these same fields at the top level on conflict.
+      tags:
+        - ATT&CK Objects
+      parameters:
+        - name: stixId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current deprecation eligibility and actionable references.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stix_id, can_deprecate, blockers]
+                properties:
+                  stix_id:
+                    type: string
+                  can_deprecate:
+                    type: boolean
+                  blockers:
+                    type: object
+                    required: [sros, embedded]
+                    properties:
+                      sros:
+                        type: array
+                        items:
+                          type: object
+                          required: [stix_id, modified, relationship_type, direction]
+                          properties:
+                            stix_id:
+                              type: string
+                            modified:
+                              type: string
+                              format: date-time
+                            relationship_type:
+                              type: string
+                            direction:
+                              type: string
+                              enum: [inbound, outbound]
+                      embedded:
+                        type: array
+                        items:
+                          type: object
+                          required: [source_ref, target_ref, path, direction]
+                          properties:
+                            source_ref:
+                              type: string
+                            target_ref:
+                              type: string
+                            path:
+                              type: string
+                              description: STIX-relative property path, including array indices.
+                            direction:
+                              type: string
+                              enum: [inbound, outbound]
+        '401':
+          description: Authentication required.
+        '404':
+          description: No object with this STIX ID exists.
+
   /api/attack-objects:
     get:
       summary: 'Get a list of all ATT&CK objects'

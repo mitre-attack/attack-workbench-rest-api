@@ -12,6 +12,17 @@ const {
 const regexValidator = require('../lib/regex');
 
 class AttackObjectsRepository extends BaseRepository {
+  async retrieveLatestGraphObjects() {
+    return this.model
+      .aggregate([
+        { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+        { $group: { _id: '$stix.id', document: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$document' } },
+        { $project: { _id: 0, __v: 0, __t: 0 } },
+      ])
+      .exec();
+  }
+
   async retrieveAll(options) {
     // Build the query
     const query = {};

@@ -8,6 +8,10 @@ const logger = require('../../lib/logger');
 const { NotImplementedError, DatabaseError } = require('../../exceptions');
 
 class AttackObjectsService extends BaseService {
+  async deprecationCheck(stixId) {
+    return require('./lifecycle-service').deprecationCheck(stixId);
+  }
+
   /**
    * Override of base class retrieveAll() because:
    * 1. Adds special handling for relationships
@@ -253,6 +257,12 @@ class AttackObjectsService extends BaseService {
    * @param {string[]} payload.organizationIdentityHistory
    */
   static async handleOrganizationIdentityChanged(payload) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() =>
+        AttackObjectsService.handleOrganizationIdentityChanged(payload),
+      );
+    }
     const { previousIdentityRef, newIdentityRef, organizationIdentityHistory } = payload;
 
     // Skip propagation on first-time setup (no previous identity to propagate from)

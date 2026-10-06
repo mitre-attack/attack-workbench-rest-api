@@ -298,7 +298,7 @@ paths:
             type: string
         - name: preserveRelationships
           in: query
-          description: 'If true, relationships referencing the revoked object are cloned to point to the revoking object before deletion.'
+          description: 'Preserve active SROs and domain embedded references on the active latest replacement; retire original SROs as new revisions. Scalar conflicts or inactive referrers fail before writes; unexpected persistence failures are not transactional.'
           schema:
             type: boolean
             default: false
@@ -331,4 +331,4 @@ paths:
         '404':
           description: 'The campaign or revoking object was not found.'
         '409':
-          description: 'The campaign is already revoked.'
+          description: 'Already revoked, inactive or stale replacement, embedded-reference conflict, inactive referrer, or concurrent graph write.'

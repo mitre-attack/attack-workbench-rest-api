@@ -8,6 +8,12 @@ const softwareRepository = require('../../repository/software-repository');
 const { Malware: MalwareType, Tool: ToolType } = require('../../lib/types');
 
 class SoftwareService extends BaseService {
+  constructor(type, repository) {
+    super(type, repository);
+    this.registerLifecycleType(MalwareType);
+    this.registerLifecycleType(ToolType);
+  }
+
   /**
    * Ensure x_mitre_aliases[0] is always the object's own name.
    *
@@ -81,6 +87,8 @@ class SoftwareService extends BaseService {
    * We temporarily set this.type to match the incoming data type so BaseService validation passes.
    */
   async create(data, options) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) return graphWriteLock.run(() => this.create(data, options));
     // Validate that the type is either malware or tool
     if (data?.stix?.type !== MalwareType && data?.stix?.type !== ToolType) {
       const { InvalidTypeError } = require('../../exceptions');

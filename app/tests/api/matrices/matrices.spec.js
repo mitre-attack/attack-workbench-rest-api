@@ -66,6 +66,27 @@ describe('Matrices API', function () {
 
     // Log into the app
     passportCookie = await login.loginAnonymous(app);
+
+    const timestamp = new Date().toISOString();
+    for (const id of initialObjectData.stix.tactic_refs) {
+      await request(app)
+        .post('/api/tactics')
+        .send({
+          workspace: { workflow: { state: 'work-in-progress' } },
+          stix: {
+            id,
+            type: 'x-mitre-tactic',
+            spec_version: '2.1',
+            name: `Matrix prerequisite ${id}`,
+            created: timestamp,
+            modified: timestamp,
+            x_mitre_domains: ['enterprise-attack'],
+          },
+        })
+        .set('Accept', 'application/json')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+        .expect(201);
+    }
   });
 
   it('GET /api/matrices returns an empty array of matrices', async function () {

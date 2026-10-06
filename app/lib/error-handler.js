@@ -56,6 +56,7 @@ const {
   ImmutableStixRevisionError,
   ObjectHasValidationIssuesError,
 } = require('../exceptions');
+const { LifecycleConflictError } = require('../exceptions');
 
 exports.bodyParser = function (err, req, res, next) {
   if (err.name === 'SyntaxError') {
@@ -145,6 +146,7 @@ exports.serviceExceptions = function (err, req, res, next) {
   // Handle 409 Conflict errors (duplicate resources)
   if (
     err instanceof DuplicateIdError ||
+    err instanceof LifecycleConflictError ||
     err instanceof DuplicateEmailError ||
     err instanceof DuplicateNameError ||
     err instanceof AlreadyRevokedError ||

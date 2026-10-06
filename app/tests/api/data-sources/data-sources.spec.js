@@ -11,6 +11,7 @@ const config = require('../../../config/config');
 const login = require('../../shared/login');
 
 const dataComponentsService = require('../../../services/stix/data-components-service');
+const AttackObject = require('../../../models/attack-object-model');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -64,7 +65,7 @@ async function loadDataComponents(baseDataComponent) {
   let timestamp = new Date().toISOString();
   data1.stix.created = timestamp;
   data1.stix.modified = timestamp;
-  const created1 = await dataComponentsService.create(data1);
+  await dataComponentsService.create(data1);
 
   const data2 = _.cloneDeep(baseDataComponent);
   timestamp = new Date().toISOString();
@@ -82,8 +83,12 @@ async function loadDataComponents(baseDataComponent) {
   timestamp = new Date().toISOString();
   data4.stix.created = timestamp;
   data4.stix.modified = timestamp;
-  data4.stix.x_mitre_deprecated = true;
-  await dataComponentsService.create(data4);
+  const created4 = await dataComponentsService.create(data4);
+  // Legacy imported inactive components can retain their data source references.
+  await AttackObject.collection.updateOne(
+    { 'stix.id': created4.stix.id },
+    { $set: { 'stix.x_mitre_deprecated': true } },
+  );
 
   const data5 = _.cloneDeep(baseDataComponent);
   timestamp = new Date().toISOString();
@@ -91,10 +96,10 @@ async function loadDataComponents(baseDataComponent) {
   data5.stix.modified = timestamp;
   const created5 = await dataComponentsService.create(data5);
 
-  // Revoke data component 5 using data component 1 as the revoking object
-  await dataComponentsService.revoke(created5.stix.id, {
-    revoking: { stixId: created1.stix.id, modified: created1.stix.modified },
-  });
+  await AttackObject.collection.updateOne(
+    { 'stix.id': created5.stix.id },
+    { $set: { 'stix.revoked': true } },
+  );
 }
 
 describe('Data Sources API', function () {

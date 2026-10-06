@@ -797,6 +797,36 @@ ATT&CK-specific configuration values.
 
 ---
 
+## STIX graph-write exclusion
+
+Authoring lifecycle validation and persistence share a database-backed lock in
+`graphWriteLocks` with `_id: "stix-graph"`. Writes queue within one API process;
+a competing worker returns `409` with `code: "graph_write_conflict"`. Read-only
+preflight checks are advisory; final writes revalidate while holding the lock.
+Imports participate in write exclusion but retain their source-fidelity policy.
+
+The lock deliberately has **no automatic expiry**. On standalone MongoDB, taking
+over an expired lock cannot fence a paused former owner's subsequent writes.
+A process crash or failed lock release therefore fails closed: graph writes can
+remain blocked until an operator recovers the lock.
+
+Recovery procedure:
+
+1. Stop **all API workers and other graph writers** using this database. Do not
+   remove a lock merely because an operation appears slow.
+2. Inspect the failed operation's logs and persisted object/SRO revisions.
+   Revocation is preflighted but not a multi-document transaction; earlier
+   writes may have completed before an unexpected database failure.
+3. In the correct Workbench database, inspect the ownership record:
+   `db.graphWriteLocks.findOne({_id: "stix-graph"})`.
+4. Only after every writer is stopped, remove that record:
+   `db.graphWriteLocks.deleteOne({_id: "stix-graph"})`.
+5. Restart the workers, refresh affected objects, and reconcile the operation's
+   persisted state before retrying. Never delete STIX revisions as lock cleanup.
+
+This recovery does not rebuild embedded-reference metadata or roll back partial
+work. See [lifecycle workflow semantics](../user/revoke-workflow.md).
+
 ## Additional Resources
 
 - [Authentication Documentation](./authentication/README.md)

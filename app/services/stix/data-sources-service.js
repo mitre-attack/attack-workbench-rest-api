@@ -56,6 +56,10 @@ class DataSourcesService extends BaseService {
       const dataSource = await dataSourcesRepository.retrieveLatestByStixId(dataSourceId);
 
       if (!dataSource) {
+        if (payload.options?.requireReferences) {
+          const { NotFoundError } = require('../../exceptions');
+          throw new NotFoundError({ stix_id: dataSourceId });
+        }
         logger.warn(
           `DataSourcesService: Could not find data source ${dataSourceId} to add inbound relationship`,
         );
@@ -90,6 +94,7 @@ class DataSourcesService extends BaseService {
 
       await dataSourcesRepository.saveDocument(dataSource);
     } catch (error) {
+      if (payload.options?.requireReferences) throw error;
       logger.error(
         `DataSourcesService: Error handling data-source-referenced for ${dataSourceId}:`,
         error,
@@ -117,6 +122,10 @@ class DataSourcesService extends BaseService {
       const dataSource = await dataSourcesRepository.retrieveLatestByStixId(dataSourceId);
 
       if (!dataSource) {
+        if (payload.options?.requireReferences) {
+          const { NotFoundError } = require('../../exceptions');
+          throw new NotFoundError({ stix_id: dataSourceId });
+        }
         logger.warn(
           `DataSourcesService: Could not find data source ${dataSourceId} to remove inbound relationship`,
         );
@@ -141,6 +150,7 @@ class DataSourcesService extends BaseService {
 
       await dataSourcesRepository.saveDocument(dataSource);
     } catch (error) {
+      if (payload.options?.requireReferences) throw error;
       logger.error(
         `DataSourcesService: Error handling data-source-removed for ${dataSourceId}:`,
         error,
