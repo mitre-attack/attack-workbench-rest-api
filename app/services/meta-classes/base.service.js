@@ -468,9 +468,11 @@ class BaseService extends ServiceWithHooks {
    * Validation errors that match a stored bypass rule are filtered out.
    *
    * @param {Object} data - The composed request data ({ stix, workspace })
+   * @param {Object} [options] - Validation options
+   * @param {Array} [options.bypassRules] - Preloaded rules for batch validation
    * @returns {Promise<{ errors: Array, warnings: Array }>} Validation results
    */
-  async validateComposedObject(data) {
+  async validateComposedObject(data, { bypassRules } = {}) {
     const empty = { errors: [], warnings: [] };
     if (!config.validateRequests.withAttackDataModel) return empty;
 
@@ -497,6 +499,7 @@ class BaseService extends ServiceWithHooks {
     const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
       errors: allErrors,
       stixType,
+      bypassRules,
     });
 
     // The handler returns { errors, warnings }

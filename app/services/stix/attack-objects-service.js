@@ -213,6 +213,11 @@ class AttackObjectsService extends BaseService {
       AttackObjectsService.handleRevisionsRequested,
     );
 
+    EventBus.on(
+      Events.RELEASE_TRACK_OBJECTS_REVIEWED,
+      AttackObjectsService.handleReleaseTrackObjectsReviewed,
+    );
+
     logger.info('AttackObjectsService: Event listeners initialized');
   }
 
@@ -226,6 +231,12 @@ class AttackObjectsService extends BaseService {
   static async handleRevisionsRequested({ entries }) {
     if (!entries || entries.length === 0) return [];
     return attackObjectsRepository.findManyByIdAndModified(entries);
+  }
+
+  static async handleReleaseTrackObjectsReviewed({ entries }) {
+    return attackObjectsRepository.markRevisionsReviewed(
+      entries.filter((entry) => !entry.object_ref.startsWith('relationship--')),
+    );
   }
 
   /**

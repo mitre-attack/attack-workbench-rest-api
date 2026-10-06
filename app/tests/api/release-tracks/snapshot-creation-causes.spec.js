@@ -201,7 +201,18 @@ describe('Snapshot creation causes', function () {
       '/api/techniques',
       {
         workspace: { workflow: { state: 'work-in-progress' } },
-        stix: { type: 'attack-pattern', spec_version: '2.1', name: 'Creation Cause Technique' },
+        stix: {
+          type: 'attack-pattern',
+          spec_version: '2.1',
+          name: 'Creation Cause Technique',
+          description: 'Technique used to verify workflow snapshot provenance.',
+          x_mitre_version: '1.0',
+          x_mitre_domains: ['enterprise-attack'],
+          x_mitre_platforms: ['Windows'],
+          x_mitre_is_subtechnique: false,
+          kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
+          object_marking_refs: ['marking-definition--fa42a846-8d90-4e51-bc29-71d5b4802168'],
+        },
       },
       201,
     );

@@ -62,6 +62,7 @@ describe('Virtual release-track graph integrity', function () {
         type: 'attack-pattern',
         object_marking_refs: [staticMarkingDefinitionId],
         kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
+        x_mitre_version: '1.0',
         x_mitre_domains: domains,
         x_mitre_is_subtechnique: false,
         x_mitre_platforms: ['Windows'],
@@ -81,6 +82,7 @@ describe('Virtual release-track graph integrity', function () {
         spec_version: '2.1',
         type: 'course-of-action',
         object_marking_refs: [staticMarkingDefinitionId],
+        x_mitre_version: '1.0',
         x_mitre_domains: domains,
       },
     };

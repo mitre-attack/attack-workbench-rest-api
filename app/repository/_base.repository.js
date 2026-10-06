@@ -527,6 +527,22 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
+  async markRevisionsReviewed(entries) {
+    if (!entries.length) return { matchedCount: 0 };
+    // The generic AttackObject schema omits modified; strictQuery would strip
+    // that predicate. Match BSON dates directly to preserve the exact revision.
+    return this.model.collection.updateMany(
+      {
+        $or: entries.map(({ object_ref, object_modified }) => ({
+          'stix.id': object_ref,
+          'stix.modified': new Date(object_modified),
+        })),
+        'workspace.workflow.state': { $ne: 'static' },
+      },
+      { $set: { 'workspace.workflow.state': 'reviewed' } },
+    );
+  }
+
   /**
    * Retrieve the workspace.release_tracks backrefs of one object revision.
    * Lean, minimal projection — used to refresh a create/update response

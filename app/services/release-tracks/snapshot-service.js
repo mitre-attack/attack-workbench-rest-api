@@ -496,6 +496,11 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
   clone.creation_cause = options.creationCause || CreationCause.Unknown;
   clone.creation_actor = creationActor(options.userAccountId);
   const normalized = tierRevisionInvariant.normalizeSnapshot(clone);
+  const reviewWarnings = await require('./reviewed-state-service').reviewSnapshotChanges(
+    sourceSnapshot,
+    normalized.snapshot,
+    { membersWritten: rewritesMembers },
+  );
   await options.lease.assertOwned();
   const cleanupIntent =
     normalized.snapshot.type === 'virtual' && options.retention
@@ -561,6 +566,7 @@ async function cloneSnapshotUnlocked(trackId, sourceSnapshot, overrides, options
     );
   }
   logger.verbose(`SnapshotService: Cloned snapshot for track "${trackId}"`);
+  if (reviewWarnings.length) saved.warnings = reviewWarnings;
   return saved;
 }
 
@@ -636,6 +642,11 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
   await primaryRevisionService.assertStoredEntries(
     tierRevisionInvariant.TIER_PRECEDENCE.flatMap((tier) => normalized.snapshot[tier] || []),
   );
+  const reviewWarnings = await require('./reviewed-state-service').reviewSnapshotChanges(
+    null,
+    normalized.snapshot,
+    { membersWritten: true },
+  );
 
   await modelFactory.ensureIndexes(newTrackId);
   const saved = await saveSealedSnapshot(
@@ -667,6 +678,7 @@ async function _cloneToNewTrack(sourceSnapshot, options = {}) {
     );
   }
   logger.verbose(`SnapshotService: Cloned track to new track "${clone.name}" (${newTrackId})`);
+  if (reviewWarnings.length) saved.warnings = reviewWarnings;
   return saved;
 }
 

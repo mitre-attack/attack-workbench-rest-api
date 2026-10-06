@@ -125,6 +125,11 @@ class RelationshipsService extends BaseService {
     );
 
     EventBus.on(
+      EventConstants.RELEASE_TRACK_OBJECTS_REVIEWED,
+      this.handleReleaseTrackObjectsReviewed.bind(this),
+    );
+
+    EventBus.on(
       EventConstants.BUNDLE_RELATIONSHIPS_REQUESTED,
       this.handleBundleRelationshipsRequested.bind(this),
     );
@@ -147,6 +152,12 @@ class RelationshipsService extends BaseService {
       includeDeprecated: false,
       objectRefs,
     });
+  }
+
+  static async handleReleaseTrackObjectsReviewed({ entries }) {
+    return relationshipsRepository.markRevisionsReviewed(
+      entries.filter((entry) => entry.object_ref.startsWith('relationship--')),
+    );
   }
 
   /**

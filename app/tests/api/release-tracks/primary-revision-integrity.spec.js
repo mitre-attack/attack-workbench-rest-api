@@ -36,6 +36,8 @@ function buildTechnique(name, previous) {
       kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
       x_mitre_is_subtechnique: false,
       x_mitre_platforms: ['Windows'],
+      x_mitre_version: '1.0',
+      x_mitre_domains: ['enterprise-attack'],
     },
   };
 }

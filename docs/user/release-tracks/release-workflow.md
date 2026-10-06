@@ -25,6 +25,41 @@ The three workflow states tracked per release track:
 2. **awaiting-review** - Object is complete and waiting for team review
 3. **reviewed** - Object has been reviewed and approved, ready for release
 
+#### Temporary legacy ADM admission gate
+
+Admission to `staged` or `members` now also uses the existing revision-global
+`workspace.workflow.state`. Before writing the tier transition, the API
+validates the selected object revisions as `reviewed`, using the existing ADM
+configuration and validation bypass rules. If validation succeeds, it sets
+only their legacy workflow state to `reviewed`. STIX content, `stix.modified`,
+and other workflow metadata are unchanged. Protected `static` objects retain
+their state.
+
+This applies to explicit and automatic staging, snapshot member writes,
+track cloning, and release commits. A release commit checks every planned
+member, including legacy members that were never marked reviewed. Candidates
+alone do not change legacy state. Lowering the candidacy threshold does not
+relax this ADM check. Disabling ADM validation globally still disables it here.
+
+An ADM failure returns HTTP `400` with revision-specific `details` and prevents
+the staged/member admission. No object in the rejected validation batch is
+marked reviewed. Warning bypasses allow admission and return `warnings`.
+Existing candidate/review operations may already have saved a candidate
+snapshot before their subsequent automatic promotion fails.
+
+This is a temporary single-track-oriented workaround, **not track-scoped
+validation state**. Reviewing a revision through one track changes its legacy
+state for every track referencing it; demotion does not reset that state.
+Legacy `"latest"` selectors remain dynamic: following a newer revision without
+a tier transition does not itself rerun this gate. Release commit validates the
+exact revisions selected at that time. Supporting graph objects and generated
+collection envelopes are not validated by this gate.
+
+There is no startup migration or historical backfill. Workflow metadata writes
+and snapshot writes are not one transaction: an infrastructure failure after
+validation can leave validated revisions marked reviewed without a completed
+tier transition.
+
 ### Version Pinning
 
 Each tier entry includes a revision selector in `object_modified`:
