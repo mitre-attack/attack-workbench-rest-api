@@ -556,6 +556,10 @@ async function releaseLocked(trackId, loadPlan, options) {
   if (options.squash_drafts) draftCleanupService.assertAdmin(options.actor);
   return withReleaseLock(trackId, async (lease) => {
     const plan = await loadPlan();
+    if (plan.blockingError) throw plan.blockingError;
+    const reviewWarnings = await require('./reviewed-state-service').ensureReviewed(
+      plan.plannedSnapshot.members || [],
+    );
     const intent = options.squash_drafts
       ? await draftCleanupService.beginSquash(plan, options, lease)
       : null;
@@ -567,6 +571,7 @@ async function releaseLocked(trackId, loadPlan, options) {
       if (intent) throw await draftCleanupService.failRelease(intent, error);
       throw error;
     }
+    if (reviewWarnings.length) released.warnings = reviewWarnings;
     if (!intent) return released;
     intent.cleanup = {
       kind: 'squash',

@@ -99,6 +99,7 @@ describe('Release-track manifest migrations', function () {
         x_mitre_is_subtechnique: false,
         x_mitre_domains: ['enterprise-attack'],
         x_mitre_platforms: ['Windows'],
+        x_mitre_version: '1.0',
         object_marking_refs: [markingDefinitionId],
       },
     });
@@ -112,6 +113,8 @@ describe('Release-track manifest migrations', function () {
         name: 'Migration graph group',
         description: 'A group migration fixture.',
         object_marking_refs: [markingDefinitionId],
+        x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
       },
     });
     relationship = await post('/api/relationships', {

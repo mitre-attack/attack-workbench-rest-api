@@ -33,6 +33,7 @@ function buildTechnique(name, description) {
       x_mitre_is_subtechnique: false,
       x_mitre_platforms: ['Windows'],
       x_mitre_version: '1.0',
+      x_mitre_domains: ['enterprise-attack'],
     },
   };
 }

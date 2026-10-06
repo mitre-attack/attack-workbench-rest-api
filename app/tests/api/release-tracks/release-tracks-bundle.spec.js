@@ -124,6 +124,8 @@ describe('Release Tracks Bundle Export API', function () {
         kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
         x_mitre_is_subtechnique: false,
         x_mitre_platforms: ['Windows'],
+        x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
         ...overrides,
       },
     };
@@ -171,6 +173,8 @@ describe('Release Tracks Bundle Export API', function () {
         spec_version: '2.1',
         type: 'intrusion-set',
         object_marking_refs: [staticMarkingDefinitionId],
+        x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
       },
     });
     includedRelationship = await postObject('/api/relationships', {
@@ -209,6 +213,8 @@ describe('Release Tracks Bundle Export API', function () {
         spec_version: '2.1',
         type: 'intrusion-set',
         object_marking_refs: [staticMarkingDefinitionId],
+        x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
       },
     });
     secondaryRelationship = await postObject('/api/relationships', {

@@ -113,12 +113,13 @@ describe('Virtual release-track object-type filters API', function () {
         type: 'course-of-action',
         labels: ['test'],
         x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
         object_marking_refs: [staticMarkingDefinitionId],
       },
     };
   }
 
-  function buildMatrix(name) {
+  function buildMatrix(name, tacticId) {
     const timestamp = new Date().toISOString();
     return {
       workspace: { workflow: { state: 'work-in-progress' } },
@@ -132,6 +133,8 @@ describe('Virtual release-track object-type filters API', function () {
         external_references: [{ source_name: 'test-source', external_id: 'enterprise-attack' }],
         object_marking_refs: [staticMarkingDefinitionId],
         x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
+        tactic_refs: [tacticId],
       },
     };
   }
@@ -201,7 +204,16 @@ describe('Virtual release-track object-type filters API', function () {
 
   it('filters members without replacing the revision pinned by the tagged component', async function () {
     const mitigation = await post('/api/mitigations', buildMitigation('Pinned Type Member'));
-    const matrix = await post('/api/matrices', buildMatrix('Excluded Type Member'));
+    const tactic = await post('/api/tactics', {
+      workspace: { workflow: { state: 'work-in-progress' } },
+      stix: {
+        type: 'x-mitre-tactic',
+        spec_version: '2.1',
+        name: 'Initial Access',
+        x_mitre_shortname: 'initial-access',
+      },
+    });
+    const matrix = await post('/api/matrices', buildMatrix('Excluded Type Member', tactic.stix.id));
 
     await releaseExactMembers(app, passportCookie, componentTrack.id, [mitigation, matrix]);
 

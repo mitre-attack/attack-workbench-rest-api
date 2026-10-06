@@ -133,6 +133,7 @@ describe('Release-track destructive authorization and audit', function () {
           x_mitre_is_subtechnique: false,
           x_mitre_domains: ['enterprise-attack'],
           x_mitre_platforms: ['Windows'],
+          x_mitre_version: '1.0',
           object_marking_refs: [markingDefinitionId],
         },
       },
