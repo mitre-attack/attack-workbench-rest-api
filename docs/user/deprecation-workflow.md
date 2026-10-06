@@ -173,6 +173,43 @@ that overrides later changes. A request may remove its own outgoing embedded
 references in the same proposed deprecated revision; it still cannot remove
 incoming references owned by other objects that way.
 
+## Restoring a deprecated object
+
+Un-deprecation creates a new revision of the selected object with the same STIX ID,
+a later `modified` timestamp, and `x_mitre_deprecated: false`. It does not clear
+`revoked`, and it is not an undo of every relationship change made when the
+object was deprecated.
+
+The current object-restoration path saves the selected SDO; it does **not**
+automatically restore ordinary SROs linked to that object. UI availability varies:
+the main object toolbar disables its deprecate action after deprecation, while
+applicable STIX dialogs can expose an un-deprecate action. API clients can POST
+a valid new object revision directly.
+
+Restoring a retired SRO is a separate authoring request: POST a new revision of
+that relationship with `x_mitre_deprecated: false`. The API checks **both endpoints'
+latest revisions**, even when the relationship ID already exists:
+
+- If either endpoint is deprecated or revoked, an ordinary SRO restoration returns
+  `409 inactive_reference`. Its current retired revision and history remain unchanged.
+- If both endpoints are active, an otherwise valid restoration is permitted.
+- `revoked-by` retains its inactive-endpoint exception. Preserving an existing
+  `subtechnique-of` edge during SDO deprecation does not grant an exception for
+  explicitly restoring a retired `subtechnique-of` edge.
+
+For example, consider `Marcher (S0317) --uses--> Deliver Malicious Application via
+Other Means (T1476)`:
+
+1. Retire the `uses` SRO, then deprecate T1476.
+2. Deprecate S0317 as well.
+3. Un-deprecate T1476. The `uses` SRO remains retired.
+4. An explicit attempt to restore that SRO is rejected while S0317 is inactive.
+5. Once S0317 is also active, the SRO can be explicitly restored as a new revision.
+
+The same rule applies with source and target reversed, or when the other endpoint
+is revoked instead of deprecated. A bulk caller must not infer that restoring
+one endpoint authorizes restoring all incident relationships.
+
 ## Failure handling and boundaries
 
 - If the first check finds embedded blockers, the frontend makes **no writes**.
