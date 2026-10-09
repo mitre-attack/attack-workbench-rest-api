@@ -272,6 +272,7 @@ async function checkForStaticBypassRules() {
 
 exports.checkSystemConfiguration = async function () {
   logger.info(`Performing system configuration check...`);
+  await require('../services/system/validation-policy-service').initialize();
   await require('../services/system/allowed-values-service').initialize();
   await checkForOrganizationIdentity();
   await checkForAnonymousUserAccount();

@@ -170,7 +170,7 @@ exports.streamImportBundle = async function (req, res) {
     // Check if import should be blocked
     if (shouldBlockImport(errorResult, errorFound, forceImportParameters)) {
       logger.error('Unable to import collection bundle due to an error in the bundle.');
-      const event = `event: error\ndata: ${JSON.stringify(errorResult)}\n\n`;
+      const event = `event: error\ndata: ${JSON.stringify(res.exemptionReport ? { ...errorResult, exemptionReport: await res.exemptionReport(false) } : errorResult)}\n\n`;
       res.write(event);
       res.end();
       return;
@@ -203,7 +203,7 @@ exports.streamImportBundle = async function (req, res) {
 
     // Send final result
     if (!res.destroyed) {
-      const event = `event: complete\ndata: ${JSON.stringify(importedCollection)}\n\n`;
+      const event = `event: complete\ndata: ${JSON.stringify(res.exemptionReport ? { ...(importedCollection.toObject ? importedCollection.toObject() : importedCollection), exemptionReport: await res.exemptionReport(true) } : importedCollection)}\n\n`;
       res.write(event);
       res.end();
     }
@@ -219,6 +219,7 @@ exports.streamImportBundle = async function (req, res) {
         message: err.message || 'Unknown error',
         error: err.toString(),
       };
+      if (res.exemptionReport) errorData.exemptionReport = await res.exemptionReport(false);
       const event = `event: error\ndata: ${JSON.stringify(errorData)}\n\n`;
       res.write(event);
       res.end();

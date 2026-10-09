@@ -559,6 +559,14 @@ async function renderReleasePlan(plan, options) {
   const format = options.format || 'summary';
   rejectFilesystemStoreFormat(format, 'previewRelease');
 
+  if (!plan.blockingError) {
+    // Use the publication gate on copies; previews must never mark revisions reviewed.
+    await require('./reviewed-state-service').validateForReview(
+      plan.plannedSnapshot.members || [],
+      { phase: 'preflight' },
+    );
+  }
+
   if (format === 'summary') return plan.summary;
   if (plan.blockingError) throw plan.blockingError;
   if (format === 'bundle') {
@@ -675,3 +683,5 @@ exports.listObjectVersions = function listObjectVersions(trackId, objectRef) {
 exports.handleObjectModified = function handleObjectModified(event) {
   return memberSyncService.handleObjectModified(event);
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

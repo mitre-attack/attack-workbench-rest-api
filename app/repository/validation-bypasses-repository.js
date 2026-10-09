@@ -157,4 +157,159 @@ class ValidationBypassesRepository {
   }
 }
 
-module.exports = new ValidationBypassesRepository(ValidationBypassRule);
+const policyRepository = require('./validation-policy-repository');
+const { normalizeRule, selectorKey } = require('../lib/validation-policy-rules');
+const { assertEngineContext } = require('../lib/validation-engine-context');
+const { BadRequestError } = require('../exceptions');
+const legacy = new ValidationBypassesRepository(ValidationBypassRule);
+
+function withId(data, id) {
+  const rule = normalizeRule(data);
+  if (id) rule._id = new mongoose.Types.ObjectId(String(id));
+  else rule._id = new mongoose.Types.ObjectId();
+  return rule;
+}
+
+async function mutateOrLegacy(mutate, fallback) {
+  const result = await policyRepository.mutateRules(mutate);
+  return result ? result.value : fallback();
+}
+
+const facade = {
+  model: ValidationBypassRule,
+  async findAll() {
+    const policy = await policyRepository.readPolicy();
+    if (!policy) return legacy.findAll();
+    assertEngineContext(policy.engine_context);
+    return policy.rules;
+  },
+  async retrieveAll(options = {}) {
+    const policy = await policyRepository.readPolicy();
+    if (!policy) return legacy.retrieveAll(options);
+    assertEngineContext(policy.engine_context);
+    const sorted = policy.rules
+      .slice()
+      .sort((a, b) => (a.stixType || '').localeCompare(b.stixType || ''));
+    const offset = options.offset || 0;
+    const documents = options.limit
+      ? sorted.slice(offset, offset + options.limit)
+      : sorted.slice(offset);
+    return [{ totalCount: [{ totalCount: sorted.length }], documents }];
+  },
+  async retrieveById(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const normalizedId = new mongoose.Types.ObjectId(id).toHexString();
+    return (await facade.findAll()).find((rule) => String(rule._id) === normalizedId) || null;
+  },
+  async save(data) {
+    const rule = withId(data);
+    return mutateOrLegacy(
+      (rules) => ({ rules: [...rules, rule], value: rule }),
+      () => {
+        if (rule.kind === 'object-exemption')
+          throw new BadRequestError({
+            details: 'Initialize the canonical validation policy before creating exemptions.',
+          });
+        return legacy.save(rule);
+      },
+    );
+  },
+  async upsertRule(data) {
+    const rule = withId(data);
+    return mutateOrLegacy(
+      (rules) => {
+        if (rules.some((existing) => selectorKey(existing) === selectorKey(rule)))
+          return { rules, value: { created: false } };
+        return { rules: [...rules, rule], value: { created: true } };
+      },
+      () => legacy.upsertRule(rule),
+    );
+  },
+  async updateById(id, data) {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const normalizedId = new mongoose.Types.ObjectId(id).toHexString();
+    const validated = normalizeRule(data);
+    return mutateOrLegacy(
+      (rules) => {
+        const current = rules.find((rule) => String(rule._id) === normalizedId);
+        if (!current) return { rules, value: null };
+        // Preserve legacy PATCH-like optional field behavior within a rule kind.
+        const sameKind = (current.kind || 'error-bypass') === (validated.kind || 'error-bypass');
+        const updated = withId(sameKind ? { ...current, ...data } : data, normalizedId);
+        return { rules: rules.map((rule) => (rule === current ? updated : rule)), value: updated };
+      },
+      // Validation above must not turn omitted options into legacy $set defaults.
+      () => legacy.updateById(normalizedId, data),
+    );
+  },
+  async deleteById(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const normalizedId = new mongoose.Types.ObjectId(id).toHexString();
+    return mutateOrLegacy(
+      (rules) => ({
+        rules: rules.filter((rule) => String(rule._id) !== normalizedId),
+        value: rules.find((rule) => String(rule._id) === normalizedId) || null,
+      }),
+      () => legacy.deleteById(normalizedId),
+    );
+  },
+  async deleteAutoCreated() {
+    return mutateOrLegacy(
+      (rules) => ({
+        rules: rules.filter((rule) => !rule.autoCreated),
+        value: { deletedCount: rules.filter((rule) => rule.autoCreated).length },
+      }),
+      () => legacy.deleteAutoCreated(),
+    );
+  },
+  async deleteByReason(reason) {
+    return facade.replaceGeneratedGroup(reason, []);
+  },
+  async replaceGeneratedGroup(reason, data) {
+    const replacements = data.map((rule) =>
+      withId({ ...rule, autoCreated: true, autoCreatedReason: reason }),
+    );
+    return mutateOrLegacy(
+      (rules) => {
+        const old = rules.filter((rule) => rule.autoCreated && rule.autoCreatedReason === reason);
+        const retained = rules.filter((rule) => !old.includes(rule));
+        const desired = replacements
+          .map((rule) => {
+            const previous = old.find((item) => selectorKey(item) === selectorKey(rule));
+            return previous
+              ? {
+                  ...rule,
+                  _id: previous._id,
+                  ...(previous.__v === undefined ? {} : { __v: previous.__v }),
+                }
+              : rule;
+          })
+          .filter((rule) => !retained.some((item) => selectorKey(item) === selectorKey(rule)));
+        return {
+          rules: [
+            ...rules.flatMap((rule) => {
+              if (!old.includes(rule)) return [rule];
+              const replacement = desired.find((item) => String(item._id) === String(rule._id));
+              return replacement ? [replacement] : [];
+            }),
+            ...desired.filter((rule) => !old.some((item) => String(item._id) === String(rule._id))),
+          ],
+          value: {
+            deletedCount: old.length,
+            created: desired.filter(
+              (rule) => !old.some((item) => String(item._id) === String(rule._id)),
+            ).length,
+          },
+        };
+      },
+      async () => {
+        const removed = await legacy.deleteByReason(reason);
+        let created = 0;
+        for (const rule of replacements) if ((await legacy.upsertRule(rule)).created) created++;
+        return { ...removed, created };
+      },
+    );
+  },
+};
+
+module.exports = facade;

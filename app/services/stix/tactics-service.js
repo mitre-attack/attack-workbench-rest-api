@@ -49,24 +49,38 @@ class TacticsService extends BaseService {
    * Compares against the current latest version; stores the change so afterCreate
    * can emit the domain event.
    */
-  // eslint-disable-next-line no-unused-vars
   async beforeCreate(data, options) {
     if (!data.stix?.id) {
       return; // Brand-new tactic — no previous version to compare against
     }
 
+    let previousVersion;
     try {
-      const previousVersion = await tacticsRepository.retrieveLatestByStixId(data.stix.id);
-      if (!previousVersion) return;
-
-      const oldShortname = previousVersion.stix?.x_mitre_shortname;
-      const newShortname = data.stix?.x_mitre_shortname;
-
-      if (oldShortname && newShortname && oldShortname !== newShortname) {
-        this._shortnameChangeViaCreate = { oldShortname, newShortname };
-      }
+      previousVersion = await tacticsRepository.retrieveLatestByStixId(data.stix.id);
     } catch {
       logger.debug(`TacticsService: No previous version found for tactic ${data.stix.id}`);
+      return;
+    }
+    if (!previousVersion) return;
+    const oldShortname = previousVersion.stix?.x_mitre_shortname;
+    const newShortname = data.stix?.x_mitre_shortname;
+    if (oldShortname && newShortname && oldShortname !== newShortname) {
+      // The enclosing graph operation holds the same policy snapshot and lock
+      // through the primary save and required propagation listener.
+      const propagationModified = new Date().toISOString();
+      await EventBus.emitRequired(
+        EventConstants.TACTIC_SHORTNAME_CHANGE_PREFLIGHT_REQUESTED,
+        {
+          tacticId: data.stix.id,
+          oldShortname,
+          newShortname,
+          domains: data.stix.x_mitre_domains || [],
+          createNewVersion: true,
+          propagationModified,
+        },
+        { minimumListeners: 1, validationRequired: true },
+      );
+      options.shortnameChange = { oldShortname, newShortname, propagationModified };
     }
   }
 
@@ -74,25 +88,24 @@ class TacticsService extends BaseService {
    * Emit a domain event when a new tactic version has a changed x_mitre_shortname.
    * TechniquesService will create new technique versions to propagate the change.
    */
-  // eslint-disable-next-line no-unused-vars
   async afterCreate(document, options) {
-    if (this._shortnameChangeViaCreate) {
-      const { oldShortname, newShortname } = this._shortnameChangeViaCreate;
+    if (options.shortnameChange) {
+      const { oldShortname, newShortname, propagationModified } = options.shortnameChange;
+      delete options.shortnameChange;
 
       logger.info(
         `TacticsService: New tactic version with x_mitre_shortname change '${oldShortname}' -> '${newShortname}', emitting event`,
         { tacticId: document.stix.id },
       );
 
-      await EventBus.emit(EventConstants.TACTIC_SHORTNAME_CHANGED, {
+      await EventBus.emitValidationRequired(EventConstants.TACTIC_SHORTNAME_CHANGED, {
         tacticId: document.stix.id,
         oldShortname,
         newShortname,
         domains: document.stix.x_mitre_domains || [],
         createNewVersion: true,
+        propagationModified,
       });
-
-      delete this._shortnameChangeViaCreate;
     }
   }
 
@@ -117,20 +130,19 @@ class TacticsService extends BaseService {
   async afterUpdate(updatedDocument) {
     if (this._shortnameChange) {
       const { oldShortname, newShortname } = this._shortnameChange;
+      delete this._shortnameChange;
 
       logger.info(
         `TacticsService: x_mitre_shortname changed '${oldShortname}' -> '${newShortname}', emitting event`,
         { tacticId: updatedDocument.stix.id },
       );
 
-      await EventBus.emit(EventConstants.TACTIC_SHORTNAME_CHANGED, {
+      await EventBus.emitValidationRequired(EventConstants.TACTIC_SHORTNAME_CHANGED, {
         tacticId: updatedDocument.stix.id,
         oldShortname,
         newShortname,
         domains: updatedDocument.stix.x_mitre_domains || [],
       });
-
-      delete this._shortnameChange;
     }
   }
 

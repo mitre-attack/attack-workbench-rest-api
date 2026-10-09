@@ -26,6 +26,13 @@ reserved for upgrade paths between stable releases.
 
 ## Validation Rules
 
+- `reviewed-state-service.validateForReview` evaluates copies of exact primary
+  revisions using the full reviewed schema and the operation's validation policy,
+  returning validated references and warnings without persistence. Release preview
+  rendering invokes it for all proposed members before applying representation
+  filters; `ensureReviewed` adds the required reviewed-state writes only for
+  actual admission/publication. Preview evidence uses the `preflight` phase, and
+  ADM failures return 400 before rendering any format.
 - `POST /api/release-tracks/new` and `PUT /api/release-tracks/:id/config`
   share the same Zod configuration schema. Creation passes the parsed config
   directly into the initial snapshot so Mongoose applies defaults only to

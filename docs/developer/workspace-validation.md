@@ -1,204 +1,84 @@
-# Stateful Validation Tracking (`workspace.validation`)
+# Current ADM diagnostics
 
-## Overview
+`workspace.validation` contains unresolved ADM errors only. Its absence does not
+assert schema conformance: a revision may be exempt, request validation may be
+disabled, or its schema may be unsupported. The independent server-controlled
+`workspace.evaluation_context` records the outcome and the authority of that
+result. Both fields, and the internal recovery flag described below, are stripped
+from POST, PUT, and imported client input.
 
-Every Mongoose document in the Workbench REST API has an optional
-`workspace.validation` subdocument that records the result of validating
-the document's `stix` payload against the [ATT&CK Data Model
-(ADM)](https://github.com/mitre-attack/attack-data-model) schemas.
+The shared evaluator uses one immutable policy snapshot throughout a logical
+operation, including recursive lifecycle writes, bulk imports, and release review.
+It honors request ADM enablement, matches enabled object exemptions, and then
+applies full or WIP partial ADM schemas and error bypass rules. Periodic validation
+and durable policy reconciliation always enable ADM evaluation independently of
+the request toggle. See [validation policy](validation-policy.md).
 
-The field is **server-controlled** and **diagnostic**: it does not
-gate reads, but it tells operators and client UIs which documents are
-known to fail current ADM validation and why. It exists so that a long-
-lived database can carry forward documents that were valid under an
-older ADM version (or that pre-date validation entirely) without losing
-visibility into their non-compliance.
+## Stored fields
 
-This document defines the field, its invariants, and the pipelines that
-write or clear it.
+`workspace.validation` contains `errors` (complete message, path, and code),
+`attack_spec_version`, `adm_version`, and `validated_at`. It is written only for
+an invalid result. All other outcomes clear these current errors.
 
-## Why state-track validation at all?
+`workspace.evaluation_context` contains:
 
-ADM validation is the gate at the write boundary: every POST and metadata-only
-PUT runs the composed STIX object through the ADM schemas before
-persistence (see [`base.service.js`](../../app/services/meta-classes/base.service.js)
-pipeline stage 5, "VALIDATE WITH ADM"). If validation fails on a write,
-the request throws and nothing is persisted.
+- `policy_revision`, `evaluation_generation`, and `engine_context` (ADM, ATT&CK
+  spec, and evaluator versions);
+- `workflow_state` and `schema_mode` (`partial` or `full`);
+- globally ordered `publication_token`;
+- `outcome`: `valid`, `invalid`, `exempt`, `disabled`, or `unsupported`.
 
-Given that gate, **a freshly-seeded database should never contain
-validation errors.** State-tracking is only meaningful for documents
-that bypassed the gate or were validated under different rules:
+Metadata never enters STIX or exported bundles. Reconciliation preserves workflow
+review decisions, release manifests, and historical `workspace.import_categories`.
 
-1. **Legacy content** — documents that existed before ADM-based
-   validation was introduced into the request pipeline. These
-   documents may have shapes that current schemas reject and were
-   never gated on entry.
+## Guarded publication
 
-2. **Version-skewed content** — documents written under one ADM
-   version that subsequently became non-compliant when Workbench
-   upgraded to a later ADM version. For example, content authored
-   under ADM v1.0 may fail ADM v2.0 validation if v2.0 tightened a
-   constraint or renamed a required field.
+`validation-diagnostic-service` owns diagnostic stamping and read projections.
+Pure marker/error serialization lives in `app/lib/validation-diagnostics.js`.
+Publication delegates to `validation-diagnostics-repository`, which verifies the
+active canonical context and, for workers, live claim ownership. Its atomic
+document update compares the full
+observed STIX and workflow with stored input and refuses to replace a larger
+publication token. Both error writes and successful clears use these checks.
+Metadata PUT and release review combine workspace changes with this guarded
+update. New revision and bulk insert paths strip prepared diagnostics before
+insertion and publish them through the same guard afterward. A concurrent newer
+publisher wins; responses read its actual stored diagnostics.
 
-   Schema-changing Workbench upgrades are expected to ship database
-   migration scripts that bring existing content into compliance, so
-   this case should be rare in practice. It remains technically
-   possible whenever an upgrade lands without a corresponding migration,
-   or when a migration cannot fully repair a document.
+Inserts persist an internal `workspace.evaluation_needed` flag in the content
+write. Guarded publication clears it. The worker checks these indexed flags even
+after completing a scan and starts another scan when necessary, recovering
+interrupted publication and late inserts from superseded operation snapshots
+independently of the periodic scheduler. HTTP responses omit this flag.
 
-3. **Imported content** — STIX bundle imports use a fail-open path
-   (see below). When an imported object fails validation but the
-   import is allowed to proceed, the errors are recorded on the
-   document so they are visible after the import completes.
+Before metadata PUT uses the native atomic update, the merged candidate is cast
+and validated with its concrete Mongoose model. Workflow enums, schema dates, and
+strict field handling remain enforced when ADM exempts the revision or legacy
+OpenAPI request validation is disabled.
 
-## Field shape
+The evaluator does not normalize or replace persisted STIX. Mongoose documents
+and dates are copied to plain ADM input. Full error contents, rather than issue
+counts alone, determine whether issues have changed.
 
-```jsonc
-{
-  "workspace": {
-    "validation": {
-      "errors": [
-        { "message": "stix.x_mitre_domains is Required",
-          "path": ["x_mitre_domains"],
-          "code": "invalid_type" }
-      ],
-      "attack_spec_version": "3.3.0",
-      "adm_version": "1.4.2",
-      "validated_at": "2026-05-06T12:00:00.000Z"
-    }
-  }
-}
-```
+HTTP projections omit diagnostics and evaluation markers whose policy, generation,
+engine, or workflow no longer matches the operation snapshot. Historical import
+reports remain visible as historical evidence. Services implementing additional
+report projections can use `validation-diagnostic-service.isCurrent` and `project`.
 
-| Field | Meaning |
-|---|---|
-| `errors` | Array of `{ message, path, code }` derived from Zod issues, after bypass rules are applied. |
-| `attack_spec_version` | ATT&CK spec version under which validation was performed. |
-| `adm_version` | NPM version of `@mitre-attack/attack-data-model` at validation time. |
-| `validated_at` | UTC timestamp of the validation run. |
+## Write behavior
 
-The presence of the `validation` subdocument means "this document had
-unresolved errors as of `validated_at`." Its **absence** means "this
-document was either never validated or last passed validation."
+Ordinary authoring, metadata updates, review, and release admission reject invalid
+ADM results when request validation is enabled. Dedicated revocation preflights
+its primary revoked revision before saving any side effects. A default exemption
+may permit that revision; deleting the exemption restores the primary ADM gate.
+Active restored revisions are evaluated normally.
 
-## Invariants
-
-1. `workspace.validation` is **server-controlled.** Clients cannot
-   set, modify, or carry forward this field through any write path.
-2. The field is **recomputed (or omitted) on every successful write.**
-   A POST or metadata-only PUT that passes ADM validation produces a document with
-   no `workspace.validation`. A POST or PUT that fails ADM validation
-   throws — nothing is persisted, and the prior document (if any) is
-   untouched until a future write or scheduler tick revisits it.
-3. The only paths that may legitimately *set* `workspace.validation`
-   are the scheduler and the import fail-open path. All other paths
-   either clear it or leave it absent.
-
-## Writers and behavior
-
-### 1. `BaseService.create()` — POST a new (version of an) object
-
-[`base.service.js`](../../app/services/meta-classes/base.service.js)
-
-- `stripServerControlledFields()` removes any client-supplied
-  `workspace.validation` at the top of the pipeline.
-- ADM validation runs.
-- If validation fails, the request throws — nothing persists.
-- If validation passes, the new document is saved with no
-  `workspace.validation`.
-
-### 2. `BaseService.updateFull()` — PUT an existing version
-
-- `stripServerControlledFields()` removes any client-supplied
-  `workspace.validation`.
-- ADM validation runs against the composed object.
-- If the submitted body changes persisted `stix` content, the request returns
-  `409 Conflict`; a content correction must be a new POST revision.
-- If validation fails, the request throws — the existing document is
-  untouched.
-- If validation passes:
-  - The composed document is merged onto the existing one.
-  - If the existing document had `workspace.validation`, the merge
-    sets it to `undefined` and a follow-up `repository.unsetField`
-    call removes the field from the persisted document.
-
-### 3. `BaseService._createFromImport()` — STIX bundle import
-
-This path is intentionally **fail-open**: import is the primary way
-that legacy and version-skewed content enters the system, so blocking
-on every validation error would make migrations impossible.
-
-- Any client-supplied `workspace.validation` is stripped at entry.
-- Revoked or deprecated objects skip validation entirely and are
-  persisted with no `workspace.validation`.
-- Otherwise, ADM validation runs.
-- If validation fails and `options.validateContents` is set, the
-  import throws.
-- If validation fails and `validateContents` is not set, the errors
-  are recorded on `workspace.validation` (with current ADM and spec
-  versions) and the document persists. **This is the only legitimate
-  client-facing setter.**
-- If validation passes, the document persists with no
-  `workspace.validation`.
-
-### 4. The `validate-objects` scheduler task
-
-[`app/scheduler/validate-objects-task.js`](../../app/scheduler/validate-objects-task.js)
-
-The scheduler exists to combat **concept drift**: a document that
-passed validation last week may fail today if Workbench has since
-upgraded ADM. On its configured cron schedule, the task iterates every
-SDO and SRO in the database, re-runs validation, and brings each
-document's `workspace.validation` field back in sync with the current
-ADM rules.
-
-For each document:
-
-- Revoked/deprecated objects are skipped (validation is not
-  meaningful for retired content).
-- Validation runs and bypass rules are applied.
-- If the document passes, any existing `workspace.validation` is
-  unset (`totalCleared`).
-- If the document fails, `workspace.validation` is set to the current
-  errors with current ADM/spec versions (`totalErrored`).
-
-Because the scheduler is the only writer that can transition a
-document from "valid" to "has-validation-errors" without a user
-write, it is also the only mechanism that surfaces version-skewed
-documents after a Workbench upgrade.
-
-## Lifecycle summary
-
-| Path | Validation outcome | `workspace.validation` after the write |
-|---|---|---|
-| `create()` | passes | absent |
-| `create()` | fails | request throws; nothing persisted |
-| `updateFull()` | passes | absent (cleared if previously present) |
-| `updateFull()` | fails | request throws; existing doc untouched |
-| `_createFromImport()` | passes | absent |
-| `_createFromImport()` | fails + `validateContents` | request throws |
-| `_createFromImport()` | fails + fail-open | server-set with current ADM/spec |
-| `_createFromImport()` | revoked/deprecated | absent |
-| Scheduler | passes | absent (cleared if previously present) |
-| Scheduler | fails | server-set with current ADM/spec |
-
-## Bypass rules
-
-Both the request pipeline and the scheduler consult
-`validation-bypasses-repository` to filter Zod issues that match a
-stored bypass rule (matching on `stixType`, `errorCode`, and
-`fieldPath`). A bypassed error is removed from the `errors` array
-before the field is written. This allows operators to suppress known-
-benign validation noise without modifying ADM itself.
-
-The set of bypass rules is shared between the synchronous write path
-and the scheduler so that a document's validation status is consistent
-regardless of which writer last touched it.
-
-## Reading `workspace.validation`
-
-There is no public endpoint that filters on this field today. Clients
-that need to surface "documents needing attention" should retrieve
-the relevant collection and check for the presence of
-`workspace.validation` on each document. The field is a diagnostic
-hint, not a workflow gate — read paths do not consult it.
+Imports with `validateContents=true` reject invalid revisions. Fail-open imports
+retain the errors both as current diagnostics and in the original import report.
+Retirement is governed by configured exemptions on every path; it is not an
+unconditional import skip. Removing, disabling or narrowing all applicable exemptions therefore changes
+strict import behavior as well as subsequent ordinary operations. An overlapping
+enabled rule still grants exemption. Strict mode rejects invalid revisions while
+other eligible bundle members can continue importing; it is not a bundle transaction.
+Opt-in [operation reports](../user/validation-reports.md) explain matches separately
+from current errors and historical import reports.

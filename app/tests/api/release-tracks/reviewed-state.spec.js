@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const request = require('supertest');
 const { expect } = require('expect');
+const sinon = require('sinon');
 const config = require('../../../config/config');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
@@ -57,6 +58,10 @@ describe('Legacy reviewed state on release-track admission', function () {
     app = await require('../../../index').initializeApp();
     const passportCookie = await login.loginAnonymous(app);
     cookie = `${passportCookie.name}=${passportCookie.value}`;
+  });
+
+  after(async function () {
+    await database.closeConnection();
   });
 
   async function post(path, body, status = 200) {
@@ -118,6 +123,40 @@ describe('Legacy reviewed state on release-track admission', function () {
     expect(after.workspace.workflow).toEqual({ ...before.workspace.workflow, state: 'reviewed' });
     const snapshot = await get(`/api/release-tracks/${track.id}/snapshots/latest`);
     expect(snapshot.staged.map((entry) => entry.object_ref)).toEqual([object.stix.id]);
+  });
+
+  it('rechecks full-schema validity if a revision changes after admission', async function () {
+    const object = await post('/api/campaigns', campaign(), 201);
+    const track = await createTrack([object]);
+    const repository = require('../../../repository/attack-objects-repository');
+    const Campaign = require('../../../models/campaign-model');
+    const retrieve = repository.retrieveReviewableRevisions;
+    const stub = sinon
+      .stub(repository, 'retrieveReviewableRevisions')
+      .callsFake(async (entries) => {
+        // Simulate a changed input between admission validation and reviewed-state publication.
+        await Campaign.collection.updateOne(
+          { 'stix.id': object.stix.id },
+          { $unset: { 'stix.description': '' } },
+        );
+        return retrieve.call(repository, entries);
+      });
+    try {
+      await post(
+        `/api/release-tracks/${track.id}/candidates/promote`,
+        {
+          object_refs: [object.stix.id],
+        },
+        500,
+      );
+      const stored = await get(`/api/campaigns/${object.stix.id}/modified/${object.stix.modified}`);
+      expect(stored.workspace.workflow.state).toBe('work-in-progress');
+      const snapshot = await get(`/api/release-tracks/${track.id}/snapshots/latest`);
+      expect(snapshot.staged).toEqual([]);
+      expect(snapshot.candidates.map((entry) => entry.object_ref)).toEqual([object.stix.id]);
+    } finally {
+      stub.restore();
+    }
   });
 
   it('blocks a legacy incomplete member before tagging the snapshot', async function () {

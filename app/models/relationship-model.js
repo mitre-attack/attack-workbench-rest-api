@@ -66,6 +66,12 @@ relationshipSchema.index({
   'workspace.relationship_endpoints.target.object_modified': 1,
 });
 
+// Durable insert recovery is independent of scan checkpoints and scheduler enablement.
+relationshipSchema.index(
+  { 'workspace.evaluation_needed': 1 },
+  { partialFilterExpression: { 'workspace.evaluation_needed': true } },
+);
+
 // Create the model
 const RelationshipModel = mongoose.model(ModelName.Relationship, relationshipSchema);
 

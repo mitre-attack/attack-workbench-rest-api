@@ -109,6 +109,10 @@ class SystemConfigurationService extends BaseService {
    * and emits an event to trigger downstream propagation.
    */
   async setOrganizationIdentity(stixId) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.setOrganizationIdentity(stixId));
+    }
     // Validate that the identity exists
     const identities = await identitiesService.retrieveById(stixId, { versions: 'latest' });
     if (identities.length === 0) {
@@ -123,19 +127,34 @@ class SystemConfigurationService extends BaseService {
 
       const previousIdentityRef = currentConfig.organization_identity_ref;
 
+      // Validate all dependent revisions before changing the configuration.
+      // Include the proposed identity in the same provenance chain used after save.
+      const organizationIdentityHistory = [
+        ...new Set([...(await this.repository.retrieveAllDistinctIdentityRefs()), stixId]),
+      ];
+      const propagationModified = new Date().toISOString();
+      await EventBus.emitRequired(
+        Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGE_PREFLIGHT_REQUESTED,
+        {
+          previousIdentityRef,
+          newIdentityRef: stixId,
+          organizationIdentityHistory,
+          propagationModified,
+        },
+        { minimumListeners: 1, validationRequired: true },
+      );
+
       // Create a new config document with updated identity ref
       await this._createNewConfigVersion(currentConfig, {
         organization_identity_ref: stixId,
       });
 
-      // Determine the full provenance chain
-      const organizationIdentityHistory = await this.repository.retrieveAllDistinctIdentityRefs();
-
       // Emit event for downstream propagation
-      await EventBus.emit(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
+      await EventBus.emitValidationRequired(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
         previousIdentityRef,
         newIdentityRef: stixId,
         organizationIdentityHistory,
+        propagationModified,
       });
     } else {
       // First-time setup: create initial config document
@@ -146,7 +165,7 @@ class SystemConfigurationService extends BaseService {
       await this.repository.constructor.saveDocument(newConfig);
 
       // Emit event so validation bypass rules are created at startup
-      await EventBus.emit(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
+      await EventBus.emitValidationRequired(Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED, {
         previousIdentityRef: null,
         newIdentityRef: stixId,
         organizationIdentityHistory: [stixId],

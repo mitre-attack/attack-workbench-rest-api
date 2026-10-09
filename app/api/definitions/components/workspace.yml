@@ -3,6 +3,26 @@ components:
     workspace:
       type: object
       properties:
+        evaluation_context:
+          type: object
+          description: 'Server-controlled ADM evaluation context; supplied client values are ignored. Absence or an exempt, disabled, or unsupported outcome does not assert ADM conformance.'
+          properties:
+            policy_revision:
+              type: integer
+            evaluation_generation:
+              type: integer
+            engine_context:
+              type: object
+            workflow_state:
+              type: string
+            schema_mode:
+              type: string
+              enum: [partial, full]
+            publication_token:
+              type: integer
+            outcome:
+              type: string
+              enum: [valid, invalid, exempt, disabled, unsupported]
         # STIX common properties
         workflow:
           type: object

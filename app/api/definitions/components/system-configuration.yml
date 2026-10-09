@@ -1,5 +1,37 @@
 components:
   schemas:
+    validation-reconciliation:
+      type: object
+      required: [status, policy_revision, generation, counts, checkpoint, last_error, progress]
+      properties:
+        status:
+          type: string
+          enum: [pending, running, completed, failed, superseded]
+        policy_revision:
+          type: integer
+        generation:
+          type: integer
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+        checkpoint:
+          type: object
+          nullable: true
+        last_error:
+          type: object
+          nullable: true
+        progress:
+          type: object
+          properties:
+            processed:
+              type: integer
+            total:
+              type: integer
+              nullable: true
+        engine_context:
+          type: object
+
     system-version:
       type: object
       required:
@@ -263,6 +295,10 @@ components:
           example: false
 
     validation-bypass-rule:
+      oneOf:
+        - $ref: '#/components/schemas/error-bypass-rule'
+        - $ref: '#/components/schemas/object-exemption-rule'
+    error-bypass-rule:
       type: object
       required:
         - fieldPath
@@ -272,6 +308,10 @@ components:
         _id:
           type: string
           description: Database id of the validation bypass rule
+        kind:
+          type: string
+          enum: [error-bypass]
+          description: May be omitted for legacy error bypass payloads.
         fieldPath:
           type: array
           description: Zod issue path to match. Path segments are compared as strings.
@@ -307,3 +347,60 @@ components:
           type: string
           nullable: true
           description: Warning emitted when a matching validation error is bypassed.
+
+    object-exemption-rule:
+      type: object
+      required: [kind, name, enabled, retirementStatus, stixTypes]
+      properties:
+        _id:
+          type: string
+          description: Stable database rule identity.
+        kind:
+          type: string
+          enum: [object-exemption]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        enabled:
+          type: boolean
+        retirementStatus:
+          type: string
+          enum: [revoked, deprecated]
+        stixTypes:
+          description: All types or a nonempty normalized set of supported STIX types.
+          oneOf:
+            - type: string
+              enum: [all]
+            - type: array
+              minItems: 1
+              items:
+                type: string
+                enum:
+                  [
+                    attack-pattern,
+                    campaign,
+                    course-of-action,
+                    identity,
+                    intrusion-set,
+                    malware,
+                    marking-definition,
+                    relationship,
+                    tool,
+                    x-mitre-analytic,
+                    x-mitre-asset,
+                    x-mitre-collection,
+                    x-mitre-data-component,
+                    x-mitre-data-source,
+                    x-mitre-detection-strategy,
+                    x-mitre-matrix,
+                    x-mitre-tactic,
+                  ]
+        autoCreated:
+          type: boolean
+        autoCreatedReason:
+          type: string
+          nullable: true
+        triggerEvent:
+          type: string
+          nullable: true

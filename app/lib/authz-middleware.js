@@ -33,6 +33,13 @@ exports.readOnlyService = [serviceRoles.readOnly];
  */
 exports.requireRole = function (allowedUserRoles, allowedServiceRoles) {
   return function (req, res, next) {
+    const authorized = () => {
+      req.validationReportAuthorization = {
+        userRoles: allowedUserRoles || [],
+        serviceRoles: allowedServiceRoles || [],
+      };
+      return next();
+    };
     if (!req.user) {
       return res.status(401).send('Not authorized');
     }
@@ -56,7 +63,7 @@ exports.requireRole = function (allowedUserRoles, allowedServiceRoles) {
           allowedServiceRoles &&
           allowedServiceRoles.includes(serviceConfig.serviceRole)
         ) {
-          return next();
+          return authorized();
         } else {
           logger.verbose(`Service not authorized. Service name is ${req.user.serviceName}`);
           return res.status(401).send('Not authorized');
@@ -71,7 +78,7 @@ exports.requireRole = function (allowedUserRoles, allowedServiceRoles) {
           allowedServiceRoles &&
           allowedServiceRoles.includes(serviceConfig.serviceRole)
         ) {
-          return next();
+          return authorized();
         } else {
           logger.verbose(`Service not authorized. Client Id is ${req.user.clientId}`);
           return res.status(401).send('Not authorized');
@@ -81,7 +88,7 @@ exports.requireRole = function (allowedUserRoles, allowedServiceRoles) {
         return res.status(401).send('Not authorized');
       }
     } else if (allowedUserRoles && allowedUserRoles.includes(req.user.role)) {
-      return next();
+      return authorized();
     } else {
       logger.verbose(`User not authorized. User role is ${req.user.role}`);
       return res.status(401).send('Not authorized');

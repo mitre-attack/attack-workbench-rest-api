@@ -19,6 +19,8 @@ const inactive = (document) =>
   document?.stix?.revoked === true || document?.stix?.x_mitre_deprecated === true;
 const repositoryFor = (id) => (id?.startsWith('relationship--') ? relationships : objects);
 const latest = (id) => repositoryFor(id).retrieveLatestByStixIdLean(id);
+// Internal lifecycle collection phase; ordinary HTTP dry-run options cannot set it.
+const VALIDATION_PHASE = Symbol('lifecycle-validation-phase');
 
 async function deprecationCheck(stixId, proposed) {
   const current = await latest(stixId);
@@ -214,6 +216,7 @@ async function reconcileEmbeddedMetadata(changed) {
 }
 
 module.exports = {
+  VALIDATION_PHASE,
   inactive,
   latest,
   deprecationCheck,

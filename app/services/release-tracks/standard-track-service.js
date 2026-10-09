@@ -612,3 +612,5 @@ exports.listObjectVersions = async function listObjectVersions(trackId, objectRe
 
   return { versions };
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

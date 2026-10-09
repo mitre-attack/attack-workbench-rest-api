@@ -31,7 +31,9 @@ exports.run = async function run(operation) {
         code: 'graph_write_conflict',
       });
     }
-    return await context.run(owner, operation);
+    return await context.run(owner, () =>
+      require('../services/system/validation-operation-service').run(operation),
+    );
   } finally {
     owner.active = false;
     try {

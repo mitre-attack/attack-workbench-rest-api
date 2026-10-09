@@ -344,3 +344,5 @@ exports.createTrackFromBundle = async function createTrackFromBundle(bundleData,
 
   return snapshot;
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

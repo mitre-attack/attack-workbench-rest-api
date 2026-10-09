@@ -9,6 +9,10 @@ This directory contains supplementary technical documentation for the ATT&CK Wor
 
 Guides for consumers of the REST API — endpoints, workflows, and terminology.
 
+- [Repository Glossary](../GLOSSARY.md): Shared object, workflow, release and validation vocabulary
+- [Validation Rules](user/validation-rules.md): Retired-object exemptions and compatible error bypasses
+- [Optional ADM Reports](user/validation-reports.md): Quiet evidence, filters, counts and retained details
+- [STIX Bundle Import](user/stix-bundle-import.md): Strict/fail-open behavior and import evidence
 - [Build Information](user/build-information.md): Inspect the running REST API release and build provenance
 - [Deprecation Workflow](user/deprecation-workflow.md): Blocking-reference retirement, frontend ordering, preserved hierarchy/replacement links, and explicit embedded-reference resolution
 - [Revocation Workflow](user/revoke-workflow.md): Frontend/backend responsibilities, SRO and embedded-reference preservation, replacement constraints, and failure handling
@@ -34,6 +38,11 @@ Architecture, patterns, and implementation details for contributors.
 - [Build Information](developer/build-information.md): Build metadata provenance, runtime configuration, and frontend integration
 - [Data Quality Query Design](developer/data-quality-reports.md): Duplicate-report memory amplification, query optimization, and remaining response-size limits
 - [Data Model](developer/data-model.md): Database schema and STIX object structure
+- [Validation Architecture](developer/validation-policy-design.md): Implemented configurable ADM exemptions, reporting, reconciliation and upgrade boundaries
+- [Canonical Validation Policy](developer/validation-policy.md): Rule storage, operation snapshots, engine context and worker contracts
+- [Current ADM Diagnostics](developer/workspace-validation.md): Server-owned evaluation metadata and guarded publication
+- [Validation Report Internals](developer/validation-reports.md): Retained evidence, authorization and pagination
+- [STIX Bundle Import Pipeline](developer/stix-bundle-import-pipeline.md): Dependency tiers, policy snapshots and source fidelity
 - [Allowed Values Model](developer/data-model.md#runtime-allowed-values-configuration): Schema catalog, initialization, persistence, and invalid settings
 - [Event Bus Architecture](developer/event-bus-architecture.md): Event-driven architecture for cross-document dependencies
 - [Lifecycle Hooks Guide](developer/lifecycle-hooks-guide.md): Service lifecycle hooks pattern
@@ -63,6 +72,8 @@ Architecture, patterns, and implementation details for contributors.
 Configuration, deployment, and identity provider setup.
 
 - [Configuration](admin/configuration.md): Complete configuration guide (environment variables, JSON files)
+- [Validation Policy Upgrades](admin/configuration.md#validation-policy-storage-and-upgrades): Stop old writers, activate the engine and monitor durable reconciliation
+- [Validation Report Retention](admin/validation-reports.md): Expiry, authorization and durable report key
 - [Allowed Values Administration](admin/configuration.md#allowed-values): Initial values, ADM versions and upgrades, adding choices, and invalid settings
 - [Automation Run Audit Trail](admin/automation-runs.md): How to inspect migration and scheduler audit records
 - [Virtual Track Schedules](admin/virtual-track-schedules.md): UTC execution, restart recovery, retries, and observability

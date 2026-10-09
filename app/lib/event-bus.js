@@ -85,6 +85,11 @@ class EventBus extends EventEmitter {
       logger.warn(
         `EventBus: ${failures.length}/${listeners.length} listeners failed for '${eventName}'`,
       );
+      if (options.validationRequired) {
+        const { ValidationError } = require('../exceptions');
+        const rejected = failures.find((failure) => failure.reason instanceof ValidationError);
+        if (rejected) throw rejected.reason;
+      }
       if (options.required) {
         const error = new AggregateError(
           failures.map((failure) => failure.reason),
@@ -102,6 +107,12 @@ class EventBus extends EventEmitter {
 
   async emit(eventName, payload) {
     return this._dispatch(eventName, payload);
+  }
+
+  // Opt-in ADM gate for recursive validation; all other listener failures retain
+  // the event's existing best-effort behavior.
+  async emitValidationRequired(eventName, payload) {
+    return this._dispatch(eventName, payload, { validationRequired: true });
   }
 
   /**

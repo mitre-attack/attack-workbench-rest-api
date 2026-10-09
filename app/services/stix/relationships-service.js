@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertNoAdmErrors } = require('../../lib/adm-validation');
+
 const { BaseService } = require('../meta-classes');
 const relationshipsRepository = require('../../repository/relationships-repository');
 const attackObjectsRepository = require('../../repository/attack-objects-repository');
@@ -155,7 +157,7 @@ class RelationshipsService extends BaseService {
   }
 
   static async handleReleaseTrackObjectsReviewed({ entries }) {
-    return relationshipsRepository.markRevisionsReviewed(
+    return module.exports.markRevisionsReviewed(
       entries.filter((entry) => entry.object_ref.startsWith('relationship--')),
     );
   }
@@ -225,6 +227,7 @@ class RelationshipsService extends BaseService {
 
       return { created: [createdRelationship] };
     } catch (error) {
+      if (error instanceof require('../../exceptions').ValidationError) throw error;
       logger.error(
         `RelationshipsService: Error creating subtechnique-of relationship for ${stixId}: ${error.message}`,
       );
@@ -250,7 +253,10 @@ class RelationshipsService extends BaseService {
    * @param {string} payload.stixId - STIX ID of the converted subtechnique
    */
   static async handleSubtechniqueConvertedToTechnique(payload) {
-    const { stixId } = payload;
+    const { stixId, hierarchyRetirements = [] } = payload;
+    const plannedModified = new Map(
+      hierarchyRetirements.map((revision) => [revision.stixId, revision.modified]),
+    );
 
     logger.info(`RelationshipsService: Deprecating subtechnique-of relationships for ${stixId}`);
 
@@ -274,16 +280,22 @@ class RelationshipsService extends BaseService {
           delete deprecatedVersion.__t;
 
           deprecatedVersion.stix.x_mitre_deprecated = true;
-          deprecatedVersion.stix.modified = new Date().toISOString();
+          deprecatedVersion.stix.modified =
+            plannedModified.get(rel.stix.id) || new Date().toISOString();
           // Backrefs are pinned to the exact revision a track references —
           // never carried onto a new revision.
           if (deprecatedVersion.workspace) {
             delete deprecatedVersion.workspace.release_tracks;
           }
 
+          delete deprecatedVersion.workspace?.validation;
+          delete deprecatedVersion.workspace?.evaluation_context;
+          const evaluation = await module.exports.validateComposedObject(deprecatedVersion);
+          assertNoAdmErrors(evaluation);
           const saved = await relationshipsRepository.save(deprecatedVersion);
           deprecatedDocs.push(saved);
         } catch (error) {
+          if (error instanceof require('../../exceptions').ValidationError) throw error;
           logger.error(
             `RelationshipsService: Error deprecating relationship ${rel.stix?.id}: ${error.message}`,
           );
@@ -299,6 +311,7 @@ class RelationshipsService extends BaseService {
         `RelationshipsService: Deprecated ${deprecatedDocs.length}/${subtechniqueOfRels.length} subtechnique-of relationship(s) for ${stixId}`,
       );
     } catch (error) {
+      if (error instanceof require('../../exceptions').ValidationError) throw error;
       logger.error(
         `RelationshipsService: Error handling subtechnique-to-technique conversion for ${stixId}:`,
         error,
@@ -391,6 +404,15 @@ class RelationshipsService extends BaseService {
       return results;
     }
   }
+}
+
+for (const name of [
+  'handleTechniqueConvertedToSubtechnique',
+  'handleSubtechniqueConvertedToTechnique',
+]) {
+  RelationshipsService[name] = require('../system/validation-operation-service').wrap(
+    RelationshipsService[name],
+  );
 }
 
 RelationshipsService.initializeEventListeners();

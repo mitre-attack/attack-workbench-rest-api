@@ -641,7 +641,16 @@ describe('Collection Bundles Basic API', function () {
     const collection = response.body;
     expect(collection).toBeDefined();
     expect(collection.workspace.import_categories.additions.length).toBe(8);
-    expect(collection.workspace.import_categories.errors.length).toBe(3);
+    expect(collection.workspace.import_categories.errors.length).toBe(4);
+    expect(collection.workspace.import_categories.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          object_ref: 'attack-pattern--14fbfb6a-c4d9-4c3b-a7ef-f8df23e3b22b',
+          error_type: 'Validation error',
+          details: expect.any(Array),
+        }),
+      ]),
+    );
   });
 
   let collection1;
@@ -658,7 +667,16 @@ describe('Collection Bundles Basic API', function () {
     const collection = response.body;
     expect(collection).toBeDefined();
     expect(collection.workspace.import_categories.additions.length).toBe(8);
-    expect(collection.workspace.import_categories.errors.length).toBe(3);
+    expect(collection.workspace.import_categories.errors.length).toBe(4);
+    expect(collection.workspace.import_categories.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          object_ref: 'attack-pattern--14fbfb6a-c4d9-4c3b-a7ef-f8df23e3b22b',
+          error_type: 'Validation error',
+          details: expect.any(Array),
+        }),
+      ]),
+    );
   });
 
   it('POST /api/collection-bundles imports a collection bundle', async function () {

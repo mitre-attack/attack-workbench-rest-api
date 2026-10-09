@@ -147,10 +147,10 @@ JSON_CONFIG_PATH=./config.json
 
 Configuration for the HTTP server.
 
-| Option               | Environment Variable    | JSON Path                  | Type    | Default | Description                                                                                                     |
-|----------------------|-------------------------|----------------------------|---------|---------|-----------------------------------------------------------------------------------------------------------------|
-| Port                 | `PORT`                  | `server.port`              | integer | `3000`  | HTTP server port                                                                                                |
-| CORS Allowed Origins | `CORS_ALLOWED_ORIGINS`  | `server.corsAllowedOrigins`| domains | `*`     | Allowed origins for CORS. Use `*` for all, `disable` to disable CORS, or comma-separated list of origins        |
+| Option               | Environment Variable   | JSON Path                   | Type    | Default | Description                                                                                              |
+| -------------------- | ---------------------- | --------------------------- | ------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| Port                 | `PORT`                 | `server.port`               | integer | `3000`  | HTTP server port                                                                                         |
+| CORS Allowed Origins | `CORS_ALLOWED_ORIGINS` | `server.corsAllowedOrigins` | domains | `*`     | Allowed origins for CORS. Use `*` for all, `disable` to disable CORS, or comma-separated list of origins |
 
 **CORS Allowed Origins** accepts:
 
@@ -181,10 +181,10 @@ CORS_ALLOWED_ORIGINS=https://workbench.example.com,https://staging.example.com
 
 MongoDB database configuration.
 
-| Option       | Environment Variable                | JSON Path                    | Type    | Default     | Description                               |
-|--------------|-------------------------------------|------------------------------|---------|-------------|-------------------------------------------|
-| URL          | `DATABASE_URL`                      | `database.url`               | string  | *(empty)*   | MongoDB connection string (REQUIRED)      |
-| Auto-migrate | `WB_REST_DATABASE_MIGRATION_ENABLE` | `database.migration.enable`  | boolean | `true`      | Run migrations automatically on startup   |
+| Option       | Environment Variable                | JSON Path                   | Type    | Default   | Description                             |
+| ------------ | ----------------------------------- | --------------------------- | ------- | --------- | --------------------------------------- |
+| URL          | `DATABASE_URL`                      | `database.url`              | string  | _(empty)_ | MongoDB connection string (REQUIRED)    |
+| Auto-migrate | `WB_REST_DATABASE_MIGRATION_ENABLE` | `database.migration.enable` | boolean | `true`    | Run migrations automatically on startup |
 
 **Examples:**
 
@@ -233,9 +233,9 @@ set them explicitly; omitted commit and date values are reported as `unknown`.
 
 Logging configuration using Winston.
 
-| Option    | Environment Variable | JSON Path          | Type   | Default | Description         |
-|-----------|----------------------|--------------------|--------|---------|---------------------|
-| Log Level | `LOG_LEVEL`          | `logging.logLevel` | string | `info`  | Console log level   |
+| Option    | Environment Variable | JSON Path          | Type   | Default | Description       |
+| --------- | -------------------- | ------------------ | ------ | ------- | ----------------- |
+| Log Level | `LOG_LEVEL`          | `logging.logLevel` | string | `info`  | Console log level |
 
 **Log Levels** (from least to most verbose):
 
@@ -256,10 +256,10 @@ LOG_LEVEL=debug
 
 Session management for user authentication.
 
-| Option               | Environment Variable           | JSON Path                        | Type   | Default                  | Description                               |
-|----------------------|--------------------------------|----------------------------------|--------|--------------------------|-------------------------------------------|
-| Secret               | `SESSION_SECRET`               | `session.secret`                 | string | *(generated at startup)* | Secret used to sign session cookies       |
-| Mongo Session Secret | `MONGOSTORE_CRYPTO_SECRET`     | `session.mongoStoreCryptoSecret` | string | *(generated at startup)* | Secret to encrypt session data in MongoDB |
+| Option               | Environment Variable       | JSON Path                        | Type   | Default                  | Description                               |
+| -------------------- | -------------------------- | -------------------------------- | ------ | ------------------------ | ----------------------------------------- |
+| Secret               | `SESSION_SECRET`           | `session.secret`                 | string | _(generated at startup)_ | Secret used to sign session cookies       |
+| Mongo Session Secret | `MONGOSTORE_CRYPTO_SECRET` | `session.mongoStoreCryptoSecret` | string | _(generated at startup)_ | Secret to encrypt session data in MongoDB |
 
 **Important Notes:**
 
@@ -285,9 +285,9 @@ MONGOSTORE_CRYPTO_SECRET=your-secure-secret-here
 
 Configuration for user authentication (how end-users log in).
 
-| Option    | Environment Variable | JSON Path             | Type | Default     | Description                      |
-|-----------|----------------------|-----------------------|------|-------------|----------------------------------|
-| Mechanism | `AUTHN_MECHANISM`    | `userAuthn.mechanism` | enum | `anonymous` | Authentication mechanism to use  |
+| Option    | Environment Variable | JSON Path             | Type | Default     | Description                     |
+| --------- | -------------------- | --------------------- | ---- | ----------- | ------------------------------- |
+| Mechanism | `AUTHN_MECHANISM`    | `userAuthn.mechanism` | enum | `anonymous` | Authentication mechanism to use |
 
 **Mechanism Options:**
 
@@ -298,12 +298,12 @@ Configuration for user authentication (how end-users log in).
 
 Required when `mechanism` is set to `oidc`.
 
-| Option          | Environment Variable         | JSON Path                       | Type   | Default                 | Description                 |
-|-----------------|------------------------------|---------------------------------|--------|-------------------------|-----------------------------|
-| Issuer URL      | `AUTHN_OIDC_ISSUER_URL`      | `userAuthn.oidc.issuerUrl`      | string | *(empty)*               | OIDC provider's issuer URL  |
-| Client ID       | `AUTHN_OIDC_CLIENT_ID`       | `userAuthn.oidc.clientId`       | string | *(empty)*               | OIDC client identifier      |
-| Client Secret   | `AUTHN_OIDC_CLIENT_SECRET`   | `userAuthn.oidc.clientSecret`   | string | *(empty)*               | OIDC client secret          |
-| Redirect Origin | `AUTHN_OIDC_REDIRECT_ORIGIN` | `userAuthn.oidc.redirectOrigin` | string | `http://localhost:3000` | Base URL for redirect URI   |
+| Option          | Environment Variable         | JSON Path                       | Type   | Default                 | Description                |
+| --------------- | ---------------------------- | ------------------------------- | ------ | ----------------------- | -------------------------- |
+| Issuer URL      | `AUTHN_OIDC_ISSUER_URL`      | `userAuthn.oidc.issuerUrl`      | string | _(empty)_               | OIDC provider's issuer URL |
+| Client ID       | `AUTHN_OIDC_CLIENT_ID`       | `userAuthn.oidc.clientId`       | string | _(empty)_               | OIDC client identifier     |
+| Client Secret   | `AUTHN_OIDC_CLIENT_SECRET`   | `userAuthn.oidc.clientSecret`   | string | _(empty)_               | OIDC client secret         |
+| Redirect Origin | `AUTHN_OIDC_REDIRECT_ORIGIN` | `userAuthn.oidc.redirectOrigin` | string | `http://localhost:3000` | Base URL for redirect URI  |
 
 **Example:**
 
@@ -337,18 +337,18 @@ All methods support role-based access control with three service roles:
 
 Uses OAuth2 Client Credentials flow with JWT validation.
 
-| Option   | Environment Variable          | JSON Path                                    | Type    | Default   | Description                                    |
-|----------|-------------------------------|----------------------------------------------|---------|-----------|------------------------------------------------|
-| Enable   | `SERVICE_ACCOUNT_OIDC_ENABLE` | `serviceAuthn.oidcClientCredentials.enable`  | boolean | `false`   | Enable OIDC client credentials authentication  |
-| JWKS URI | `JWKS_URI`                    | `serviceAuthn.oidcClientCredentials.jwksUri` | string  | *(empty)* | JWKS endpoint for IdP public keys              |
-| Clients  | *(JSON only)*                 | `serviceAuthn.oidcClientCredentials.clients` | array   | `[]`      | Array of authorized OIDC clients               |
+| Option   | Environment Variable          | JSON Path                                    | Type    | Default   | Description                                   |
+| -------- | ----------------------------- | -------------------------------------------- | ------- | --------- | --------------------------------------------- |
+| Enable   | `SERVICE_ACCOUNT_OIDC_ENABLE` | `serviceAuthn.oidcClientCredentials.enable`  | boolean | `false`   | Enable OIDC client credentials authentication |
+| JWKS URI | `JWKS_URI`                    | `serviceAuthn.oidcClientCredentials.jwksUri` | string  | _(empty)_ | JWKS endpoint for IdP public keys             |
+| Clients  | _(JSON only)_                 | `serviceAuthn.oidcClientCredentials.clients` | array   | `[]`      | Array of authorized OIDC clients              |
 
 **Clients Array Schema:**
 
 ```json
 {
-  "clientId": "string",      // OIDC client ID
-  "serviceRole": "enum"      // Service role (read-only, collection-manager, stix-export)
+  "clientId": "string", // OIDC client ID
+  "serviceRole": "enum" // Service role (read-only, collection-manager, stix-export)
 }
 ```
 
@@ -387,20 +387,20 @@ See sample configurations:
 
 Token exchange authentication with challenge/response mechanism.
 
-| Option               | Environment Variable                              | JSON Path                                     | Type    | Default                  | Description                           |
-|----------------------|---------------------------------------------------|-----------------------------------------------|---------|--------------------------|---------------------------------------|
-| Enable               | `WB_REST_SERVICE_ACCOUNT_CHALLENGE_APIKEY_ENABLE` | `serviceAuthn.challengeApikey.enable`         | boolean | `false`                  | Enable challenge API key authentication |
-| Token Signing Secret | `WB_REST_TOKEN_SIGNING_SECRET`                    | `serviceAuthn.challengeApikey.secret`         | string  | *(generated at startup)* | Secret used to sign access tokens     |
-| Token Timeout        | `WB_REST_TOKEN_TIMEOUT`                           | `serviceAuthn.challengeApikey.tokenTimeout`   | integer | `300`                    | Access token lifetime in seconds      |
-| Service Accounts     | *(JSON only)*                                     | `serviceAuthn.challengeApikey.serviceAccounts`| array   | `[]`                     | Array of service accounts             |
+| Option               | Environment Variable                              | JSON Path                                      | Type    | Default                  | Description                             |
+| -------------------- | ------------------------------------------------- | ---------------------------------------------- | ------- | ------------------------ | --------------------------------------- |
+| Enable               | `WB_REST_SERVICE_ACCOUNT_CHALLENGE_APIKEY_ENABLE` | `serviceAuthn.challengeApikey.enable`          | boolean | `false`                  | Enable challenge API key authentication |
+| Token Signing Secret | `WB_REST_TOKEN_SIGNING_SECRET`                    | `serviceAuthn.challengeApikey.secret`          | string  | _(generated at startup)_ | Secret used to sign access tokens       |
+| Token Timeout        | `WB_REST_TOKEN_TIMEOUT`                           | `serviceAuthn.challengeApikey.tokenTimeout`    | integer | `300`                    | Access token lifetime in seconds        |
+| Service Accounts     | _(JSON only)_                                     | `serviceAuthn.challengeApikey.serviceAccounts` | array   | `[]`                     | Array of service accounts               |
 
 **Service Accounts Array Schema:**
 
 ```json
 {
-  "name": "string",          // Service account name
-  "apikey": "string",        // Shared secret (API key)
-  "serviceRole": "enum"      // Service role
+  "name": "string", // Service account name
+  "apikey": "string", // Shared secret (API key)
+  "serviceRole": "enum" // Service role
 }
 ```
 
@@ -438,18 +438,18 @@ See sample: [test-service-challenge-apikey.json](../../resources/sample-configur
 
 Simple API key authentication (no challenge).
 
-| Option           | Environment Variable                           | JSON Path                                  | Type    | Default | Description                          |
-|------------------|------------------------------------------------|--------------------------------------------|---------|---------|--------------------------------------|
-| Enable           | `WB_REST_SERVICE_ACCOUNT_BASIC_APIKEY_ENABLE`  | `serviceAuthn.basicApikey.enable`          | boolean | `false` | Enable basic API key authentication  |
-| Service Accounts | *(JSON only)*                                  | `serviceAuthn.basicApikey.serviceAccounts` | array   | `[]`    | Array of service accounts            |
+| Option           | Environment Variable                          | JSON Path                                  | Type    | Default | Description                         |
+| ---------------- | --------------------------------------------- | ------------------------------------------ | ------- | ------- | ----------------------------------- |
+| Enable           | `WB_REST_SERVICE_ACCOUNT_BASIC_APIKEY_ENABLE` | `serviceAuthn.basicApikey.enable`          | boolean | `false` | Enable basic API key authentication |
+| Service Accounts | _(JSON only)_                                 | `serviceAuthn.basicApikey.serviceAccounts` | array   | `[]`    | Array of service accounts           |
 
 **Service Accounts Array Schema:**
 
 ```json
 {
-  "name": "string",          // Service account name
-  "apikey": "string",        // API key
-  "serviceRole": "enum"      // Service role
+  "name": "string", // Service account name
+  "apikey": "string", // API key
+  "serviceRole": "enum" // Service role
 }
 ```
 
@@ -527,10 +527,10 @@ See sample: [multiple-apikey-services.json](../../resources/sample-configuration
 
 Background job scheduler configuration.
 
-| Option | Environment Variable | JSON Path | Type | Default | Description |
-|---|---|---|---|---|---|
-| Enable | `ENABLE_SCHEDULER` | `scheduler.enableScheduler` | boolean | `true` | Enable background job scheduler |
-| Virtual-track reconciliation | `VIRTUAL_TRACK_SCHEDULES_CRON` | `scheduler.virtualTrackSchedulesCron` | string | `* * * * *` | Discover and retry persisted virtual snapshot schedules |
+| Option                       | Environment Variable           | JSON Path                             | Type    | Default     | Description                                             |
+| ---------------------------- | ------------------------------ | ------------------------------------- | ------- | ----------- | ------------------------------------------------------- |
+| Enable                       | `ENABLE_SCHEDULER`             | `scheduler.enableScheduler`           | boolean | `true`      | Enable background job scheduler                         |
+| Virtual-track reconciliation | `VIRTUAL_TRACK_SCHEDULES_CRON` | `scheduler.virtualTrackSchedulesCron` | string  | `* * * * *` | Discover and retry persisted virtual snapshot schedules |
 
 **Scheduler Functions:**
 
@@ -551,33 +551,40 @@ VIRTUAL_TRACK_SCHEDULES_CRON="* * * * *"
 Configuration for ATT&CK Data Model (ADM) request validation and the scheduled re-validation task.
 
 | Option            | Environment Variable        | JSON Path                              | Type    | Default     | Description                                                                                  |
-|-------------------|-----------------------------|----------------------------------------|---------|-------------|----------------------------------------------------------------------------------------------|
-| Validate Requests | `VALIDATE_WITH_ADM_SCHEMAS` | `validateRequests.withAttackDataModel` | boolean | `false`     | Run incoming POST/PUT bodies through the ADM schemas before persisting                       |
+| ----------------- | --------------------------- | -------------------------------------- | ------- | ----------- | -------------------------------------------------------------------------------------------- |
+| Validate Requests | `VALIDATE_WITH_ADM_SCHEMAS` | `validateRequests.withAttackDataModel` | boolean | `true`      | Evaluate composed revisions through ADM and the configured exemption/error-bypass policy     |
 | Re-validate Cron  | `VALIDATE_OBJECTS_CRON`     | `scheduler.validateObjectsCron`        | string  | `0 3 * * *` | Cron pattern for the background task that refreshes `workspace.validation` on every document |
-| ADM Log Level     | `ADM_LOG_LEVEL`             | *(env only)*                           | enum    | `warn`      | Verbosity of the ADM library's internal logger                                               |
+| ADM Log Level     | `ADM_LOG_LEVEL`             | _(env only)_                           | enum    | `warn`      | Verbosity of the ADM library's internal logger                                               |
 
 **`VALIDATE_WITH_ADM_SCHEMAS`**
 
-When enabled, every POST and PUT validates the composed STIX payload against the ADM schemas before saving. Failed validations cause the request to throw with an HTTP error and the document is not persisted. When disabled, the write pipeline does not gate on ADM compliance and downstream tools are responsible for detecting non-compliant content.
+When enabled (the default), validation-bearing operations evaluate composed
+revisions under the current policy. Matching object exemptions skip ADM; other
+revisions use full or work-in-progress partial schemas and configured error
+bypasses. Ordinary authoring/review gates reject invalid results. Bundle import
+keeps its separate strict versus fail-open behavior controlled by
+`validateContents`. When disabled, the request gate records a disabled outcome
+without claiming ADM conformance. Model, reference, lifecycle and authorization
+checks still apply. See [validation rules](../user/validation-rules.md).
 
 This setting does not affect the legacy OpenAPI request validation (`VALIDATE_WITH_LEGACY_SCHEMAS`), which can be enabled or disabled independently.
 
 **`VALIDATE_OBJECTS_CRON`**
 
-The Workbench scheduler periodically re-validates every SDO and SRO in the database against the current ADM and refreshes each document's `workspace.validation` field. This combats *concept drift*: documents that passed validation under an older ADM version may become non-compliant after a Workbench upgrade.
+The Workbench scheduler periodically re-validates every SDO and SRO in the database against the current ADM and refreshes each document's `workspace.validation` field. This combats _concept drift_: documents that passed validation under an older ADM version may become non-compliant after a Workbench upgrade.
 
-The cron pattern follows standard 5-field syntax (`minute hour day-of-month month day-of-week`). The default `0 3 * * *` runs the task daily at 3:00 AM. The task is skipped entirely if the global scheduler is disabled (`ENABLE_SCHEDULER=false`).
+The cron pattern follows standard 5-field syntax (`minute hour day-of-month month day-of-week`). The default `0 3 * * *` runs the task daily at 3:00 AM. The periodic task is skipped if the global scheduler is disabled (`ENABLE_SCHEDULER=false`). Durable policy reconciliation still runs, and both background evaluators enable ADM independently of the request-validation switch.
 
 For the lifecycle of `workspace.validation` itself, see [Stateful Validation Tracking](../developer/workspace-validation.md).
 
 **`ADM_LOG_LEVEL`**
 
-Read by the `@mitre-attack/attack-data-model` library directly — *not* a Convict-managed setting and not configurable via `JSON_CONFIG_PATH`. It controls the verbosity of the ADM library's own logger, which is independent of the Workbench `LOG_LEVEL`.
+Read by the `@mitre-attack/attack-data-model` library directly — _not_ a Convict-managed setting and not configurable via `JSON_CONFIG_PATH`. It controls the verbosity of the ADM library's own logger, which is independent of the Workbench `LOG_LEVEL`.
 
 This was introduced primarily to suppress the deprecation warning that the ADM emits for every relationship in the database during a re-validation run. Setting `ADM_LOG_LEVEL=error` (or `silent`) keeps the scheduled task quiet without affecting Workbench's own logs.
 
 | Level    | Description                                                        |
-|----------|--------------------------------------------------------------------|
+| -------- | ------------------------------------------------------------------ |
 | `debug`  | Verbose diagnostic output                                          |
 | `info`   | Informational status messages (data retrieval, parse counts, etc.) |
 | `warn`   | Validation issues in `relaxed` mode and deprecation warnings       |
@@ -603,9 +610,9 @@ ADM_LOG_LEVEL=error
 
 Configuration for ATT&CK collection index subscriptions.
 
-| Option           | Environment Variable | JSON Path                        | Type    | Default | Description                               |
-|------------------|----------------------|----------------------------------|---------|---------|-------------------------------------------|
-| Default Interval | `DEFAULT_INTERVAL`   | `collectionIndex.defaultInterval`| integer | `300`   | Default update check interval in seconds  |
+| Option           | Environment Variable | JSON Path                         | Type    | Default | Description                              |
+| ---------------- | -------------------- | --------------------------------- | ------- | ------- | ---------------------------------------- |
+| Default Interval | `DEFAULT_INTERVAL`   | `collectionIndex.defaultInterval` | integer | `300`   | Default update check interval in seconds |
 
 **Notes:**
 
@@ -616,11 +623,11 @@ Configuration for ATT&CK collection index subscriptions.
 
 Paths to additional configuration and data files.
 
-| Option                            | Environment Variable                 | JSON Path                                           | Type   | Default                                          | Description                                      |
-|-----------------------------------|--------------------------------------|-----------------------------------------------------|--------|--------------------------------------------------|--------------------------------------------------|
-| JSON Config Path                  | `JSON_CONFIG_PATH`                   | `configurationFiles.jsonConfigFile`                 | string | *(empty)*                                        | Path to JSON configuration file                  |
-| Allowed Values Path               | `ALLOWED_VALUES_PATH`                | `configurationFiles.allowedValues`                  | string | `./app/config/allowed-values.json`               | Seed values used when Allowed Values configuration does not yet exist |
-| Static Marking Definitions Path   | `WB_REST_STATIC_MARKING_DEFS_PATH`   | `configurationFiles.staticMarkingDefinitionsPath`   | string | `./app/lib/default-static-marking-definitions/`  | Directory containing static marking definitions  |
+| Option                          | Environment Variable               | JSON Path                                         | Type   | Default                                         | Description                                                           |
+| ------------------------------- | ---------------------------------- | ------------------------------------------------- | ------ | ----------------------------------------------- | --------------------------------------------------------------------- |
+| JSON Config Path                | `JSON_CONFIG_PATH`                 | `configurationFiles.jsonConfigFile`               | string | _(empty)_                                       | Path to JSON configuration file                                       |
+| Allowed Values Path             | `ALLOWED_VALUES_PATH`              | `configurationFiles.allowedValues`                | string | `./app/config/allowed-values.json`              | Seed values used when Allowed Values configuration does not yet exist |
+| Static Marking Definitions Path | `WB_REST_STATIC_MARKING_DEFS_PATH` | `configurationFiles.staticMarkingDefinitionsPath` | string | `./app/lib/default-static-marking-definitions/` | Directory containing static marking definitions                       |
 
 #### Allowed Values
 
@@ -630,11 +637,11 @@ Values**, below **Validation Bypasses**.
 
 The three sources have different responsibilities:
 
-| Source | Responsibility |
-| --- | --- |
-| Installed backend ADM package | Determines permissible values and object-type/domain constraints through its Zod schemas |
+| Source                                   | Responsibility                                                                                                                                                   |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Installed backend ADM package            | Determines permissible values and object-type/domain constraints through its Zod schemas                                                                         |
 | Bundled `app/config/allowed-values.json` | Registers supported object/property pairs, supplies initial groups and values, and provides suggestions for formatted fields and the dropdown response structure |
-| MongoDB | Stores the administrator's configured values and enabled states |
+| MongoDB                                  | Stores the administrator's configured values and enabled states                                                                                                  |
 
 ##### Initialization and the JSON file
 
@@ -680,11 +687,11 @@ rewrite existing ATT&CK objects or change their validation requirements.
 
 A value does not generally need to be added to both ADM and the JSON file:
 
-| Situation | ADM change | JSON change | Operator action |
-| --- | --- | --- | --- |
-| ADM already permits the value, but it is not configured or enabled | None | None | Enable it in the relevant property/domain and object-type scope, then save |
-| The value is a new enum member that ADM rejects | Required | Only if it should be a default for new configurations | Upgrade the backend ADM package, then enable the value through the UI |
-| A new data-source/component string satisfies ADM's existing format validator | None | None | Use Validate and add, then save |
+| Situation                                                                    | ADM change | JSON change                                           | Operator action                                                            |
+| ---------------------------------------------------------------------------- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| ADM already permits the value, but it is not configured or enabled           | None       | None                                                  | Enable it in the relevant property/domain and object-type scope, then save |
+| The value is a new enum member that ADM rejects                              | Required   | Only if it should be a default for new configurations | Upgrade the backend ADM package, then enable the value through the UI      |
+| A new data-source/component string satisfies ADM's existing format validator | None       | None                                                  | Use Validate and add, then save                                            |
 
 For a new enum member:
 
@@ -723,7 +730,7 @@ Software choices must be valid for both tool and malware objects.
 
 A stored setting may be invalid under the current ADM because an earlier
 implementation accepted it or an ADM upgrade changed the schema.
-*Quarantine* means retaining that setting while excluding it from use:
+_Quarantine_ means retaining that setting while excluding it from use:
 
 - The backend evaluates stored settings on reads; there is no quarantine
   collection or persisted quarantine flag.
@@ -742,14 +749,14 @@ None of this changes existing STIX objects.
 All management endpoints require an administrator. The dropdown endpoint retains
 visitor-or-higher and read-only service access.
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/config/allowed-values` | Enabled, ADM-compliant choices in the existing nested object/property/domain format, including empty scopes |
-| `GET /api/config/allowed-values/catalog` | Backend ADM version, supported scopes, choices, validation kind, and descriptions |
-| `GET /api/config/allowed-values/rules` | Configured groups, compliant `values`, and legacy `invalidValues` warnings |
-| `POST /api/config/allowed-values/rules` | Create `{ propertyName, domainName, values }`; returns `201` |
-| `PUT /api/config/allowed-values/rules/{propertyName}/{domainName}` | Replace a configured group's complete `{ values }` set |
-| `POST /api/config/allowed-values/validate` | Check `{ propertyName, domainName, objectTypes, value }` without saving; return the trimmed `{ value }` |
+| Method and path                                                    | Purpose                                                                                                     |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `GET /api/config/allowed-values`                                   | Enabled, ADM-compliant choices in the existing nested object/property/domain format, including empty scopes |
+| `GET /api/config/allowed-values/catalog`                           | Backend ADM version, supported scopes, choices, validation kind, and descriptions                           |
+| `GET /api/config/allowed-values/rules`                             | Configured groups, compliant `values`, and legacy `invalidValues` warnings                                  |
+| `POST /api/config/allowed-values/rules`                            | Create `{ propertyName, domainName, values }`; returns `201`                                                |
+| `PUT /api/config/allowed-values/rules/{propertyName}/{domainName}` | Replace a configured group's complete `{ values }` set                                                      |
+| `POST /api/config/allowed-values/validate`                         | Check `{ propertyName, domainName, objectTypes, value }` without saving; return the trimmed `{ value }`     |
 
 Each option in `values` has `{ value, enabled, objectTypes }`: a nonempty trimmed
 string, a boolean, and distinct supported object types. Values are case-sensitive.
@@ -774,10 +781,10 @@ Directory containing JSON files with STIX marking definitions that are automatic
 
 ATT&CK-specific configuration values.
 
-| Option                   | Environment Variable | JSON Path              | Type   | Default    | Description                                                     |
-|--------------------------|----------------------|------------------------|--------|------------|-----------------------------------------------------------------|
-| Attack Source Names      | *(JSON only)*        | `attackSourceNames`    | array  | See below  | Valid `source_name` values in ATT&CK `external_references`      |
-| Domain to Kill Chain Map | *(JSON only)*        | `domainToKillChainMap` | object | See below  | Maps domain names to kill chain phase names                     |
+| Option                   | Environment Variable | JSON Path              | Type   | Default   | Description                                                |
+| ------------------------ | -------------------- | ---------------------- | ------ | --------- | ---------------------------------------------------------- |
+| Attack Source Names      | _(JSON only)_        | `attackSourceNames`    | array  | See below | Valid `source_name` values in ATT&CK `external_references` |
+| Domain to Kill Chain Map | _(JSON only)_        | `domainToKillChainMap` | object | See below | Maps domain names to kill chain phase names                |
 
 **Default Attack Source Names:**
 
@@ -832,3 +839,119 @@ work. See [lifecycle workflow semantics](../user/revoke-workflow.md).
 - [Authentication Documentation](./authentication/README.md)
 - [Sample Configurations](../../resources/sample-configurations/)
 - [Template Environment File](../../template.env)
+
+## Validation policy storage and upgrades
+
+The existing `/api/config/validation-bypasses` API accepts `error-bypass` rules
+and `object-exemption` rules. An omitted `kind` retains the legacy error bypass
+contract. Exemptions require a readable `name`, Boolean `enabled`, a
+`retirementStatus` of `revoked` or `deprecated`, and `stixTypes` equal to `all` or
+a nonempty list of supported STIX types. Type lists are normalized; duplicate
+selectors are rejected even if the names or enabled states differ. Mixed fields
+from the two rule kinds are rejected. Existing list pagination, permissions,
+rule IDs, and CRUD status codes remain compatible.
+
+Newly initialized policies include separate enabled all-type revoked and deprecated
+rules. Their one-time seed marker prevents restart from undoing edits, enabling
+disabled rules, or recreating deleted defaults. Custom overlapping rules are
+allowed; any enabled match grants exemption. A disabled rule does not cancel
+another enabled rule.
+
+The canonical policy stores rules and pending reevaluation intent atomically.
+Saving a change advances policy revision and evaluation generation; it does not
+synchronously scan historical revisions. Rule payloads and control metadata are
+limited to 8 MiB total and 10,000 rules.
+
+For the first upgrade to canonical policy storage, stop all old API writers,
+back up the database, and run one designated upgrader with migrations enabled.
+Set `WB_REST_DATABASE_MIGRATION_ENABLE=true` (the default) for that designated
+server. Keep it out of request traffic until startup completes.
+The final validation-policy migration runs after earlier migrations finish
+modifying legacy rules. Start new workers only after cutover completes. Mixing
+old servers that write the legacy collection with new canonical-policy servers
+is unsupported. The old collection is retained as historical input and is no
+longer synchronized after cutover; restore the stopped-server backup for rollback.
+
+An engine upgrade (ADM package, ATT&CK specification, or evaluator implementation)
+also requires stopping older workers. The designated initializer must explicitly
+call `validation-policy-service.initialize({ activateEngine: true })` after
+connecting to the database. This activates the engine once and records a new
+reevaluation generation. Normal initialization only verifies an existing engine
+and fails on a mismatch. For an existing canonical policy, run this one-off command
+from the REST API repository with the new engine installed and the target database
+configuration loaded, **after all previous API workers have stopped and a backup
+has been taken**, before starting the new servers:
+
+```sh
+node <<'JS'
+const mongoose = require('mongoose');
+(async () => {
+  try {
+    await require('./app/lib/database-connection').initializeConnection();
+    const policy = require('./app/services/system/validation-policy-service');
+    await policy.initialize({ activateEngine: true });
+    const snapshot = await policy.loadSnapshot();
+    console.log({
+      policy_revision: snapshot.policy_revision,
+      evaluation_generation: snapshot.evaluation_generation,
+      engine_context: snapshot.engine_context,
+    });
+  } finally {
+    await mongoose.disconnect();
+  }
+})().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+JS
+```
+
+This command writes the canonical engine context and queues reevaluation. It does
+not run the API, worker or pending migrations. The first canonical-storage migration
+already performs explicit activation; do not run this command ahead of that legacy
+cutover, because earlier migrations must finish modifying legacy rules first.
+After an existing-policy activation, start one new server with migrations enabled,
+confirm startup and matching engine context, then start the remaining new workers.
+A repeat activation using the same engine is a no-op. Preserve administrator rule
+edits and removed defaults; activation does not reset them. Restore the stopped-server
+backup for rollback rather than mixing engines or copying legacy rules back.
+See the [storage and evaluation contract](../developer/validation-policy.md).
+
+### Validation diagnostic reconciliation
+
+After initialization, the API explicitly starts a durable validation worker even
+when `ENABLE_SCHEDULER=false`. Policy changes and designated engine activation
+record pending work atomically with the new context. All object and relationship
+revisions are scanned in bounded batches; process restart resumes an expired lease
+from its checkpoint. This updates current diagnostics without rewriting STIX,
+workflow review decisions, release membership, published bundles, or import reports.
+New revisions record recovery work with their content, so interrupted diagnostic
+publication and late inserts after a completed scan are also recovered by this
+worker after restart, independently of the scheduler.
+
+Use `GET /api/config/validation-bypasses/reconciliation` to inspect progress and
+bounded failure information. `POST /api/config/validation-bypasses/reconciliation/retry`
+requeues failed work. These routes are administrator-only. Enforcement already uses
+the saved policy while cleanup is pending or failed. Older diagnostic markers are
+omitted from ordinary HTTP reads rather than shown as current under a newer policy.
+
+An administrator can inspect and retry through an authenticated session:
+
+```sh
+curl -b cookies.txt \
+  'http://localhost:3000/api/config/validation-bypasses/reconciliation'
+curl -b cookies.txt -X POST -H 'Content-Type: application/json' --data '{}' \
+  'http://localhost:3000/api/config/validation-bypasses/reconciliation/retry'
+```
+
+`progress.total` can be null before counting and is estimated during a scan;
+completion finalizes it. Retry resumes failed work from its checkpoint and is a
+no-op for pending, running or completed work. Inspect `last_error` when failed.
+A newer policy resets progress for a full scan; there is no superseded-job history
+in this endpoint. The UI displays enforcement as active while cleanup is pending.
+
+### Optional validation reports
+
+[Validation report retention](validation-reports.md) documents 24-hour TTL storage,
+current authorization and the separate durable report key. Reports do not depend
+on the scheduler switch or session-secret defaults.

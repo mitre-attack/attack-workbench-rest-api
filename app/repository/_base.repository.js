@@ -386,8 +386,11 @@ class BaseRepository extends AbstractRepository {
 
   async save(data) {
     try {
-      const document = new this.model(data);
-      return await document.save();
+      const { prepared, evaluation } = this.prepareValidationInsert(data);
+      const document = new this.model(prepared);
+      await document.save();
+      await this.publishInsertedValidation(document, evaluation);
+      return document;
     } catch (err) {
       logger.error(`A database error occurred: ${err.message}`);
       if (err.name === 'MongoServerError' && err.code === 11000) {
@@ -397,6 +400,69 @@ class BaseRepository extends AbstractRepository {
       }
       throw new DatabaseError(err);
     }
+  }
+
+  prepareValidationInsert(data) {
+    const operation = require('../lib/validation-operation-context').getStore();
+    if (!operation?.snapshot.engine_context) return { prepared: data };
+    const workspace = { ...data.workspace };
+    const marker = workspace.evaluation_context;
+    const evaluation =
+      marker?.publication_token === operation.publicationToken
+        ? {
+            outcome: marker.outcome,
+            errors: workspace.validation?.errors || [],
+          }
+        : null;
+    delete workspace.validation;
+    delete workspace.evaluation_context;
+    workspace.evaluation_needed = true;
+    return { prepared: { ...data, workspace }, evaluation };
+  }
+
+  async publishInsertedValidation(document, evaluation) {
+    if (!evaluation) return;
+    const operation = require('../lib/validation-operation-context').getStore();
+    const observed = await this.model.collection.findOne({ _id: document._id });
+    if (!observed) return;
+    await require('./validation-diagnostics-repository').publish({
+      model: this.model,
+      document: observed,
+      result: evaluation,
+      snapshot: operation.snapshot,
+      publicationToken: operation.publicationToken,
+    });
+    // A concurrent newer publisher may have won. Return its actual stored state.
+    const current = await this.model.collection.findOne({ _id: document._id });
+    document.set('workspace.validation', current?.workspace?.validation);
+    document.set('workspace.evaluation_context', current?.workspace?.evaluation_context);
+    document.set('workspace.evaluation_needed', current?.workspace?.evaluation_needed);
+  }
+
+  async saveMany(dataArr, options = {}) {
+    if (!Array.isArray(dataArr) || dataArr.length === 0) return { inserted: [], errors: [] };
+    const prepared = dataArr.map((data) => this.prepareValidationInsert(data));
+    // Compare canonical timestamps without formatting unvalidated input; Mongoose
+    // must report invalid dates per document while inserting valid neighbors.
+    const key = (data) =>
+      `${data.stix.id}:${data.stix.modified ? new Date(data.stix.modified).getTime() : ''}`;
+    const evaluations = new Map(
+      dataArr.map((data, index) => [key(data), prepared[index].evaluation]),
+    );
+    const result = await this._insertMany(
+      prepared.map((item) => item.prepared),
+      options,
+    );
+    for (let offset = 0; offset < result.inserted.length; offset += 20) {
+      await Promise.all(
+        result.inserted
+          .slice(offset, offset + 20)
+          .map((document) =>
+            this.publishInsertedValidation(document, evaluations.get(key(document))),
+          ),
+      );
+    }
+    return result;
   }
 
   /**
@@ -423,7 +489,7 @@ class BaseRepository extends AbstractRepository {
    *   `errors[].index` is the index into the input `dataArr`; the caller can
    *   use it to recover the original document for error reporting.
    */
-  async saveMany(dataArr, { ordered = false } = {}) {
+  async _insertMany(dataArr, { ordered = false } = {}) {
     if (!Array.isArray(dataArr) || dataArr.length === 0) {
       return { inserted: [], errors: [] };
     }
@@ -519,6 +585,31 @@ class BaseRepository extends AbstractRepository {
 
   async updateAndSave(document, data) {
     try {
+      const operation = require('../lib/validation-operation-context').getStore();
+      if (operation?.snapshot.engine_context && data.workspace?.evaluation_context) {
+        const observed = document.toObject({ transform: false });
+        // Native CAS must retain the casting, strictness and model validation
+        // previously provided by document.save(), including discriminator fields.
+        const candidate = new document.constructor(_.merge({}, observed, data));
+        await candidate.validate();
+        const workspace = candidate.toObject({ transform: false }).workspace;
+        const result = {
+          outcome: data.workspace.evaluation_context.outcome,
+          errors: data.workspace.validation?.errors || [],
+        };
+        const saved = await require('./validation-diagnostics-repository').publish({
+          model: this.model,
+          document: observed,
+          result,
+          workspace,
+          snapshot: operation.snapshot,
+          publicationToken: operation.publicationToken,
+        });
+        if (!saved) throw new Error('Validation context or revision changed; retry the operation');
+        const updated = await this.model.findById(document._id);
+        document.set(updated.toObject());
+        return document;
+      }
       // TODO validate that document is valid mongoose object first
       _.merge(document, data);
       return await document.save();
@@ -527,20 +618,18 @@ class BaseRepository extends AbstractRepository {
     }
   }
 
-  async markRevisionsReviewed(entries) {
-    if (!entries.length) return { matchedCount: 0 };
-    // The generic AttackObject schema omits modified; strictQuery would strip
-    // that predicate. Match BSON dates directly to preserve the exact revision.
-    return this.model.collection.updateMany(
-      {
+  async retrieveReviewableRevisions(entries) {
+    if (!entries.length) return [];
+    // Match BSON dates directly: the generic model omits type-specific modified.
+    return this.model.collection
+      .find({
         $or: entries.map(({ object_ref, object_modified }) => ({
           'stix.id': object_ref,
           'stix.modified': new Date(object_modified),
         })),
         'workspace.workflow.state': { $ne: 'static' },
-      },
-      { $set: { 'workspace.workflow.state': 'reviewed' } },
-    );
+      })
+      .toArray();
   }
 
   /**

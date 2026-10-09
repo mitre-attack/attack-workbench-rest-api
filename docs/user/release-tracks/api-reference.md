@@ -1151,6 +1151,15 @@ Release previews and commits use the same planner. Preview requests never
 persist data. Representation filters change only the rendered preview; they do
 not change the release plan.
 
+Before rendering an otherwise releasable plan, every preview format evaluates all
+proposed members with the same full reviewed ADM schema, validation setting and
+policy snapshot used by publication. Enabled object exemptions and error bypasses
+apply normally. An ADM failure returns `400` with validation details, including
+when `format=summary`; it cannot return `releasable: true`. Evaluation never marks
+revisions reviewed, updates stored diagnostics or creates a release snapshot.
+Optional exemption reports record these visits as `preflight`. Publication remains
+a separate operation and reevaluates under its own policy snapshot.
+
 ### Preview Next Release (Read-Only)
 
 Returns a before/after delta by default. Use the historical form

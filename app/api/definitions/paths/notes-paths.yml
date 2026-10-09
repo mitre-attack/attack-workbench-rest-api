@@ -90,6 +90,8 @@ paths:
                   $ref: '../components/notes.yml#/components/schemas/note'
 
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Create a note'
       operationId: 'note-create'
       description: |
@@ -99,6 +101,10 @@ paths:
       tags:
         - 'Notes'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - $ref: '../components/query-parameters.yml#/components/parameters/dryRun'
       requestBody:
         required: true
@@ -107,17 +113,35 @@ paths:
             schema:
               $ref: '../components/notes.yml#/components/schemas/note'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'The note has been successfully created.'
           content:
             application/json:
               schema:
-                $ref: '../components/notes.yml#/components/schemas/note'
+                anyOf:
+                  - $ref: '../components/notes.yml#/components/schemas/note'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Missing or invalid parameters were provided. The note was not created.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Duplicate `stix.id` and `stix.modified` properties. The note was not created.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/notes/{stixId}:
     get:
       summary: 'Get one or more versions of a note'
@@ -209,6 +233,8 @@ paths:
         '404':
           description: 'A note with the requested STIX id and modified date was not found.'
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update a note'
       operationId: 'note-update-version'
       description: |
@@ -216,6 +242,10 @@ paths:
       tags:
         - 'Notes'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: stixId
           in: path
           description: 'STIX id of the note to update'
@@ -236,18 +266,43 @@ paths:
             schema:
               $ref: '../components/notes.yml#/components/schemas/note'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The note was updated.'
           content:
             application/json:
               schema:
-                $ref: '../components/notes.yml#/components/schemas/note'
+                anyOf:
+                  - $ref: '../components/notes.yml#/components/schemas/note'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Missing or invalid parameters were provided. The note was not updated.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'A note with the requested STIX id and modified date was not found.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'STIX-changing PUTs conflict with revision immutability. Deletes conflict when the revision is pinned by release-track membership or an opt-in snapshot graph. Create a new revision instead.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
     delete:
       summary: 'Delete a note'
       operationId: 'note-delete-version'

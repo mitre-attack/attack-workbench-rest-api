@@ -335,8 +335,6 @@ async function processTier(type, objects, ctx) {
     categorizeObject(importObject, existing, importedCollection);
     processExternalReferences(importObject, importReferences, referenceImportResults);
 
-    if (options.previewOnly) return;
-
     const stagingDoc = {
       workspace: {
         collections: [collectionReference],
@@ -403,6 +401,10 @@ async function processTier(type, objects, ctx) {
           })),
         });
       }
+
+      // Preview shares composition and ADM eligibility with import, but must
+      // stop before write hooks, persistence, and diagnostic publication.
+      if (options.previewOnly) return;
 
       // Run the service's beforeCreate hook so outbound embedded_relationships
       // and any other pre-persist data shaping are present on the doc when
@@ -676,7 +678,12 @@ async function saveCollection(importedCollection, duplicateCollection, options) 
       throw err;
     }
   }
-  return importedCollection;
+  // A new collection is evaluated on actual import even when contents are
+  // strict. Compose it under that same fail-open contract without create hooks.
+  const { data: composed } = await collectionsService.composeForImport(importedCollection, {
+    import: true,
+  });
+  return composed;
 }
 
 /**
@@ -787,3 +794,5 @@ module.exports = async function importBundle(collection, data, options) {
   // Save collection
   return await saveCollection(importedCollection, duplicateCollection, options);
 };
+
+module.exports = require('../../system/validation-operation-service').wrap(module.exports);

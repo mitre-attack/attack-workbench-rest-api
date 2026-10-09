@@ -50,6 +50,12 @@ attackObjectSchema.index({ 'stix.id': 1, 'stix.modified': -1 }, { unique: true }
 // (release-track backref reconciliation queries by workspace.release_tracks.id)
 attackObjectSchema.index({ 'workspace.release_tracks.id': 1 }, { sparse: true });
 
+// Durable insert recovery is independent of scan checkpoints and scheduler enablement.
+attackObjectSchema.index(
+  { 'workspace.evaluation_needed': 1 },
+  { partialFilterExpression: { 'workspace.evaluation_needed': true } },
+);
+
 // Create the model
 const attackObjectModel = mongoose.model('AttackObject', attackObjectSchema);
 

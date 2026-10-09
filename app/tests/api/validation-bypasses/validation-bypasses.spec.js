@@ -5,7 +5,7 @@ const config = require('../../../config/config');
 const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
-const ValidationBypassRule = require('../../../models/validation-bypass-rule-model');
+const validationBypassesRepository = require('../../../repository/validation-bypasses-repository');
 
 const logger = require('../../../lib/logger');
 logger.level = 'debug';
@@ -67,7 +67,6 @@ describe('Validation Bypasses API', function () {
   before(async function () {
     await database.initializeConnection();
     await databaseConfiguration.checkSystemConfiguration();
-    await ValidationBypassRule.init();
 
     config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
@@ -288,12 +287,109 @@ describe('Validation Bypasses API', function () {
       .expect(404);
   });
 
+  it('creates, normalizes, renames, disables and deletes an object exemption through the existing endpoints', async function () {
+    const payload = {
+      kind: 'object-exemption',
+      name: 'Retired software',
+      enabled: true,
+      retirementStatus: 'revoked',
+      stixTypes: ['tool', 'malware', 'tool'],
+    };
+    const created = await request(app)
+      .post('/api/config/validation-bypasses')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .send(payload)
+      .expect(201);
+    expect(created.body.stixTypes).toEqual(['malware', 'tool']);
+    expect(created.body.fieldPath).toBeUndefined();
+    await request(app)
+      .post('/api/config/validation-bypasses')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .send({ ...payload, stixTypes: ['malware', 'tool'] })
+      .expect(409);
+    const updated = await request(app)
+      .put('/api/config/validation-bypasses/' + created.body._id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .send({ ...created.body, name: 'Renamed exemption', enabled: false })
+      .expect(200);
+    expect(updated.body._id).toBe(created.body._id);
+    expect(updated.body.enabled).toBe(false);
+    await request(app)
+      .get('/api/config/validation-bypasses/' + created.body._id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200);
+    await request(app)
+      .delete('/api/config/validation-bypasses/' + created.body._id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+  });
+
+  it('accepts uppercase rule ids for GET, PUT, and DELETE without changing identity', async function () {
+    const payload = { ...initialRuleData, fieldPath: ['uppercase_id_test'] };
+    const created = await request(app)
+      .post('/api/config/validation-bypasses')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .send(payload)
+      .expect(201);
+    const id = created.body._id;
+    const upper = id.toUpperCase();
+    expect(upper).not.toBe(id);
+    const read = await request(app)
+      .get('/api/config/validation-bypasses/' + upper)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200);
+    expect(read.body._id).toBe(id);
+    const updated = await request(app)
+      .put('/api/config/validation-bypasses/' + upper)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .send({ ...payload, warningMessage: 'Updated via uppercase id' })
+      .expect(200);
+    expect(updated.body._id).toBe(id);
+    const lowercaseRead = await request(app)
+      .get('/api/config/validation-bypasses/' + id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200);
+    expect(lowercaseRead.body.warningMessage).toBe('Updated via uppercase id');
+    await request(app)
+      .delete('/api/config/validation-bypasses/' + upper)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(204);
+    await request(app)
+      .get('/api/config/validation-bypasses/' + id)
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(404);
+  });
+
+  it('rejects mixed-kind selectors and invalid exemption scopes with 400', async function () {
+    const payload = {
+      kind: 'object-exemption',
+      name: 'Scope',
+      enabled: true,
+      retirementStatus: 'revoked',
+      stixTypes: ['tool'],
+    };
+    for (const invalid of [
+      { ...payload, errorCode: 'custom' },
+      { ...payload, stixTypes: [] },
+      { ...payload, enabled: 'true' },
+      { ...payload, stixTypes: ['unknown'] },
+      { ...payload, name: '  ' },
+      { ...payload, retirementStatus: 'active' },
+    ]) {
+      await request(app)
+        .post('/api/config/validation-bypasses')
+        .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+        .send(invalid)
+        .expect(400);
+    }
+  });
+
   after(async function () {
     if (rule2?._id) {
-      await ValidationBypassRule.findByIdAndDelete(rule2._id).exec();
+      await validationBypassesRepository.deleteById(rule2._id);
     }
     if (runtimeRule?._id) {
-      await ValidationBypassRule.findByIdAndDelete(runtimeRule._id).exec();
+      await validationBypassesRepository.deleteById(runtimeRule._id);
     }
     await database.closeConnection();
   });

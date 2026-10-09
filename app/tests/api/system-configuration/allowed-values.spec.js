@@ -14,7 +14,7 @@ const UserAccount = require('../../../models/user-account-model');
 const service = require('../../../services/system/allowed-values-service');
 const systemConfigurationService = require('../../../services/system/system-configuration-service');
 const seed = require('../../../config/allowed-values.json');
-const ValidationBypassRule = require('../../../models/validation-bypass-rule-model');
+const validationBypassesRepository = require('../../../repository/validation-bypasses-repository');
 
 const base = '/api/config/allowed-values';
 const rules = `${base}/rules`;
@@ -515,7 +515,7 @@ describe('Runtime allowed values API', function () {
 
   it('rejects enum and domain incompatibilities even when disabled, bypassed, or general ADM validation is off', async function () {
     const before = (await api('get', rules)).body;
-    const bypass = await ValidationBypassRule.create({
+    const bypass = await validationBypassesRepository.save({
       fieldPath: ['x_mitre_platforms', '0'],
       errorCode: 'invalid_value',
       stixType: 'attack-pattern',
@@ -602,7 +602,7 @@ describe('Runtime allowed values API', function () {
       expect(choices((await api('get', base)).body, relatedRule, 'asset')).toEqual(['Electric']);
     } finally {
       config.validateRequests.withAttackDataModel = original;
-      await ValidationBypassRule.deleteOne({ _id: bypass._id });
+      await validationBypassesRepository.deleteById(bypass._id);
     }
   });
 

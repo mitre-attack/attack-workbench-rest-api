@@ -154,6 +154,11 @@ describe('Canonical ATT&CK domain migration', function () {
   before(async function () {
     await database.initializeConnection();
     await databaseConfiguration.checkSystemConfiguration();
+    // Reconstruct the pre-cutover bootstrap rules for this historical migration.
+    const Policy = require('../../../models/validation-policy-model');
+    const policy = await Policy.findOne({}).lean();
+    const legacyRules = policy.rules.filter((rule) => rule.kind !== 'object-exemption');
+    await mongoose.connection.collection('validationbypassrules').insertMany(legacyRules);
     config.validateRequests.withAttackDataModel = true;
     config.validateRequests.withOpenApi = true;
     app = await require('../../../index').initializeApp();
@@ -432,6 +437,7 @@ describe('Canonical ATT&CK domain migration', function () {
   });
 
   it('backfills active and inactive revisions without mutating history or lifecycle state', async function () {
+    await require('../../../models/validation-policy-model').deleteMany({});
     await mongoose.connection.db.collection('validationbypassrules').insertMany(
       migration._private.TARGET_TYPES.map((stixType) => ({
         fieldPath: ['x_mitre_domains'],

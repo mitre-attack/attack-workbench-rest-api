@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertNoAdmErrors } = require('../../lib/adm-validation');
+
 const config = require('../../config/config');
 const { BaseService } = require('../meta-classes');
 const techniquesRepository = require('../../repository/techniques-repository');
@@ -35,6 +37,10 @@ class TechniquesService extends BaseService {
    */
   static initializeEventListeners() {
     EventBus.on(
+      EventConstants.TACTIC_SHORTNAME_CHANGE_PREFLIGHT_REQUESTED,
+      TechniquesService.handleTacticShortnameChangePreflightRequested,
+    );
+    EventBus.on(
       EventConstants.TACTIC_SHORTNAME_CHANGED,
       TechniquesService.handleTacticShortnameChanged.bind(TechniquesService),
     );
@@ -52,12 +58,25 @@ class TechniquesService extends BaseService {
    * @param {string} payload.newShortname - New x_mitre_shortname value
    * @param {string[]} payload.domains - The tactic's x_mitre_domains (e.g. ['enterprise-attack'])
    */
-  static async handleTacticShortnameChanged(payload) {
+  static async handleTacticShortnameChangePreflightRequested(payload) {
+    return TechniquesService.handleTacticShortnameChanged(payload, { preflight: true });
+  }
+
+  static async handleTacticShortnameChanged(payload, { preflight = false } = {}) {
     const graphWriteLock = require('../../lib/graph-write-lock');
     if (!graphWriteLock.isHeld()) {
-      return graphWriteLock.run(() => TechniquesService.handleTacticShortnameChanged(payload));
+      return graphWriteLock.run(() =>
+        TechniquesService.handleTacticShortnameChanged(payload, { preflight }),
+      );
     }
-    const { tacticId, oldShortname, newShortname, domains = [], createNewVersion } = payload;
+    const {
+      tacticId,
+      oldShortname,
+      newShortname,
+      domains = [],
+      createNewVersion,
+      propagationModified,
+    } = payload;
 
     // Convert the tactic's domains to kill chain names so we only update
     // techniques whose kill_chain_phases match both the phase_name AND the
@@ -78,6 +97,7 @@ class TechniquesService extends BaseService {
         oldShortname,
         newShortname,
         killChainNames,
+        { preflight, propagationModified },
       );
     } else {
       await TechniquesService._propagateShortnameInPlace(
@@ -104,6 +124,7 @@ class TechniquesService extends BaseService {
     oldShortname,
     newShortname,
     killChainNames,
+    { preflight = false, propagationModified } = {},
   ) {
     const techniques = await techniquesRepository.retrieveAllLatestByPhaseName(
       oldShortname,
@@ -124,7 +145,7 @@ class TechniquesService extends BaseService {
           ...technique,
           stix: {
             ...technique.stix,
-            modified: new Date().toISOString(),
+            modified: propagationModified || new Date().toISOString(),
             kill_chain_phases: (technique.stix.kill_chain_phases || []).map((phase) =>
               phase.phase_name === oldShortname &&
               (killChainNames.length === 0 || killChainNames.includes(phase.kill_chain_name))
@@ -134,6 +155,13 @@ class TechniquesService extends BaseService {
           },
         };
 
+        delete newVersion.workspace?.validation;
+        delete newVersion.workspace?.evaluation_context;
+        const evaluation = await module.exports.validateComposedObject(newVersion, {
+          phase: preflight ? 'preflight' : 'evaluation',
+        });
+        assertNoAdmErrors(evaluation);
+        if (preflight) continue;
         await techniquesRepository.save(newVersion);
 
         logger.info(
@@ -141,6 +169,7 @@ class TechniquesService extends BaseService {
           { tacticId, oldShortname, newShortname },
         );
       } catch (error) {
+        if (error instanceof require('../../exceptions').ValidationError) throw error;
         logger.error(
           `TechniquesService: Error creating new version of technique ${technique.stix?.id}:`,
           error,
@@ -170,6 +199,7 @@ class TechniquesService extends BaseService {
         { tacticId, oldShortname, newShortname, killChainNames },
       );
     } catch (error) {
+      if (error instanceof require('../../exceptions').ValidationError) throw error;
       logger.error(
         `TechniquesService: Error updating techniques in-place for tactic shortname change '${oldShortname}' -> '${newShortname}':`,
         error,
@@ -369,6 +399,10 @@ class TechniquesService extends BaseService {
       newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
     }
 
+    delete newVersion.workspace.validation;
+    delete newVersion.workspace.evaluation_context;
+    const evaluation = await this.validateComposedObject(newVersion);
+    assertNoAdmErrors(evaluation);
     const savedDocument = await this.repository.save(newVersion);
 
     logger.info(
@@ -381,12 +415,15 @@ class TechniquesService extends BaseService {
     // Emit domain event — RelationshipsService listens to create the
     // subtechnique-of SRO; member sync re-pins/enrolls the converted revision
     // in referencing release tracks
-    const eventResults = await EventBus.emit(EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE, {
-      stixId /** STIX ID of the converted subtechnique */,
-      parentStixId: parentTechnique.stix.id /** STIX ID of the parent technique */,
-      document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
-      userAccountId: options.userAccountId,
-    });
+    const eventResults = await EventBus.emitValidationRequired(
+      EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE,
+      {
+        stixId /** STIX ID of the converted subtechnique */,
+        parentStixId: parentTechnique.stix.id /** STIX ID of the parent technique */,
+        document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
+        userAccountId: options.userAccountId,
+      },
+    );
     result.mergeEventResults(eventResults);
 
     // Revision sync may have re-pinned a track to the converted revision —
@@ -465,6 +502,35 @@ class TechniquesService extends BaseService {
       newVersion.workspace.workflow.created_by_user_account = options.userAccountId;
     }
 
+    delete newVersion.workspace.validation;
+    delete newVersion.workspace.evaluation_context;
+    const evaluation = await this.validateComposedObject(newVersion, { phase: 'preflight' });
+    assertNoAdmErrors(evaluation);
+    // Retirement of the hierarchy SRO is required by conversion. Reject its
+    // ADM errors before the primary revision changes, under this same snapshot.
+    const hierarchy = await require('../../repository/relationships-repository').retrieveAll({
+      sourceRef: stixId,
+      relationshipType: 'subtechnique-of',
+      versions: 'latest',
+      includeRevoked: false,
+      includeDeprecated: false,
+    });
+    const hierarchyRetirements = [];
+    for (const relationship of hierarchy) {
+      const retired = relationship.toObject
+        ? relationship.toObject()
+        : structuredClone(relationship);
+      retired.stix.x_mitre_deprecated = true;
+      retired.stix.modified = newVersion.stix.modified;
+      const checked = await this.validateComposedObject(retired, { phase: 'preflight' });
+      assertNoAdmErrors(checked);
+      hierarchyRetirements.push({
+        stixId: retired.stix.id,
+        modified: retired.stix.modified,
+      });
+    }
+    const actualEvaluation = await this.validateComposedObject(newVersion);
+    assertNoAdmErrors(actualEvaluation);
     const savedDocument = await this.repository.save(newVersion);
 
     logger.info(
@@ -477,11 +543,15 @@ class TechniquesService extends BaseService {
     // Emit domain event — RelationshipsService listens to deprecate
     // subtechnique-of SROs; member sync re-pins/enrolls the converted
     // revision in referencing release tracks
-    const eventResults = await EventBus.emit(EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE, {
-      stixId /** STIX ID of the converted subtechnique */,
-      document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
-      userAccountId: options.userAccountId,
-    });
+    const eventResults = await EventBus.emitValidationRequired(
+      EventConstants.SUBTECHNIQUE_CONVERTED_TO_TECHNIQUE,
+      {
+        stixId /** STIX ID of the converted subtechnique */,
+        document: savedDocument.toObject ? savedDocument.toObject() : savedDocument,
+        userAccountId: options.userAccountId,
+        hierarchyRetirements,
+      },
+    );
     result.mergeEventResults(eventResults);
 
     // Revision sync may have re-pinned a track to the converted revision —
@@ -540,6 +610,12 @@ class TechniquesService extends BaseService {
       }
     }
   }
+}
+
+for (const name of ['handleTacticShortnameChanged']) {
+  TechniquesService[name] = require('../system/validation-operation-service').wrap(
+    TechniquesService[name],
+  );
 }
 
 TechniquesService.initializeEventListeners();

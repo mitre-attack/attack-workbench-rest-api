@@ -116,6 +116,16 @@ when a listener fails or when fewer than the declared `minimumListeners` are
 registered. The caller must make the failure durable when the originating
 write has already been persisted.
 
+Tactic shortname changes and organization identity changes request dependent-revision
+preflight through `TACTIC_SHORTNAME_CHANGE_PREFLIGHT_REQUESTED` and
+`SYSTEM_CONFIGURATION_IDENTITY_CHANGE_PREFLIGHT_REQUESTED`. Their owning services
+validate proposed revisions without saving them before the originating write.
+These requests use `emitRequired()` with `minimumListeners: 1` and
+`validationRequired: true`, so a missing listener fails the operation and ADM
+validation failures retain their typed HTTP error. Preflight and post-save
+propagation share the graph lock, policy snapshot, and proposed modification
+timestamp; existing propagation events remain responsible for persistence.
+
 Release-track membership reconciliation is the first required-event workflow:
 
 1. Persist the snapshot mutation.

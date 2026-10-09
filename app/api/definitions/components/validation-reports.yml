@@ -1,0 +1,130 @@
+components:
+  schemas:
+    exemptionReport:
+      type: object
+      description: 'Optional operation evidence. Filters select reporting only; zero counts never establish ADM conformance. Failed operations may have persistent effects and show only visited revisions.'
+      properties:
+        policyRevision:
+          type: integer
+        state:
+          type: string
+          enum: [completed, partial]
+        availability:
+          type: string
+          enum: [retained, unavailable]
+        availabilityMessage:
+          type: string
+        reportId:
+          type: string
+          nullable: true
+          description: 'Opaque authenticated report identifier. Keep the whole identifier unchanged.'
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        evaluatedScope:
+          type: object
+          properties:
+            revisions:
+              type: integer
+            byOutcome:
+              type: object
+              additionalProperties:
+                type: integer
+            preflightOnlyRevisions:
+              type: integer
+        filters:
+          type: object
+          properties:
+            statuses:
+              type: array
+              items:
+                type: string
+            ruleIds:
+              type: array
+              items:
+                type: string
+        reportedExemptRevisions:
+          type: integer
+        ruleApplications:
+          type: integer
+        byStatus:
+          type: object
+          properties:
+            revoked:
+              type: integer
+            deprecated:
+              type: integer
+        byRule:
+          type: array
+          items:
+            type: object
+            properties:
+              ruleId:
+                type: string
+              ruleName:
+                type: string
+              retirementStatus:
+                type: string
+                enum: [revoked, deprecated]
+              count:
+                type: integer
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/exemptionApplication'
+        nextCursor:
+          type: string
+          nullable: true
+        hasMore:
+          type: boolean
+        truncated:
+          type: boolean
+    exemptionApplication:
+      type: object
+      properties:
+        object_ref:
+          type: string
+        object_modified:
+          type: string
+          format: date-time
+          nullable: true
+          description: 'Normalized evaluated revision timestamp, or null when missing or unusable. Reporting preserves the original validation result.'
+        ruleId:
+          type: string
+        ruleName:
+          type: string
+        retirementStatus:
+          type: string
+          enum: [revoked, deprecated]
+        phase:
+          type: string
+          enum: [preflight, evaluation]
+    operationReportResponse:
+      type: object
+      required: [exemptionReport]
+      description: 'Existing object responses gain exemptionReport; array or primitive responses are wrapped in result. Ordinary responses retain their existing shape. SSE imports augment the original complete or error event.'
+      properties:
+        result:
+          description: 'Original response when its shape is an array or primitive.'
+        exemptionReport:
+          $ref: '#/components/schemas/exemptionReport'
+    operationErrorResponse:
+      type: object
+      description: 'Existing structured operation errors optionally include evaluated exemption evidence.'
+      properties:
+        exemptionReport:
+          $ref: '#/components/schemas/exemptionReport'
+  responses:
+    operationError:
+      description: 'The existing operation error. Opt-in responses may include evaluated partial exemption evidence; partial does not imply rollback. Report availability failures preserve the original operation result/status.'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              exemptionReport:
+                $ref: '#/components/schemas/exemptionReport'
+        text/plain:
+          schema:
+            type: string

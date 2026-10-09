@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertNoAdmErrors } = require('../../lib/adm-validation');
+
 const uuid = require('uuid');
 const _ = require('lodash');
 const logger = require('../../lib/logger');
@@ -27,7 +29,9 @@ const {
   SnapshotGraphPinnedRevisionError,
   ImmutableStixRevisionError,
 } = require('../../exceptions');
-const { getSchema } = require('../../lib/validation-schemas');
+const validationOperation = require('../system/validation-operation-service');
+const validationPolicy = require('../system/validation-policy-service');
+const diagnostics = require('../system/validation-diagnostic-service');
 const { deepFreezeStix } = require('../../lib/import-safety');
 const ServiceWithHooks = require('./hooks.service');
 const WorkflowResult = require('../../lib/workflow-result');
@@ -398,6 +402,8 @@ class BaseService extends ServiceWithHooks {
     // these exact endpoint pins from authoritative object revisions.
     if (data.workspace) {
       delete data.workspace.validation;
+      delete data.workspace.evaluation_context;
+      delete data.workspace.evaluation_needed;
       delete data.workspace.release_tracks;
       delete data.workspace.relationship_endpoints;
     }
@@ -469,43 +475,51 @@ class BaseService extends ServiceWithHooks {
    *
    * @param {Object} data - The composed request data ({ stix, workspace })
    * @param {Object} [options] - Validation options
-   * @param {Array} [options.bypassRules] - Preloaded rules for batch validation
+   * @param {Object} [options.snapshot] - Explicit immutable policy snapshot
+   * @param {boolean} [options.enabled] - Override request ADM enablement
    * @returns {Promise<{ errors: Array, warnings: Array }>} Validation results
    */
-  async validateComposedObject(data, { bypassRules } = {}) {
-    const empty = { errors: [], warnings: [] };
-    if (!config.validateRequests.withAttackDataModel) return empty;
+  async validateComposedObject(
+    data,
+    { snapshot, enabled = config.validateRequests.withAttackDataModel, phase = 'evaluation' } = {},
+  ) {
+    if (!validationOperation.current()) {
+      return validationOperation.run(() => this.validateComposedObject(data, { enabled, phase }), {
+        snapshot,
+      });
+    }
+    const context = validationOperation.current();
+    const result = validationPolicy.evaluateObject(data, context.snapshot, { enabled });
+    diagnostics.stamp(data, result, context.snapshot, context.publicationToken);
+    await validationOperation.collect(data, result, { phase });
+    return { ...result, context: data.workspace?.evaluation_context };
+  }
 
-    const stixType = data.stix?.type;
-    const status = data.workspace?.workflow?.state || 'reviewed';
-
-    const schema = getSchema(stixType, status);
-    if (!schema) return empty;
-
-    const result = schema.safeParse(data.stix);
-    if (result.success) return empty;
-
-    // Convert Zod issues to error objects
-    const allErrors = result.error.issues.map((issue) => ({
-      message: `${issue.path.join('.')} is ${issue.message}`,
-      path: issue.path,
-      code: issue.code,
-      input: issue.input,
-    }));
-
-    // Filter out bypassed errors via the event bus
-    const EventBus = require('../../lib/event-bus');
-    const Events = require('../../lib/event-constants');
-    const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
-      errors: allErrors,
-      stixType,
-      bypassRules,
+  async markRevisionsReviewed(entries) {
+    if (!entries.length) return { matchedCount: 0 };
+    return validationOperation.run(async ({ snapshot, publicationToken }) => {
+      const documents = await this.repository.retrieveReviewableRevisions(entries);
+      let matchedCount = 0;
+      for (const document of documents) {
+        const workspace = _.merge({}, document.workspace, { workflow: { state: 'reviewed' } });
+        const result = validationPolicy.evaluateObject(
+          { stix: document.stix, workspace },
+          snapshot,
+          { enabled: config.validateRequests.withAttackDataModel },
+        );
+        if (result.errors.length) throw new Error('Revision changed after admission validation');
+        const saved = await diagnostics.publish({
+          model: this.repository.model,
+          document,
+          workspace,
+          result,
+          snapshot,
+          publicationToken,
+        });
+        if (saved) matchedCount++;
+      }
+      return { matchedCount };
     });
-
-    // The handler returns { errors, warnings }
-    const bypassResult = results?.[0] ?? { errors: allErrors, warnings: [] };
-
-    return { errors: bypassResult.errors, warnings: bypassResult.warnings };
   }
 
   /**
@@ -710,11 +724,11 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
     // ──────────────────────────────────────────────
-    const { errors, warnings } = await this.validateComposedObject(data);
+    const { errors, warnings } = await this.validateComposedObject(data, {
+      phase: options[lifecycle.VALIDATION_PHASE] || 'evaluation',
+    });
 
-    if (errors.length > 0) {
-      throw new ValidationError('ADM validation failed', { details: errors, warnings });
-    }
+    assertNoAdmErrors({ errors, warnings });
 
     // ──────────────────────────────────────────────
     // 6. PERSIST (skip if dry-run)
@@ -910,7 +924,7 @@ class BaseService extends ServiceWithHooks {
    * Compose and validate an object for import — no I/O, no events.
    *
    * Stamps `workspace.attack_id` from the bundle's ATT&CK external reference,
-   * runs ADM validation (unless the object is revoked/deprecated), and
+   * evaluates ADM eligibility under the current operation policy, and
    * applies fail-open semantics by attaching `workspace.validation` when
    * errors are found and `options.validateContents` is not set.
    *
@@ -942,6 +956,8 @@ class BaseService extends ServiceWithHooks {
     // stripServerControlledFields); imported objects must not claim membership.
     if (data.workspace) {
       delete data.workspace.validation;
+      delete data.workspace.evaluation_context;
+      delete data.workspace.evaluation_needed;
       delete data.workspace.release_tracks;
       delete data.workspace.relationship_endpoints;
     }
@@ -955,16 +971,7 @@ class BaseService extends ServiceWithHooks {
       data.workspace.attack_id = attackIdInExternalReferences;
     }
 
-    // Skip validation entirely for revoked or deprecated objects
-    const isRevoked = data.stix?.revoked === true;
-    const isDeprecated = data.stix?.x_mitre_deprecated === true;
-
-    let errors = [];
-    let warnings = [];
-
-    if (!isRevoked && !isDeprecated) {
-      ({ errors, warnings } = await this.validateComposedObject(data));
-    }
+    const { errors, warnings } = await this.validateComposedObject(data);
 
     let throwIfValidating = null;
     if (errors.length > 0) {
@@ -1142,15 +1149,7 @@ class BaseService extends ServiceWithHooks {
     // ──────────────────────────────────────────────
     const { errors, warnings } = await this.validateComposedObject(data);
 
-    if (errors.length > 0) {
-      throw new ValidationError('ADM validation failed', { details: errors, warnings });
-    }
-
-    // Validation passed — clear any stored validation issues from a previous import
-    if (document.workspace?.validation) {
-      data.workspace = data.workspace || {};
-      data.workspace.validation = undefined;
-    }
+    assertNoAdmErrors({ errors, warnings });
 
     // ──────────────────────────────────────────────
     // 6. PERSIST (skip if dry-run)
@@ -1160,11 +1159,6 @@ class BaseService extends ServiceWithHooks {
     const newDocument = await this.repository.updateAndSave(document, data);
 
     if (newDocument === document) {
-      // If the document previously had validation issues, explicitly unset them
-      if (document.workspace?.validation !== undefined) {
-        await this.repository.unsetField(document._id, 'workspace.validation');
-      }
-
       await this.afterUpdate(newDocument, document);
       // PUT can now change workspace metadata only. STIX-domain update events
       // drive relationship advancement and release-track revision sync, so
@@ -1321,7 +1315,11 @@ class BaseService extends ServiceWithHooks {
     };
     const writeOptions = { userAccountId: options.userAccountId, requireReferences: true };
     for (const document of [...embedded, ...retired, ...transferred, revokedBy]) {
-      await lifecycle.createRevision(document, { ...writeOptions, dryRun: true });
+      await lifecycle.createRevision(document, {
+        ...writeOptions,
+        dryRun: true,
+        [lifecycle.VALIDATION_PHASE]: 'preflight',
+      });
     }
     const revokedData = lifecycle.revision(objectA);
     revokedData.stix.revoked = true;
@@ -1330,6 +1328,10 @@ class BaseService extends ServiceWithHooks {
       revokedData.workspace.workflow = revokedData.workspace.workflow || {};
       revokedData.workspace.workflow.created_by_user_account = options.userAccountId;
     }
+    delete revokedData.workspace?.validation;
+    delete revokedData.workspace?.evaluation_context;
+    const evaluation = await this.validateComposedObject(revokedData, { phase: 'preflight' });
+    assertNoAdmErrors(evaluation);
     if (options.dryRun) {
       result.setPrimary(revokedData);
       result.addModified(embedded);
@@ -1356,6 +1358,8 @@ class BaseService extends ServiceWithHooks {
       revokedData.workspace.workflow = revokedData.workspace.workflow || {};
       revokedData.workspace.workflow.created_by_user_account = options.userAccountId;
     }
+    const actualEvaluation = await this.validateComposedObject(revokedData);
+    assertNoAdmErrors(actualEvaluation);
     const revokedDocument = await this.repository.save(revokedData);
     if (options.preserveRelationships) {
       await lifecycle.reconcileEmbeddedMetadata([objectA, objectB, ...embedded]);
@@ -1392,4 +1396,7 @@ class BaseService extends ServiceWithHooks {
   }
 }
 
+for (const name of ['create', 'updateFull', 'revoke', 'composeForImport']) {
+  BaseService.prototype[name] = validationOperation.wrap(BaseService.prototype[name]);
+}
 module.exports = BaseService;

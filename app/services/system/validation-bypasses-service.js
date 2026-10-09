@@ -8,6 +8,7 @@ const BypassRuleReasons = require('../../lib/bypass-rule-constants');
 const EventBus = require('../../lib/event-bus');
 const Events = require('../../lib/event-constants');
 const logger = require('../../lib/logger');
+const { matchErrorBypass } = require('../../lib/adm-validation');
 
 class ValidationBypassesService {
   constructor(repository) {
@@ -43,14 +44,13 @@ class ValidationBypassesService {
     const { namespace } = payload;
     const service = module.exports;
 
-    // Always remove previous auto-created rules
-    await service.removeNamespaceRules();
-
     // If a namespace prefix is being set, create new bypass rules
     if (namespace?.prefix) {
       const { stixTypeToAttackIdMapping } = require('@mitre-attack/attack-data-model');
       const stixTypes = Object.keys(stixTypeToAttackIdMapping);
       await service.createNamespaceRules(stixTypes);
+    } else {
+      await service.removeNamespaceRules();
     }
   }
 
@@ -113,27 +113,8 @@ class ValidationBypassesService {
    */
   async checkBypassRule(error, stixType, bypassRules) {
     const rules = bypassRules ?? (await this.repository.findAll());
-
-    const errorPathStr = JSON.stringify(error.path.map(String));
-
-    for (const rule of rules) {
-      // A rule is actionable if it suppresses the error or converts it to a warning
-      if (!rule.suppressError && !rule.warningMessage) continue;
-
-      // Check stixType match ('all' matches any type)
-      if (rule.stixType !== 'all' && rule.stixType !== stixType) continue;
-
-      // Check errorCode match
-      if (rule.errorCode !== error.code) continue;
-
-      // Check fieldPath match (coerce both sides to string for numeric index comparison)
-      const rulePathStr = JSON.stringify(rule.fieldPath.map(String));
-      if (rulePathStr !== errorPathStr) continue;
-
-      return { bypassed: true, warningMessage: rule.warningMessage || null };
-    }
-
-    return { bypassed: false, warningMessage: null };
+    const rule = matchErrorBypass(error, stixType, rules);
+    return { bypassed: Boolean(rule), warningMessage: rule?.warningMessage || null };
   }
 
   /**
@@ -144,9 +125,6 @@ class ValidationBypassesService {
   // eslint-disable-next-line no-unused-vars
   static async handleIdentityChanged(payload) {
     const service = module.exports;
-
-    // Remove any previously auto-created identity bypass rules
-    await service.removeByReason(BypassRuleReasons.IDENTITY);
 
     // Create bypass rules for x_mitre_modified_by_ref across all STIX types
     const { stixTypeToAttackIdMapping } = require('@mitre-attack/attack-data-model');
@@ -170,11 +148,10 @@ class ValidationBypassesService {
       triggerEvent: Events.SYSTEM_CONFIGURATION_NAMESPACE_CHANGED,
     }));
 
-    let created = 0;
-    for (const rule of rules) {
-      const result = await this.repository.upsertRule(rule);
-      if (result.created) created++;
-    }
+    const { created } = await this.repository.replaceGeneratedGroup(
+      BypassRuleReasons.NAMESPACE,
+      rules,
+    );
 
     logger.info(`Created ${created} of ${rules.length} namespace validation bypass rules`);
   }
@@ -196,11 +173,10 @@ class ValidationBypassesService {
       triggerEvent,
     }));
 
-    let created = 0;
-    for (const rule of rules) {
-      const result = await this.repository.upsertRule(rule);
-      if (result.created) created++;
-    }
+    const { created } = await this.repository.replaceGeneratedGroup(
+      BypassRuleReasons.IDENTITY,
+      rules,
+    );
 
     logger.info(`Created ${created} of ${rules.length} identity validation bypass rules`);
   }

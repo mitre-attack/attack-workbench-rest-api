@@ -116,6 +116,8 @@ paths:
                   $ref: '../components/techniques.yml#/components/schemas/technique'
 
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Create a technique'
       operationId: 'technique-create'
       description: |
@@ -128,6 +130,10 @@ paths:
       tags:
         - 'Techniques'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: parentTechniqueId
           in: query
           description: |
@@ -145,17 +151,35 @@ paths:
               # type: object
               $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'The technique has been successfully created.'
           content:
             application/json:
               schema:
-                $ref: '../components/techniques.yml#/components/schemas/technique'
+                anyOf:
+                  - $ref: '../components/techniques.yml#/components/schemas/technique'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Missing or invalid parameters were provided. The technique was not created.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Duplicate `stix.id` and `stix.modified` properties. The technique was not created.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/techniques/{stixId}:
     get:
       summary: 'Get one or more versions of a technique'
@@ -247,6 +271,8 @@ paths:
         '404':
           description: 'A technique with the requested STIX id and modified date was not found.'
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update a technique'
       operationId: 'technique-update'
       description: |
@@ -254,6 +280,10 @@ paths:
       tags:
         - 'Techniques'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: stixId
           in: path
           description: 'STIX id of the technique to update'
@@ -275,18 +305,43 @@ paths:
               # type: object
               $ref: '../components/techniques.yml#/components/schemas/technique' # TODO delete after ADM integration complete
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The technique was updated.'
           content:
             application/json:
               schema:
-                $ref: '../components/techniques.yml#/components/schemas/technique'
+                anyOf:
+                  - $ref: '../components/techniques.yml#/components/schemas/technique'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Missing or invalid parameters were provided. The technique was not updated.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'A technique with the requested STIX id and modified date was not found.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'STIX-changing PUTs conflict with revision immutability. Deletes conflict when the revision is pinned by release-track membership or an opt-in snapshot graph. Create a new revision instead.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
     delete:
       summary: 'Delete a technique'
       operationId: 'technique-delete'
@@ -375,6 +430,8 @@ paths:
 
   /api/techniques/{stixId}/convert-to-subtechnique:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Convert a technique to a subtechnique'
       operationId: 'technique-convert-to-subtechnique'
       description: |
@@ -389,6 +446,10 @@ paths:
       tags:
         - 'Techniques'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: stixId
           in: path
           description: 'STIX id of the technique to convert'
@@ -410,19 +471,39 @@ paths:
                   description: 'ATT&CK ID of the parent technique (e.g., T1234)'
                   example: 'T1234'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The technique was successfully converted to a subtechnique.'
           content:
             application/json:
               schema:
-                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                anyOf:
+                  - $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Invalid request. The technique is already a subtechnique, is revoked, or the parent technique does not exist.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'The technique was not found.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/techniques/{stixId}/convert-to-technique:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Convert a subtechnique to a technique'
       operationId: 'technique-convert-to-technique'
       description: |
@@ -438,6 +519,10 @@ paths:
       tags:
         - 'Techniques'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: stixId
           in: path
           description: 'STIX id of the subtechnique to convert'
@@ -445,19 +530,39 @@ paths:
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The subtechnique was successfully converted to a technique.'
           content:
             application/json:
               schema:
-                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                anyOf:
+                  - $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Invalid request. The object is not a subtechnique or is revoked.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'The technique was not found.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/techniques/{stixId}/revoke:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Revoke a technique'
       operationId: 'technique-revoke'
       description: |
@@ -467,6 +572,10 @@ paths:
       tags:
         - 'Techniques'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: stixId
           in: path
           description: 'STIX id of the technique to revoke'
@@ -501,15 +610,40 @@ paths:
                       type: string
                       description: 'Modified timestamp of the specific version of the revoking object'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The technique was successfully revoked.'
           content:
             application/json:
               schema:
-                $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                anyOf:
+                  - $ref: '../components/workflow-response.yml#/components/schemas/workflow-response'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Missing or invalid parameters.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'The technique or revoking object was not found.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Already revoked, inactive or stale replacement, embedded-reference conflict, inactive referrer, or concurrent graph write.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string

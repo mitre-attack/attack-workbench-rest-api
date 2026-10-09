@@ -3,11 +3,14 @@
 const validationBypassesService = require('../services/system/validation-bypasses-service');
 const logger = require('../lib/logger');
 
+const { ruleSchema } = require('../lib/validation-policy-rules');
+
 function validateRuleData(data) {
-  if (!data || !Array.isArray(data.fieldPath) || !data.errorCode || !data.stixType) {
-    return 'Unable to save validation bypass rule. Missing required properties (fieldPath, errorCode, stixType).';
-  }
-  return null;
+  const parsed = ruleSchema.safeParse(data);
+  return parsed.success
+    ? null
+    : 'Unable to save validation rule. ' +
+        parsed.error.issues.map((issue) => issue.message).join('; ');
 }
 
 exports.retrieveAll = async function (req, res, next) {
@@ -92,5 +95,24 @@ exports.deleteById = async function (req, res, next) {
     return res.status(204).end();
   } catch (err) {
     return next(err);
+  }
+};
+
+exports.reconciliationStatus = async (req, res, next) => {
+  try {
+    return res
+      .status(200)
+      .send(await require('../services/system/validation-reconciliation-service').status());
+  } catch (error) {
+    return next(error);
+  }
+};
+exports.retryReconciliation = async (req, res, next) => {
+  try {
+    return res
+      .status(200)
+      .send(await require('../services/system/validation-reconciliation-service').retry());
+  } catch (error) {
+    return next(error);
   }
 };

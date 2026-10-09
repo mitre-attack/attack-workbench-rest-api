@@ -1,22 +1,19 @@
 'use strict';
 
-const config = require('../../config/config');
+const { assertNoAdmErrors } = require('../../lib/adm-validation');
+
 const EventBus = require('../../lib/event-bus');
 const Events = require('../../lib/event-constants');
-const { ValidationError } = require('../../exceptions');
 const primaryRevisionService = require('./primary-revision-service');
 const revisionReference = require('../../lib/release-tracks/revision-reference');
 
-// This is deliberately revision-global legacy state, not a per-track review policy.
-async function ensureReviewed(entries) {
-  if (!entries.length) return [];
+// Evaluate copies against the reviewed schema without changing stored revisions.
+async function validateForReview(entries, { phase = 'evaluation' } = {}) {
+  if (!entries.length) return { warnings: [], reviewedEntries: [] };
   const { documents } = await primaryRevisionService.assertStoredEntries(entries);
   const attackObjectsService = require('../stix/attack-objects-service');
   require('../stix/relationships-service');
   require('../system/validation-bypasses-service');
-  const bypassRules = config.validateRequests.withAttackDataModel
-    ? await require('../../repository/validation-bypasses-repository').findAll()
-    : undefined;
   const errors = [];
   const warnings = [];
   const reviewedEntries = [];
@@ -35,17 +32,21 @@ async function ensureReviewed(entries) {
         stix: JSON.parse(JSON.stringify(document.stix)),
         workspace: { workflow: { state: 'reviewed' } },
       },
-      { bypassRules },
+      { phase },
     );
     errors.push(...result.errors.map((issue) => ({ ...issue, ...reference })));
     warnings.push(...result.warnings.map((issue) => ({ ...issue, ...reference })));
     reviewedEntries.push(reference);
   }
 
+  assertNoAdmErrors({ errors, warnings });
+  return { warnings, reviewedEntries };
+}
+
+// This is deliberately revision-global legacy state, not a per-track review policy.
+async function ensureReviewed(entries) {
   // Reject the complete admission before changing any object's workflow metadata.
-  if (errors.length) {
-    throw new ValidationError('ADM validation failed', { details: errors, warnings });
-  }
+  const { warnings, reviewedEntries } = await validateForReview(entries);
   if (reviewedEntries.length) {
     const results = await EventBus.emitRequired(
       Events.RELEASE_TRACK_OBJECTS_REVIEWED,
@@ -77,4 +78,6 @@ async function reviewSnapshotChanges(before, after, { membersWritten = false } =
   return ensureReviewed(entries);
 }
 
-module.exports = { ensureReviewed, reviewSnapshotChanges };
+module.exports = { validateForReview, ensureReviewed, reviewSnapshotChanges };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

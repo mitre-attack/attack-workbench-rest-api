@@ -72,6 +72,8 @@ module.exports.common = {
   collections: [collectionVersionSchema],
   release_tracks: { type: [releaseTrackRefSchema], default: undefined },
   embedded_relationships: { type: [embeddedRelationshipSchema], default: undefined },
+  evaluation_needed: { type: Boolean, default: undefined },
+  evaluation_context: { type: mongoose.Schema.Types.Mixed, default: undefined },
   validation: {
     errors: { type: [validationIssueSchema], default: undefined },
     attack_spec_version: String,

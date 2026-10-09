@@ -47,6 +47,8 @@ paths:
               schema:
                 $ref: '../components/collection-bundles.yml#/components/schemas/collection-bundle'
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Import a collection bundle'
       operationId: 'collection-bundle-import'
       description: |
@@ -54,6 +56,10 @@ paths:
       tags:
         - 'Collection Bundles'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: previewOnly
           in: query
           description: |
@@ -116,9 +122,13 @@ paths:
             schema:
               $ref: '../components/collection-bundles.yml#/components/schemas/collection-bundle'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'The collection has been successfully imported.'
           content:
             application/json:
               schema:
-                $ref: '../components/collections.yml#/components/schemas/collection'
+                anyOf:
+                  - $ref: '../components/collections.yml#/components/schemas/collection'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'

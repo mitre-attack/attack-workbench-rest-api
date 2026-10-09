@@ -214,6 +214,13 @@ paths:
                 items:
                   $ref: '../components/identities.yml#/components/schemas/identity'
     post:
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Set the designated organization identity'
       operationId: 'config-set-organization-identity'
       description: |
@@ -228,13 +235,54 @@ paths:
             schema:
               $ref: '../components/system-configuration.yml#/components/schemas/organization-identity'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '204':
+          headers:
+            X-Validation-Report-Id:
+              description: 'Opaque retained report ID for GET /api/validation-reports/{reportId}. Present only if retained.'
+              schema:
+                type: string
+            X-Validation-Report-Availability:
+              description: 'retained or unavailable; preserves the original successful204 result.'
+              schema:
+                type: string
+            X-Validation-Report-State:
+              description: 'completed or partial.'
+              schema:
+                type: string
+            X-Validation-Report-Policy-Revision:
+              description: 'Operation policy revision.'
+              schema:
+                type: string
+            X-Validation-Report-Exempt-Revisions:
+              description: 'Selected distinct exempt revision count.'
+              schema:
+                type: string
+            X-Validation-Report-Rule-Applications:
+              description: 'Selected matching rule application count.'
+              schema:
+                type: string
           description: 'The organization identity has been successfully set.'
         '400':
           description: 'Missing or invalid parameters were provided. The organization identity was not set.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'The identity could not be found. The organization identity was not set.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/config/authn:
     get:
       summary: 'Get information describing the available user authentication mechanisms'
@@ -317,6 +365,13 @@ paths:
               schema:
                 $ref: '../components/system-configuration.yml#/components/schemas/organization-namespace'
     post:
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Set the designated organization namespace'
       operationId: 'config-set-organization-namespace'
       description: |
@@ -330,11 +385,45 @@ paths:
             schema:
               $ref: '../components/system-configuration.yml#/components/schemas/organization-namespace'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '204':
+          headers:
+            X-Validation-Report-Id:
+              description: 'Opaque retained report ID for GET /api/validation-reports/{reportId}. Present only if retained.'
+              schema:
+                type: string
+            X-Validation-Report-Availability:
+              description: 'retained or unavailable; preserves the original successful204 result.'
+              schema:
+                type: string
+            X-Validation-Report-State:
+              description: 'completed or partial.'
+              schema:
+                type: string
+            X-Validation-Report-Policy-Revision:
+              description: 'Operation policy revision.'
+              schema:
+                type: string
+            X-Validation-Report-Exempt-Revisions:
+              description: 'Selected distinct exempt revision count.'
+              schema:
+                type: string
+            X-Validation-Report-Rule-Applications:
+              description: 'Selected matching rule application count.'
+              schema:
+                type: string
           description: 'The organization namespace has been successfully set.'
         '400':
           description: 'Missing or invalid parameters were provided. The organization namespace was not set.'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/config/mitre-identity-writes:
     get:
       summary: 'Get the MITRE identity write protection setting'
@@ -374,7 +463,7 @@ paths:
       summary: 'Get validation bypass rules'
       operationId: 'config-get-validation-bypasses'
       description: |
-        This endpoint gets the validation bypass rules used to suppress or warn on ADM validation errors.
+        This endpoint gets legacy error bypass rules and whole-object retirement exemption rules.
       tags:
         - 'Validation Bypasses'
       parameters:
@@ -415,7 +504,7 @@ paths:
       summary: 'Create a validation bypass rule'
       operationId: 'config-create-validation-bypass'
       description: |
-        This endpoint creates a validation bypass rule used to suppress or warn on an ADM validation error.
+        This endpoint creates an error bypass or an object exemption. Missing kind selects the legacy error bypass contract. Exemption selectors must be unique after normalization; any enabled matching exemption grants exclusion from ADM.
       tags:
         - 'Validation Bypasses'
       requestBody:
@@ -435,6 +524,40 @@ paths:
           description: 'Missing or invalid parameters were provided. The validation bypass rule was not created.'
         '409':
           description: 'A matching validation bypass rule already exists.'
+
+  /api/config/validation-bypasses/reconciliation:
+    get:
+      summary: 'Get durable validation reconciliation status'
+      operationId: 'config-validation-reconciliation-status'
+      description: 'Administrator only. Cleanup runs independently of ENABLE_SCHEDULER; policy enforcement is immediate.'
+      tags:
+        - 'Validation Bypasses'
+      responses:
+        '200':
+          description: 'Latest durable reconciliation intent and progress.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/validation-reconciliation'
+        '401':
+          description: 'Administrator role required.'
+
+  /api/config/validation-bypasses/reconciliation/retry:
+    post:
+      summary: 'Retry failed validation reconciliation'
+      operationId: 'config-validation-reconciliation-retry'
+      description: 'Administrator only. Cleanup runs independently of ENABLE_SCHEDULER; policy enforcement is immediate.'
+      tags:
+        - 'Validation Bypasses'
+      responses:
+        '200':
+          description: 'Latest durable reconciliation intent and progress.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/system-configuration.yml#/components/schemas/validation-reconciliation'
+        '401':
+          description: 'Administrator role required.'
 
   /api/config/validation-bypasses/{id}:
     get:

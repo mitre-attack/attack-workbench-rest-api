@@ -17,6 +17,19 @@ router
   )
   .post(authn.authenticate, authz.requireRole(authz.admin), validationBypassesController.create);
 
+router.get(
+  '/config/validation-bypasses/reconciliation',
+  authn.authenticate,
+  authz.requireRole(authz.admin),
+  validationBypassesController.reconciliationStatus,
+);
+router.post(
+  '/config/validation-bypasses/reconciliation/retry',
+  authn.authenticate,
+  authz.requireRole(authz.admin),
+  validationBypassesController.retryReconciliation,
+);
+
 router
   .route('/config/validation-bypasses/:id')
   .get(

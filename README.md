@@ -34,6 +34,9 @@ For a full ATT&CK Workbench deployment, including the frontend application, see 
 - [Usage Guide](USAGE.md): Comprehensive instructions for installing, configuring, and administering the REST API
 - [Contributing Guide](CONTRIBUTING.md): Information for developers about contributing to the project
 - [Data Model](docs/developer/data-model.md): Technical details about the data models used in the application
+- [Documentation Index](docs/README.md): User, administrator and developer guides
+- [Repository Glossary](GLOSSARY.md): Shared domain vocabulary
+- [Validation Rules](docs/user/validation-rules.md): Configurable ADM exemptions and error bypasses
 
 ## Technical Information
 
@@ -48,7 +51,7 @@ The REST API provides:
 ## Related Repositories
 
 - [ATT&CK Workbench Frontend](https://github.com/mitre-attack/attack-workbench-frontend): The user interface for the ATT&CK Workbench
-- [ATT&CK Workbench TAXII 2.1 Server](https://github.com/mitre-attack/attack-workbench-taxii-server): An *optional* Workbench service for sharing STIX content through a TAXII 2.1-compliant interface
+- [ATT&CK Workbench TAXII 2.1 Server](https://github.com/mitre-attack/attack-workbench-taxii-server): An _optional_ Workbench service for sharing STIX content through a TAXII 2.1-compliant interface
 - [ATT&CK Workbench Deployment Guide](https://github.com/mitre-attack/attack-workbench-deployment): The official instructions and configuration templates for deploying Workbench in Docker
 
 ## Notice

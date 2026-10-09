@@ -739,3 +739,5 @@ exports.promoteQuarantinedObject = async function promoteQuarantinedObject(
     return snapshot;
   });
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

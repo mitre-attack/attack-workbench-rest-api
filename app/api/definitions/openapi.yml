@@ -78,6 +78,17 @@ components:
     dryRun:
       $ref: 'components/query-parameters.yml#/components/parameters/dryRun'
 
+    exemptionReport:
+      $ref: 'components/query-parameters.yml#/components/parameters/exemptionReport'
+    exemptionStatuses:
+      $ref: 'components/query-parameters.yml#/components/parameters/exemptionStatuses'
+    exemptionRuleIds:
+      $ref: 'components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+    exemptionLimit:
+      $ref: 'components/query-parameters.yml#/components/parameters/exemptionLimit'
+    exemptionCursor:
+      $ref: 'components/query-parameters.yml#/components/parameters/exemptionCursor'
+
 paths:
   # ATT&CK Objects
   /api/attack-objects:
@@ -472,6 +483,12 @@ paths:
   /api/config/validation-bypasses:
     $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses'
 
+  /api/config/validation-bypasses/reconciliation:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses~1reconciliation'
+
+  /api/config/validation-bypasses/reconciliation/retry:
+    $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses~1reconciliation~1retry'
+
   /api/config/validation-bypasses/{id}:
     $ref: 'paths/system-configuration-paths.yml#/paths/~1api~1config~1validation-bypasses~1{id}'
 
@@ -544,3 +561,6 @@ paths:
 
   /api/health/status:
     $ref: 'paths/health-paths.yml#/paths/~1api~1health~1status'
+
+  /api/validation-reports/{reportId}:
+    $ref: 'paths/validation-reports-paths.yml#/paths/~1api~1validation-reports~1{reportId}'

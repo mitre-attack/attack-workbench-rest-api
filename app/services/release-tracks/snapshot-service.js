@@ -1137,3 +1137,5 @@ exports.deleteSnapshot = async function deleteSnapshot(trackId, modified) {
 
   logger.verbose(`SnapshotService: Deleted snapshot '${modified}' from track "${trackId}"`);
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

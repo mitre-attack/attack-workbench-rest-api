@@ -650,3 +650,5 @@ exports.retagReleaseLocked = async function retagReleaseLocked(trackId, modified
   );
   return retagged;
 };
+
+require('../system/validation-operation-service').wrapExports(module.exports);

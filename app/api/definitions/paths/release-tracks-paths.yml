@@ -219,6 +219,13 @@ paths:
 
   /api/release-tracks/new:
     post:
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Create a new release track'
       operationId: 'release-tracks-create'
       description: |
@@ -258,19 +265,44 @@ paths:
                 snapshot_schedule:
                   $ref: '../components/release-tracks.yml#/components/schemas/snapshot-schedule'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Release track created successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Invalid request parameters'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: 'Only administrators may supply a retention policy'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/new-from-bundle:
     post:
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Create a release track from a STIX bundle'
       operationId: 'release-tracks-create-from-bundle'
       description: |
@@ -279,13 +311,29 @@ paths:
       tags:
         - 'Release Tracks'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Release track created from bundle'
         '400':
           description: 'A bundle primary object is unsupported, invalid, or cannot be persisted'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/import:
     post:
+      parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Import a release track'
       operationId: 'release-tracks-import'
       description: |
@@ -294,11 +342,20 @@ paths:
       tags:
         - 'Release Tracks'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Release track imported successfully'
         '501':
           description: 'Not yet implemented'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   # =============================================================================
   # Track deletion
   # =============================================================================
@@ -349,6 +406,8 @@ paths:
   # =============================================================================
   /api/release-tracks/{id}/meta:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update metadata on the latest snapshot'
       operationId: 'release-tracks-update-meta-latest'
       description: |
@@ -361,21 +420,31 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Metadata updated successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
   /api/release-tracks/{id}/clone:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Clone the latest snapshot into a new release track'
       operationId: 'release-tracks-clone-latest'
       description: |
@@ -384,12 +453,18 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Release track cloned successfully'
         '409':
@@ -397,10 +472,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
   /api/release-tracks/{id}/snapshots/latest/release:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Release the latest snapshot'
       operationId: 'release-tracks-release-latest'
       description: |
@@ -423,6 +502,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -440,29 +523,58 @@ paths:
             schema:
               $ref: '../components/release-tracks.yml#/components/schemas/release-request'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Snapshot released successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '403':
           description: 'Only administrators may opt into draft squash'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '400':
           description: 'Invalid release request'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Already released, another release is in progress, conflicting snapshot, or missing persisted primary revisions'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '500':
           description: 'Publication or reconciliation failed; squash errors include operation_id and release_committed for cleanup-only recovery'
           content:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
-                  - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
+                  - anyOf:
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                      - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
   /api/release-tracks/{id}/snapshots/latest/release/preview:
     get:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Preview releasing the latest snapshot'
       operationId: 'release-tracks-preview-latest-release'
       description: |
@@ -476,9 +588,17 @@ paths:
         composition has not been materialized returns 409.
         Summary responses include the exclusive lower and upper tagged
         snapshot version_bounds used by release planning.
+        Before rendering an otherwise releasable plan, all proposed members
+        undergo the same full reviewed ADM evaluation as publication. Matching
+        exemptions and error bypasses apply; failures return 400 for every
+        format. Preview evaluation never persists workflow or diagnostic changes.
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -520,19 +640,43 @@ paths:
             type: string
             enum: ['2.0', '2.1']
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Release preview generated'
           content:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - anyOf:
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
+        '400':
+          description: 'ADM validation failed for proposed release members, or preview parameters are invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
         '409':
           description: 'Virtual draft is unmaterialized, release is blocked by a conflict, or persisted primary revisions are missing'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '501':
           description: 'Requested format is not yet implemented'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   # =============================================================================
   # Candidate management
   # =============================================================================
@@ -575,6 +719,8 @@ paths:
                       $ref: '../components/release-tracks.yml#/components/schemas/candidate-entry'
 
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Add objects as candidates'
       operationId: 'release-tracks-candidates-add'
       description: |
@@ -591,19 +737,34 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Candidates added successfully'
         '400':
           description: 'A requested exact or latest object revision does not exist'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/candidates/review:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Bulk transition candidate workflow status'
       operationId: 'release-tracks-candidates-review'
       description: |
@@ -616,17 +777,25 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Candidates reviewed successfully'
 
   /api/release-tracks/{id}/candidates/promote:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Manually promote candidates to staged'
       operationId: 'release-tracks-candidates-promote'
       description: |
@@ -637,12 +806,18 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Candidates promoted successfully'
 
@@ -674,6 +849,8 @@ paths:
 
   /api/release-tracks/{id}/candidates/{objectRef}/update-version:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update the version pin of a candidate'
       operationId: 'release-tracks-candidates-update-version'
       description: |
@@ -684,6 +861,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -695,11 +876,20 @@ paths:
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Candidate version pin updated successfully'
         '400':
           description: 'The requested replacement revision does not exist'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   # =============================================================================
   # Staged objects
   # =============================================================================
@@ -732,6 +922,8 @@ paths:
 
   /api/release-tracks/{id}/staged/demote:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Demote staged objects back to candidates'
       operationId: 'release-tracks-staged-demote'
       description: |
@@ -743,12 +935,18 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Staged objects demoted successfully'
 
@@ -778,6 +976,8 @@ paths:
                 $ref: '../components/release-tracks.yml#/components/schemas/track-config'
 
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update release track configuration'
       operationId: 'release-tracks-config-update'
       description: |
@@ -786,19 +986,27 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Configuration updated successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
   # =============================================================================
   # Object version history
   # =============================================================================
@@ -863,6 +1071,8 @@ paths:
   # =============================================================================
   /api/release-tracks/{id}/virtual/composition:
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update virtual track composition'
       operationId: 'release-tracks-composition-update'
       description: |
@@ -880,6 +1090,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -892,17 +1106,30 @@ paths:
             schema:
               type: object
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Composition updated successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Track is not virtual or composition is invalid'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/virtual/schedule:
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Update a virtual track snapshot schedule'
       operationId: 'release-tracks-schedule-update'
       description: |
@@ -919,6 +1146,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -931,24 +1162,49 @@ paths:
             schema:
               type: object
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Snapshot schedule updated successfully'
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - snapshot_schedule
-                properties:
-                  snapshot_schedule:
-                    $ref: '../components/release-tracks.yml#/components/schemas/snapshot-schedule'
+                anyOf:
+                  - type: object
+                    required:
+                      - snapshot_schedule
+                    properties:
+                      snapshot_schedule:
+                        $ref: '../components/release-tracks.yml#/components/schemas/snapshot-schedule'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Track is not virtual or schedule is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: 'Changing cron retention requires an administrator'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'Release track not found'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/virtual/draft-cleanup:
     get:
       summary: Discover pending or failed virtual draft cleanup
@@ -981,6 +1237,8 @@ paths:
 
   /api/release-tracks/{id}/virtual/draft-cleanup/{operationId}/retry:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: Repair an existing draft cleanup operation
       operationId: release-tracks-draft-cleanup-retry
       description: |
@@ -991,6 +1249,10 @@ paths:
         orphan/counter repair but no additional draft deletion.
       tags: ['Release Tracks']
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1003,23 +1265,57 @@ paths:
             type: string
             format: uuid
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: Current operation result, including any repair failure
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-result'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-result'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: Nonvirtual track
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: Administrator required
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: Track or existing cleanup intent not found
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: Another lifecycle operation holds the track lock
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/virtual/snapshots/create:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Create a virtual track snapshot'
       operationId: 'release-tracks-virtual-snapshot-create'
       description: |
@@ -1045,6 +1341,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1075,33 +1375,55 @@ paths:
                 scheduled_materialization:
                   $ref: '../components/release-tracks.yml#/components/schemas/scheduled-materialization'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Virtual snapshot created successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Track is not virtual or cannot resolve its composition'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: 'Supplying manual draft retention requires an administrator'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'A component release lock is busy or a resolved snapshot references missing primary revisions'
           content:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
-                  - type: object
-                    required: [message, track_id]
-                    properties:
-                      message:
-                        type: string
-                      track_id:
-                        type: string
+                  - anyOf:
+                      - $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
+                      - type: object
+                        required: [message, track_id]
+                        properties:
+                          message:
+                            type: string
+                          track_id:
+                            type: string
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
   /api/release-tracks/{id}/virtual/quarantine/promote:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Promote one quarantined revision to virtual members'
       operationId: 'release-tracks-virtual-quarantine-promote'
       description: |
@@ -1114,6 +1436,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1126,19 +1452,37 @@ paths:
             schema:
               type: object
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Quarantined revision promoted in a new virtual draft'
         '400':
           description: 'Track is not virtual or the request body is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'The selected exact revision is not quarantined'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'The resulting virtual snapshot would reference missing primary revisions'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
   # =============================================================================
   # Snapshot-specific operations
   # =============================================================================
@@ -1437,6 +1781,8 @@ paths:
 
   /api/release-tracks/{id}/snapshots/{modified}/draft:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Convert the latest tagged release back to a draft'
       operationId: 'release-tracks-release-to-draft'
       description: |
@@ -1450,6 +1796,10 @@ paths:
         deletion is a separate operation with its own eligibility checks.
       tags: ['Release Tracks']
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1473,23 +1823,57 @@ paths:
                   type: string
                   pattern: '^\d+\.\d+$'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Restored draft snapshot'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Version confirmation is missing, invalid, or incorrect'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: 'Administrator role required'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'Snapshot not found'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Not the latest tagged release, source draft unavailable, downstream dependency, or concurrent operation'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/snapshots/{modified}/clone:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Clone a specific snapshot into a new release track'
       operationId: 'release-tracks-clone-by-modified'
       description: |
@@ -1498,6 +1882,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1509,6 +1897,8 @@ paths:
           schema:
             type: string
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '201':
           description: 'Release track cloned successfully'
         '409':
@@ -1516,10 +1906,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/object-revision-error'
 
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
   /api/release-tracks/{id}/snapshots/{modified}/description:
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Set or clear a snapshot description'
       operationId: 'release-tracks-snapshot-description-update'
       description: |
@@ -1532,6 +1926,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1557,21 +1955,48 @@ paths:
                   type: string
                   maxLength: 4000
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Snapshot description updated successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Invalid description payload'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'Snapshot not found'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Delete the snapshot bundle cache before editing its notes'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/snapshots/{modified}/graph/reconstruct:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Reconstruct a historical content manifest from source-bundle pointers'
       operationId: 'release-tracks-snapshot-graph-reconstruct'
       description: |
@@ -1590,6 +2015,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1607,19 +2036,44 @@ paths:
             schema:
               $ref: '../components/release-tracks.yml#/components/schemas/source-graph-reconstruction'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'The tagged snapshot already references a manifest with this attestation'
         '201':
           description: 'Source-attested content manifest replaced the previous manifest'
         '400':
           description: 'Malformed reconstruction plan'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'Snapshot or exact object revision not found'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'The snapshot is untagged, replace_manifest_id does not match, or the source plan violates graph integrity'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/snapshots/{modified}/release:
     post:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Release a specific snapshot'
       operationId: 'release-tracks-release-by-modified'
       description: |
@@ -1641,6 +2095,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1663,27 +2121,56 @@ paths:
             schema:
               $ref: '../components/release-tracks.yml#/components/schemas/release-request'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Snapshot released successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '403':
           description: 'Only administrators may opt into draft squash'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '400':
           description: 'Invalid release request'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Already released, another release is in progress, conflicting snapshot, or missing persisted primary revisions'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '500':
           description: 'Publication or reconciliation failed; squash errors include operation_id and release_committed for cleanup-only recovery'
           content:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
-                  - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
+                  - anyOf:
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-track-reconciliation-error'
+                      - $ref: '../components/release-tracks.yml#/components/schemas/draft-cleanup-error'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
     put:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Change a release version'
       operationId: 'release-tracks-release-retag'
       description: |
@@ -1701,6 +2188,10 @@ paths:
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1725,23 +2216,57 @@ paths:
                   type: string
                   pattern: '^\d+\.\d+$'
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Release version changed successfully'
           content:
             application/json:
               schema:
-                $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                anyOf:
+                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
         '400':
           description: 'Invalid version body or release-lineage violation'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '403':
           description: 'Changing a release version requires an administrator'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '404':
           description: 'Snapshot not found'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '409':
           description: 'Snapshot is a draft or another release operation is in progress'
 
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
   /api/release-tracks/{id}/snapshots/{modified}/release/preview:
     get:
+      x-exemption-report-response:
+        $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
       summary: 'Preview releasing a specific snapshot'
       operationId: 'release-tracks-preview-release-by-modified'
       description: |
@@ -1753,9 +2278,17 @@ paths:
         dynamic staged references exactly as the corresponding release would.
         Summary responses include the exclusive lower and upper tagged
         snapshot version_bounds used by release planning.
+        Before rendering an otherwise releasable plan, all proposed members
+        undergo the same full reviewed ADM evaluation as publication. Matching
+        exemptions and error bypasses apply; failures return 400 for every
+        format. Preview evaluation never persists workflow or diagnostic changes.
       tags:
         - 'Release Tracks'
       parameters:
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionReport'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
         - name: id
           in: path
           required: true
@@ -1795,15 +2328,39 @@ paths:
             type: string
             enum: ['2.0', '2.1']
       responses:
+        default:
+          $ref: '../components/validation-reports.yml#/components/responses/operationError'
         '200':
           description: 'Release preview generated'
           content:
             application/json:
               schema:
                 anyOf:
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
-                  - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - anyOf:
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-summary'
+                      - $ref: '../components/release-tracks.yml#/components/schemas/release-track-snapshot'
+                  - $ref: '../components/validation-reports.yml#/components/schemas/operationReportResponse'
+        '400':
+          description: 'ADM validation failed for proposed release members, or preview parameters are invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
         '409':
           description: 'Release is blocked because the draft is unmaterialized, conflicting, or references missing primary revisions'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string
         '501':
           description: 'Requested format is not yet implemented'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/operationErrorResponse'
+            text/plain:
+              schema:
+                type: string

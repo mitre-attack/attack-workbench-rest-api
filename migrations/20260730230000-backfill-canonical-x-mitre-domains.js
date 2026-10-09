@@ -734,7 +734,9 @@ async function run(db, client) {
 
 module.exports = {
   async up(db, client) {
-    const report = await run(db, client);
+    const report = await require('../app/services/system/validation-operation-service').runLegacyMigration(
+      () => run(db, client),
+    );
     logger.info(`[${MIGRATION_NAME}] ${JSON.stringify(report)}`);
   },
 
@@ -766,6 +768,7 @@ module.exports = {
     removeResolvedDomainValidation,
     removeStaleDomainBypasses,
     resolveCandidates,
-    run,
+    run: (...args) =>
+      require('../app/services/system/validation-operation-service').runLegacyMigration(() => run(...args)),
   },
 };

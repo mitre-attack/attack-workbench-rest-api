@@ -12,3 +12,43 @@ components:
       schema:
         type: boolean
         default: false
+    exemptionReport:
+      name: exemptionReport
+      in: query
+      description: Opt in with summary or details. Details retain all matched applications for 24 hours. Omit for quiet ordinary responses.
+      schema:
+        type: string
+    exemptionStatuses:
+      name: exemptionStatuses
+      in: query
+      description: Comma-separated revoked/deprecated categories. Selects matching applications for reporting only; intersects exemptionRuleIds.
+      allowReserved: true
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    exemptionRuleIds:
+      name: exemptionRuleIds
+      in: query
+      description: Comma-separated object exemption rule ObjectIds from the operation policy snapshot. Selects reporting only.
+      allowReserved: true
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    exemptionLimit:
+      name: exemptionLimit
+      in: query
+      description: Positive detail page size from 1 to 100; defaults to 50. No default is injected when reporting is omitted.
+      schema:
+        type: string
+    exemptionCursor:
+      name: exemptionCursor
+      in: query
+      description: Opaque continuation cursor for GET retained reports. Bound to report and canonical filters. Repeat the same filters when continuing.
+      schema:
+        type: string

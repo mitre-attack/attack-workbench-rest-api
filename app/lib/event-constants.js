@@ -144,6 +144,8 @@ module.exports = Object.freeze({
   DATA_SOURCE_COMPONENTS_CHANGED: 'x-mitre-data-source::components-changed',
 
   // Tactic - shortname change (phase_name in techniques)
+  TACTIC_SHORTNAME_CHANGE_PREFLIGHT_REQUESTED:
+    'x-mitre-tactic::shortname-change-preflight-requested',
   TACTIC_SHORTNAME_CHANGED: 'x-mitre-tactic::shortname-changed',
 
   // Matrix - Tactics relationship
@@ -154,6 +156,8 @@ module.exports = Object.freeze({
 
   // System Configuration
   SYSTEM_CONFIGURATION_NAMESPACE_CHANGED: 'system-configuration::namespace-changed',
+  SYSTEM_CONFIGURATION_IDENTITY_CHANGE_PREFLIGHT_REQUESTED:
+    'system-configuration::identity-change-preflight-requested',
   SYSTEM_CONFIGURATION_IDENTITY_CHANGED: 'system-configuration::identity-changed',
 
   // Validation

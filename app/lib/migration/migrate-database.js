@@ -23,7 +23,10 @@ exports.migrateDatabase = async function () {
   if (actionsPending) {
     if (config.database.migration.enable) {
       logger.info('Starting database migration...');
-      const appliedActions = await up(db, client);
+      const appliedActions =
+        await require('../../services/system/validation-operation-service').runLegacyMigration(() =>
+          up(db, client),
+        );
       for (const action of appliedActions) {
         logger.info(`Applied migration action: ${action}`);
       }

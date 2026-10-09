@@ -29,7 +29,8 @@ function initializeScheduler() {
     const taskPath = path.join(schedulerDir, taskFile);
     try {
       // Loading the module will trigger its `initializeTask` method which schedules the task
-      require(taskPath);
+      const task = require(taskPath);
+      if (taskFile === 'validate-objects-task.js') task.initializeTask();
       logger.info(`Loaded task from ${taskFile}`);
     } catch (err) {
       logger.error(`Failed to load task from ${taskFile}: ${err.message}`);
@@ -47,6 +48,7 @@ function initializeScheduler() {
 async function gracefulShutdown() {
   logger.info('Gracefully shutting down scheduled tasks');
   await schedule.gracefulShutdown();
+  require('./validate-objects-task').stop();
   logger.info('All scheduled tasks have been shut down');
 }
 

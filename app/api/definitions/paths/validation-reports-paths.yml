@@ -1,0 +1,35 @@
+paths:
+  /api/validation-reports/{reportId}:
+    get:
+      summary: 'Retrieve immutable operation exemption details'
+      operationId: 'validation-report-get'
+      description: 'Requires the initiating principal or a human administrator, and current permission for the original operation. Filters apply to all captured matches, independent of the initial selection. Reporting never reruns validation. Report expires after 24 hours.'
+      tags:
+        - Validation Bypasses
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionStatuses'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionRuleIds'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionLimit'
+        - $ref: '../components/query-parameters.yml#/components/parameters/exemptionCursor'
+      responses:
+        '200':
+          description: 'Filtered report summary and one bounded detail page.'
+          content:
+            application/json:
+              schema:
+                $ref: '../components/validation-reports.yml#/components/schemas/exemptionReport'
+        '400':
+          description: 'Invalid filters, limit, or cursor.'
+        '401':
+          description: 'Authentication or current original-operation permission required.'
+        '403':
+          description: 'Report belongs to another principal.'
+        '404':
+          description: 'Invalid report identifier or unavailable report.'
+        '410':
+          description: 'Report expired after 24 hours, including after TTL cleanup.'

@@ -63,26 +63,26 @@ hands the entire bundle and options to `importBundle`.
 `sortObjectsByDependencies` returns the bundle's objects in this
 order (lower numbers persist first):
 
-| Tier | STIX type | Rationale |
-|---|---|---|
-| 0 | `marking-definition` | No outbound refs to other types |
-| 1 | `identity` | No outbound refs to other types |
-| 2 | `x-mitre-data-source` | Data components reference these |
-| 3 | `x-mitre-data-component` | Analytics reference these |
-| 4 | `x-mitre-analytic` | Detection strategies reference these |
-| 5 | `x-mitre-detection-strategy` | (depends on analytics) |
-| 6 | `attack-pattern` (techniques) | SDOs in general |
-| 7 | `x-mitre-tactic` | |
-| 8 | `course-of-action` (mitigations) | |
-| 9 | `intrusion-set` (groups) | |
-| 10 | `campaign` | |
-| 11 | `malware` | |
-| 12 | `tool` | |
-| 13 | `x-mitre-asset` | |
-| 14 | `x-mitre-matrix` | |
-| 15 | `relationship` | SROs last so their endpoints exist |
-| 16 | `note` | |
-| 17 | `x-mitre-collection` | The bundle's own collection (skipped here; persisted separately) |
+| Tier | STIX type                        | Rationale                                                        |
+| ---- | -------------------------------- | ---------------------------------------------------------------- |
+| 0    | `marking-definition`             | No outbound refs to other types                                  |
+| 1    | `identity`                       | No outbound refs to other types                                  |
+| 2    | `x-mitre-data-source`            | Data components reference these                                  |
+| 3    | `x-mitre-data-component`         | Analytics reference these                                        |
+| 4    | `x-mitre-analytic`               | Detection strategies reference these                             |
+| 5    | `x-mitre-detection-strategy`     | (depends on analytics)                                           |
+| 6    | `attack-pattern` (techniques)    | SDOs in general                                                  |
+| 7    | `x-mitre-tactic`                 |                                                                  |
+| 8    | `course-of-action` (mitigations) |                                                                  |
+| 9    | `intrusion-set` (groups)         |                                                                  |
+| 10   | `campaign`                       |                                                                  |
+| 11   | `malware`                        |                                                                  |
+| 12   | `tool`                           |                                                                  |
+| 13   | `x-mitre-asset`                  |                                                                  |
+| 14   | `x-mitre-matrix`                 |                                                                  |
+| 15   | `relationship`                   | SROs last so their endpoints exist                               |
+| 16   | `note`                           |                                                                  |
+| 17   | `x-mitre-collection`             | The bundle's own collection (skipped here; persisted separately) |
 
 Sort is stable, so within a tier order matches the bundle's order.
 
@@ -147,6 +147,39 @@ cascade in stage E may modify documents from earlier tiers
 embedded_relationships when detection strategies in tier 5 are
 processed).
 
+## Policy and diagnostic publication
+
+The import entry point establishes/reuses one `validation-operation-service`
+context across all tiers, concurrent workers and lifecycle listeners.
+`composeForImport` calls the shared evaluator with that frozen snapshot. Configured
+object exemptions replace the old unconditional revoked/deprecated skip. Once all
+matching exemptions are disabled or removed, strict import drops invalid retired
+revisions; fail-open import records the original errors and keeps eligible content.
+Request ADM enablement remains independent of `validateContents`.
+
+`saveMany` removes prepared diagnostic markers, atomically inserts each revision
+with `workspace.evaluation_needed`, then publishes through the guarded diagnostic
+service in bounded groups of 20. This adds per-revision publication writes after
+the tier insert; persistence is not one write for the entire validation lifecycle.
+An interrupted publication is recoverable by the durable reconciliation worker
+even with the periodic scheduler disabled. Client evaluation metadata is stripped.
+See [current diagnostics](workspace-validation.md) for publication fences.
+
+Preview runs the same member composition and validation stage, then returns
+before `beforeCreate`, bulk insertion and post-insert lifecycle events. New
+collections use `composeForImport` without their create lifecycle, keeping the
+collection's existing fail-open contract; forced duplicate collections are not
+reevaluated. Preview therefore evaluates under the frozen operation snapshot
+without publishing current diagnostics or updating STIX, references or workspace
+metadata in storage. Requested report retention remains separate from those writes.
+
+The optional collector copies actual revision/rule applications before later
+mutation, sharing the operation snapshot. JSON responses or original terminal SSE
+events include requested [report evidence](validation-reports.md). The collector
+never reevaluates input. Historical `workspace.import_categories` remains import-time
+evidence when later reconciliation refreshes current diagnostics. Source STIX
+continues through the existing import-fidelity guards without ADM normalization.
+
 ## Concurrency primitives
 
 `runWithConcurrency(items, limit, task)` in `import-bundle.js` is a
@@ -166,7 +199,7 @@ Both new repository methods live on `_base.repository.js` and are
 inherited by every concrete repository:
 
 - **`retrieveAllByStixIds(stixIds)`** — single `find({ 'stix.id':
-  { $in: ids } })` followed by an in-memory bucket by stixId.
+{ $in: ids } })` followed by an in-memory bucket by stixId.
   Returns `Map<stixId, Array<version>>` with versions sorted
   newest-first (matching `retrieveAllById`'s order).
 
@@ -208,8 +241,9 @@ The pipeline scales primarily with two factors:
 
 1. **Number of objects in the bundle.** The MongoDB round-trips
    are dominated by per-tier reads and writes, both of which are
-   O(1) queries per tier regardless of the number of objects in
-   it. The total round-trip count is ~`2 * number_of_tiers`.
+   constant-count bulk queries per tier for those two stages. Guarded diagnostic
+   publication additionally performs per-revision work, so total database traffic
+   also grows with the number of inserted revisions.
 
 2. **Cost of the listener cascade.** Each `afterCreate` that emits
    a domain event triggers a listener that fetches and updates the
@@ -224,11 +258,11 @@ Mongo and CPU.
 
 ## Files
 
-| Path | Role |
-|---|---|
-| [`app/services/stix/collection-bundles-service/import-bundle.js`](../../app/services/stix/collection-bundles-service/import-bundle.js) | The pipeline itself. `processObjects`, `processTier`, `runWithConcurrency`. |
-| [`app/services/stix/collection-bundles-service/bundle-helpers.js`](../../app/services/stix/collection-bundles-service/bundle-helpers.js) | Constants for `importErrors`, `forceImportParameters`, `errors`. |
-| [`app/services/meta-classes/base.service.js`](../../app/services/meta-classes/base.service.js) | `composeForImport` (validation + workspace fields) and `_createFromImport` (single-object path). |
-| [`app/repository/_base.repository.js`](../../app/repository/_base.repository.js) | `retrieveAllByStixIds` and `saveMany`. |
-| [`app/lib/validation-schemas.js`](../../app/lib/validation-schemas.js) | ADM schema selection with cached `.partial()` for WIP objects. |
-| [`app/lib/import-safety.js`](../../app/lib/import-safety.js) | `deepFreezeStix` enforcement helper. |
+| Path                                                                                                                                     | Role                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [`app/services/stix/collection-bundles-service/import-bundle.js`](../../app/services/stix/collection-bundles-service/import-bundle.js)   | The pipeline itself. `processObjects`, `processTier`, `runWithConcurrency`.                      |
+| [`app/services/stix/collection-bundles-service/bundle-helpers.js`](../../app/services/stix/collection-bundles-service/bundle-helpers.js) | Constants for `importErrors`, `forceImportParameters`, `errors`.                                 |
+| [`app/services/meta-classes/base.service.js`](../../app/services/meta-classes/base.service.js)                                           | `composeForImport` (validation + workspace fields) and `_createFromImport` (single-object path). |
+| [`app/repository/_base.repository.js`](../../app/repository/_base.repository.js)                                                         | `retrieveAllByStixIds` and `saveMany`.                                                           |
+| [`app/lib/validation-schemas.js`](../../app/lib/validation-schemas.js)                                                                   | ADM schema selection with cached `.partial()` for WIP objects.                                   |
+| [`app/lib/import-safety.js`](../../app/lib/import-safety.js)                                                                             | `deepFreezeStix` enforcement helper.                                                             |

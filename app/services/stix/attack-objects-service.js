@@ -1,5 +1,7 @@
 'use strict';
 
+const { assertNoAdmErrors } = require('../../lib/adm-validation');
+
 const attackObjectsRepository = require('../../repository/attack-objects-repository');
 const { BaseService } = require('../meta-classes');
 const identitiesService = require('./identities-service');
@@ -199,6 +201,11 @@ class AttackObjectsService extends BaseService {
     const Events = require('../../lib/event-constants');
 
     EventBus.on(
+      Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGE_PREFLIGHT_REQUESTED,
+      AttackObjectsService.handleOrganizationIdentityChangePreflightRequested,
+    );
+
+    EventBus.on(
       Events.SYSTEM_CONFIGURATION_IDENTITY_CHANGED,
       AttackObjectsService.handleOrganizationIdentityChanged,
     );
@@ -234,7 +241,7 @@ class AttackObjectsService extends BaseService {
   }
 
   static async handleReleaseTrackObjectsReviewed({ entries }) {
-    return attackObjectsRepository.markRevisionsReviewed(
+    return module.exports.markRevisionsReviewed(
       entries.filter((entry) => !entry.object_ref.startsWith('relationship--')),
     );
   }
@@ -267,14 +274,23 @@ class AttackObjectsService extends BaseService {
    * @param {string} payload.newIdentityRef
    * @param {string[]} payload.organizationIdentityHistory
    */
-  static async handleOrganizationIdentityChanged(payload) {
+  static async handleOrganizationIdentityChangePreflightRequested(payload) {
+    return AttackObjectsService.handleOrganizationIdentityChanged(payload, { preflight: true });
+  }
+
+  static async handleOrganizationIdentityChanged(payload, { preflight = false } = {}) {
     const graphWriteLock = require('../../lib/graph-write-lock');
     if (!graphWriteLock.isHeld()) {
       return graphWriteLock.run(() =>
-        AttackObjectsService.handleOrganizationIdentityChanged(payload),
+        AttackObjectsService.handleOrganizationIdentityChanged(payload, { preflight }),
       );
     }
-    const { previousIdentityRef, newIdentityRef, organizationIdentityHistory } = payload;
+    const {
+      previousIdentityRef,
+      newIdentityRef,
+      organizationIdentityHistory,
+      propagationModified,
+    } = payload;
 
     // Skip propagation on first-time setup (no previous identity to propagate from)
     // or if required payload fields are missing.
@@ -299,10 +315,13 @@ class AttackObjectsService extends BaseService {
         );
 
         const newVersion = {
+          // Preserve the concrete model when saving through the heterogeneous
+          // repository, so modified and type-specific STIX fields survive casting.
+          __t: obj.__t,
           workspace: { ...obj.workspace },
           stix: {
             ...obj.stix,
-            modified: new Date().toISOString(),
+            modified: propagationModified || new Date().toISOString(),
           },
         };
         // Release-track backrefs are pinned to specific revisions — the new
@@ -316,6 +335,13 @@ class AttackObjectsService extends BaseService {
           newVersion.stix.x_mitre_modified_by_ref = newIdentityRef;
         }
 
+        delete newVersion.workspace?.validation;
+        delete newVersion.workspace?.evaluation_context;
+        const evaluation = await module.exports.validateComposedObject(newVersion, {
+          phase: preflight ? 'preflight' : 'evaluation',
+        });
+        assertNoAdmErrors(evaluation);
+        if (preflight) continue;
         await attackObjectsRepository.save(newVersion);
 
         logger.info(
@@ -326,6 +352,7 @@ class AttackObjectsService extends BaseService {
           },
         );
       } catch (error) {
+        if (error instanceof require('../../exceptions').ValidationError) throw error;
         logger.error(`AttackObjectsService: Error creating new version of ${obj.stix?.id}:`, error);
       }
     }
@@ -343,6 +370,12 @@ class AttackObjectsService extends BaseService {
 module.exports.AttackObjectsService = AttackObjectsService;
 
 // Initialize event listeners for identity propagation
+for (const name of ['handleOrganizationIdentityChanged']) {
+  AttackObjectsService[name] = require('../system/validation-operation-service').wrap(
+    AttackObjectsService[name],
+  );
+}
+
 AttackObjectsService.initializeEventListeners();
 
 // Export an instance of the service
