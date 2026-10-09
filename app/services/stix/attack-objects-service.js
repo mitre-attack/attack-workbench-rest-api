@@ -8,6 +8,10 @@ const logger = require('../../lib/logger');
 const { NotImplementedError, DatabaseError } = require('../../exceptions');
 
 class AttackObjectsService extends BaseService {
+  async deprecationCheck(stixId) {
+    return require('./lifecycle-service').deprecationCheck(stixId);
+  }
+
   /**
    * Override of base class retrieveAll() because:
    * 1. Adds special handling for relationships
@@ -209,6 +213,11 @@ class AttackObjectsService extends BaseService {
       AttackObjectsService.handleRevisionsRequested,
     );
 
+    EventBus.on(
+      Events.RELEASE_TRACK_OBJECTS_REVIEWED,
+      AttackObjectsService.handleReleaseTrackObjectsReviewed,
+    );
+
     logger.info('AttackObjectsService: Event listeners initialized');
   }
 
@@ -222,6 +231,12 @@ class AttackObjectsService extends BaseService {
   static async handleRevisionsRequested({ entries }) {
     if (!entries || entries.length === 0) return [];
     return attackObjectsRepository.findManyByIdAndModified(entries);
+  }
+
+  static async handleReleaseTrackObjectsReviewed({ entries }) {
+    return attackObjectsRepository.markRevisionsReviewed(
+      entries.filter((entry) => !entry.object_ref.startsWith('relationship--')),
+    );
   }
 
   /**
@@ -253,6 +268,12 @@ class AttackObjectsService extends BaseService {
    * @param {string[]} payload.organizationIdentityHistory
    */
   static async handleOrganizationIdentityChanged(payload) {
+    const graphWriteLock = require('../../lib/graph-write-lock');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() =>
+        AttackObjectsService.handleOrganizationIdentityChanged(payload),
+      );
+    }
     const { previousIdentityRef, newIdentityRef, organizationIdentityHistory } = payload;
 
     // Skip propagation on first-time setup (no previous identity to propagate from)

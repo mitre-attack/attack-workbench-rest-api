@@ -83,6 +83,8 @@ paths:
   /api/attack-objects:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects'
 
+  /api/attack-objects/{stixId}/deprecation-check:
+    $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1{stixId}~1deprecation-check'
   # Generate next available ATT&CK ID
   /api/attack-objects/attack-id/next:
     $ref: 'paths/attack-objects-paths.yml#/paths/~1api~1attack-objects~1attack-id~1next'

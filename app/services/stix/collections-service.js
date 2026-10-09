@@ -3,6 +3,7 @@
 const { BaseService } = require('../meta-classes');
 const collectionRepository = require('../../repository/collections-repository');
 const { Collection: CollectionType } = require('../../lib/types');
+const graphWriteLock = require('../../lib/graph-write-lock');
 
 const attackObjectsService = require('./attack-objects-service');
 
@@ -194,6 +195,9 @@ class CollectionsService extends BaseService {
   }
 
   async create(data, options = {}) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.create(data, options));
+    }
     const savedCollection = await super.create(data, options);
 
     let insertionErrors = [];
@@ -287,6 +291,9 @@ class CollectionsService extends BaseService {
   }
 
   async delete(stixId, deleteAllContents = false) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.delete(stixId, deleteAllContents));
+    }
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }
@@ -314,6 +321,9 @@ class CollectionsService extends BaseService {
   }
 
   async deleteVersionById(stixId, modified, deleteAllContents = false) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => this.deleteVersionById(stixId, modified, deleteAllContents));
+    }
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }

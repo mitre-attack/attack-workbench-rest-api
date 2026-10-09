@@ -32,6 +32,9 @@ const { deepFreezeStix } = require('../../lib/import-safety');
 const ServiceWithHooks = require('./hooks.service');
 const WorkflowResult = require('../../lib/workflow-result');
 
+const graphWriteLock = require('../../lib/graph-write-lock');
+const lifecycle = require('../stix/lifecycle-service');
+const EventBus = require('../../lib/event-bus');
 // Import required repositories
 const systemConfigurationRepository = require('../../repository/system-configurations-repository');
 const identitiesRepository = require('../../repository/identities-repository');
@@ -46,6 +49,20 @@ class BaseService extends ServiceWithHooks {
     // Initialize caches for identity lookups
     this.identityCache = new Map();
     this.userAccountCache = new Map();
+    if (type) this.registerLifecycleType(type);
+  }
+
+  registerLifecycleType(type) {
+    EventBus.on(`${type}::lifecycle-create-requested`, ({ data, options }) =>
+      this.create(data, options),
+    );
+    EventBus.on(`${type}::lifecycle-cache-requested`, async ({ stixId, embeddedRelationships }) => {
+      const document = await this.repository.retrieveLatestByStixId(stixId);
+      if (!document) throw new NotFoundError({ stix_id: stixId });
+      document.workspace = document.workspace || {};
+      document.workspace.embedded_relationships = embeddedRelationships;
+      await this.repository.saveDocument(document);
+    });
   }
 
   // ============================
@@ -451,9 +468,11 @@ class BaseService extends ServiceWithHooks {
    * Validation errors that match a stored bypass rule are filtered out.
    *
    * @param {Object} data - The composed request data ({ stix, workspace })
+   * @param {Object} [options] - Validation options
+   * @param {Array} [options.bypassRules] - Preloaded rules for batch validation
    * @returns {Promise<{ errors: Array, warnings: Array }>} Validation results
    */
-  async validateComposedObject(data) {
+  async validateComposedObject(data, { bypassRules } = {}) {
     const empty = { errors: [], warnings: [] };
     if (!config.validateRequests.withAttackDataModel) return empty;
 
@@ -480,6 +499,7 @@ class BaseService extends ServiceWithHooks {
     const results = await EventBus.emit(Events.VALIDATION_BYPASS_CHECK_REQUESTED, {
       errors: allErrors,
       stixType,
+      bypassRules,
     });
 
     // The handler returns { errors, warnings }
@@ -509,7 +529,10 @@ class BaseService extends ServiceWithHooks {
    * @returns {Object} The created document (or composed data if dryRun) with warnings array
    */
   async create(data, options) {
-    options = options || {};
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => BaseService.prototype.create.call(this, data, options));
+    }
+    options = { ...options };
 
     // ──────────────────────────────────────────────
     // 1. ANALYZE REQUEST
@@ -634,7 +657,7 @@ class BaseService extends ServiceWithHooks {
     // Check for an existing object (may differ from existingVersion if stix.id was just generated)
     let existingObject;
     if (data.stix.id) {
-      existingObject = await this.repository.retrieveOneById(data.stix.id);
+      existingObject = await this.repository.retrieveLatestByStixId(data.stix.id);
     }
 
     if (existingObject) {
@@ -682,6 +705,7 @@ class BaseService extends ServiceWithHooks {
     // 4. LIFECYCLE HOOKS
     // ──────────────────────────────────────────────
     await this.beforeCreate(data, options);
+    await lifecycle.assertAuthoring(data, existingObject);
 
     // ──────────────────────────────────────────────
     // 5. VALIDATE WITH ADM
@@ -990,6 +1014,11 @@ class BaseService extends ServiceWithHooks {
    * @returns {Object|null} The updated document (or composed data if dryRun), null if not found
    */
   async updateFull(stixId, stixModified, data, options) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() =>
+        BaseService.prototype.updateFull.call(this, stixId, stixModified, data, options),
+      );
+    }
     options = options || {};
 
     // ──────────────────────────────────────────────
@@ -1154,6 +1183,11 @@ class BaseService extends ServiceWithHooks {
 
   // TODO rename to deleteVersionByStixId and repurpose the existing name for deleting by the document's unique _id
   async deleteVersionById(stixId, stixModified) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() =>
+        BaseService.prototype.deleteVersionById.call(this, stixId, stixModified),
+      );
+    }
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }
@@ -1188,289 +1222,158 @@ class BaseService extends ServiceWithHooks {
   // ============================
 
   /**
-   * Revokes an object (Object A) in favor of another object (Object B).
-   *
-   * Workflow:
-   *   1. Validate inputs
-   *   2. Retrieve objects A and B
-   *   3. Lifecycle hook: beforeRevoke
-   *   4. Mark Object A as revoked (creates a new version via this.create)
-   *   5. Create a revoked-by relationship (A → B)
-   *   6. Handle relationships (transfer to B if preserveRelationships)
-   *   7. Lifecycle hook: afterRevoke
-   *   8. Emit revoked event (RelationshipsService deprecates original relationships via event listener)
-   *   9. Return result
-   *
-   * @param {string} stixId - The STIX ID of the object to revoke (Object A)
-   * @param {Object} data - Request body containing { revoking: { stixId, modified } }
-   * @param {Object} [options] - Options
-   * @param {boolean} [options.preserveRelationships] - If true, clone relationships to Object B before deleting
-   * @param {string} [options.userAccountId] - The authenticated user's account ID
-   * @returns {Object} Result with revokedObject, revokedByRelationship, relationshipsSummary
+   * Plan and validate the complete revocation under the shared graph lock.
+   * Expected conflicts are rejected before any writes. Standalone MongoDB
+   * cannot roll back unexpected persistence failures; these fail the request,
+   * never become a successful workflow with a transfer-failed warning.
    */
   async revoke(stixId, data, options = {}) {
-    logger.info(
-      `REVOKING ${stixId} in favor of ${data?.revoking?.stixId} (preserveRelationships: ${options.preserveRelationships})`,
-    );
-
-    // Lazy-load to avoid circular dependency
-    const relationshipsService = require('../stix/relationships-service');
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() =>
+        BaseService.prototype.revoke.call(this, stixId, data, options),
+      );
+    }
+    const { LifecycleConflictError } = require('../../exceptions');
     const relationshipsRepository = require('../../repository/relationships-repository');
+    if (!stixId) throw new MissingParameterError('stixId');
+    if (!data?.revoking?.stixId) throw new MissingParameterError('revoking.stixId');
+    if (!data?.revoking?.modified) throw new MissingParameterError('revoking.modified');
+    if (stixId === data.revoking.stixId) throw new SelfRevocationError();
 
-    // ──────────────────────────────────────────────
-    // 1. VALIDATE INPUTS
-    // ──────────────────────────────────────────────
-    if (!stixId) {
-      throw new MissingParameterError('stixId');
-    }
-    if (!data?.revoking?.stixId) {
-      throw new MissingParameterError('revoking.stixId');
-    }
-    if (!data?.revoking?.modified) {
-      throw new MissingParameterError('revoking.modified');
-    }
-    if (stixId === data.revoking.stixId) {
-      throw new SelfRevocationError();
-    }
-
-    // ──────────────────────────────────────────────
-    // 2. RETRIEVE OBJECTS
-    // ──────────────────────────────────────────────
     const objectA = await this.repository.retrieveLatestByStixId(stixId);
-    if (!objectA) {
-      throw new NotFoundError({ details: `Object A with stixId ${stixId} not found` });
+    if (!objectA) throw new NotFoundError({ stix_id: stixId });
+    if (objectA.stix.revoked) throw new AlreadyRevokedError({ stix_id: stixId });
+    const objectB = await this.repository.retrieveLatestByStixId(data.revoking.stixId);
+    if (!objectB || objectB.stix.type !== objectA.stix.type) {
+      throw new NotFoundError({ stix_id: data.revoking.stixId });
     }
-    if (objectA.stix.revoked === true) {
-      throw new AlreadyRevokedError({ details: `Object ${stixId} is already revoked` });
-    }
-
-    const objectB = await this.repository.retrieveOneByVersion(
-      data.revoking.stixId,
-      data.revoking.modified,
-    );
-    if (!objectB) {
-      throw new NotFoundError({
-        details: `Object B with stixId ${data.revoking.stixId} and modified ${data.revoking.modified} not found`,
+    if (
+      lifecycle.inactive(objectB) ||
+      new Date(objectB.stix.modified).getTime() !== new Date(data.revoking.modified).getTime()
+    ) {
+      throw new LifecycleConflictError('Replacement must be its active latest revision', {
+        code: 'invalid_replacement',
+        stix_id: objectB.stix.id,
       });
     }
-    if (objectB.stix.type !== this.type) {
-      throw new BadRequestError({
-        details: `Revoking object must be of the same type (${this.type}), got ${objectB.stix.type}`,
-      });
-    }
-
-    // ──────────────────────────────────────────────
-    // 3. LIFECYCLE HOOK: beforeRevoke
-    // ──────────────────────────────────────────────
     await this.beforeRevoke(objectA, objectB, options);
 
-    // ──────────────────────────────────────────────
-    // 4. MARK OBJECT A AS REVOKED
-    // ──────────────────────────────────────────────
-    // Clone Object A and set revoked = true, then persist directly via the repository.
-    // We bypass this.create() because the object is already fully composed and validated —
-    // routing it through create() would strip the revoked flag (which is server-controlled).
-    const objectAData = objectA.toObject ? objectA.toObject() : { ...objectA };
-    delete objectAData._id;
-    delete objectAData.__v;
-    delete objectAData.__t;
-    objectAData.stix.revoked = true;
-    objectAData.stix.modified = new Date().toISOString();
-    // Release-track backrefs are pinned to specific revisions — the new
-    // revoked revision is not referenced by any track.
-    if (objectAData.workspace) {
-      delete objectAData.workspace.release_tracks;
-    }
-    if (options.userAccountId) {
-      objectAData.workspace = objectAData.workspace || {};
-      objectAData.workspace.workflow = objectAData.workspace.workflow || {};
-      objectAData.workspace.workflow.created_by_user_account = options.userAccountId;
-    }
-
-    const revokedDocument = await this.repository.save(objectAData);
-
     const result = new WorkflowResult('revoke');
-    result.setPrimary(revokedDocument);
-
-    // ──────────────────────────────────────────────
-    // 5. CREATE REVOKED-BY RELATIONSHIP
-    // ──────────────────────────────────────────────
-    // NOTE: This is a direct cross-service write (BaseService → RelationshipsService.create).
-    // The revoke workflow predates the event-driven architecture and is shared by all SDO types.
-    // TODO: Migrate to an event-driven pattern for consistency with the conversion workflows.
-    const now = new Date().toISOString();
-    const revokedByRelationship = await relationshipsService.create(
-      {
-        workspace: {
-          workflow: {},
-        },
-        stix: {
-          type: 'relationship',
-          spec_version: '2.1',
-          relationship_type: 'revoked-by',
-          source_ref: objectA.stix.id,
-          target_ref: objectB.stix.id,
-          created: now,
-          modified: now,
-        },
-      },
-      { userAccountId: options.userAccountId },
-    );
-    result.addCreated(revokedByRelationship);
-
-    // TODO what if relationshipsService.create fails after we've already marked Object A as revoked?
-    // We should have error handling to attempt to roll back the revoked status if the relationship
-    // creation fails, to avoid leaving the system in a broken state where Object A is revoked but
-    // there's no link to Object B. This could be done with a try/catch around the relationship creation,
-    // and in the catch block we would attempt to set revoked back to false on Object A and save it again.
-    // We would also need to handle potential errors in that rollback attempt and log them appropriately.
-
-    // ──────────────────────────────────────────────
-    // 6. HANDLE RELATIONSHIPS (transfer if preserveRelationships is set)
-    // ──────────────────────────────────────────────
+    const embedded = options.preserveRelationships
+      ? await lifecycle.planEmbeddedTransfer(objectA, objectB)
+      : [];
+    const originals = await relationshipsRepository.retrieveAll({
+      versions: 'latest',
+      sourceOrTargetRef: stixId,
+    });
+    const retired = originals.map((document) => {
+      const changed = lifecycle.revision(document);
+      changed.stix.x_mitre_deprecated = true;
+      return changed;
+    });
+    const transferred = [];
+    const triple = (stix) => `${stix.source_ref}:${stix.relationship_type}:${stix.target_ref}`;
     if (options.preserveRelationships) {
-      const existingRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
-        objectA.stix.id,
-      );
-
-      // Exclude the revoked-by relationship we just created
-      const relationshipsToProcess = existingRelationships.filter(
-        (rel) => rel.stix.id !== revokedByRelationship.stix.id,
-      );
-      // Build a set of relationship triples (source_ref--relationship_type--target_ref)
-      // that Object B already participates in, so we can skip duplicates.
-      const objectBRelationships = await relationshipsRepository.retrieveAllBySourceOrTarget(
-        objectB.stix.id,
-      );
-      const objectBRelTriples = new Set(
-        objectBRelationships.map(
-          (r) => `${r.stix.source_ref}--${r.stix.relationship_type}--${r.stix.target_ref}`,
-        ),
-      );
-
-      for (const rel of relationshipsToProcess) {
-        try {
-          // Skip subtechnique-of relationships — hierarchy relationships must be managed
-          // separately via the conversion endpoints, not transferred during revocation.
-          if (rel.stix.relationship_type === 'subtechnique-of') {
-            logger.info(
-              `Skipping subtechnique-of relationship ${rel.stix.id} during preservation (hierarchy relationships are not transferred)`,
-            );
-            result.addWarning({
-              message: 'Hierarchy relationship not transferred',
-              reason: 'subtechnique-of',
-              relationship: {
-                id: rel.stix.id,
-                source_ref: rel.stix.source_ref,
-                target_ref: rel.stix.target_ref,
-                relationship_type: rel.stix.relationship_type,
-              },
-            });
-            continue;
-          }
-
-          // TODO here is another use case for a more robust composition layer or a DTO pattern — we are manually cloning and modifying relationship objects, which is error-prone and may not scale well if relationships have more complex fields in the future. A composition layer could handle cloning an existing relationship and substituting references while ensuring all required fields are correctly set.
-          const relData = { ...rel };
-          delete relData._id;
-          delete relData.__v;
-          delete relData.__t;
-
-          // Reset timestamps
-          relData.stix.created = now;
-          relData.stix.modified = now;
-
-          // Substitute Object B for Object A
-          if (relData.stix.source_ref === objectA.stix.id) {
-            relData.stix.source_ref = objectB.stix.id;
-          }
-          if (relData.stix.target_ref === objectA.stix.id) {
-            relData.stix.target_ref = objectB.stix.id;
-          }
-
-          // Skip if Object B already has an equivalent relationship
-          const candidateTriple = `${relData.stix.source_ref}--${relData.stix.relationship_type}--${relData.stix.target_ref}`;
-          if (objectBRelTriples.has(candidateTriple)) {
-            logger.info(
-              `Skipping duplicate relationship transfer: ${candidateTriple} already exists on Object B`,
-            );
-            result.addWarning({
-              message: 'Duplicate relationship transfer skipped',
-              skipped: {
-                id: rel.stix.id,
-                source_ref: rel.stix.source_ref,
-                target_ref: rel.stix.target_ref,
-                relationship_type: rel.stix.relationship_type,
-                description: rel.stix.description,
-              },
-              existing: {
-                id: relData.stix.id,
-                source_ref: relData.stix.source_ref,
-                target_ref: relData.stix.target_ref,
-                relationship_type: relData.stix.relationship_type,
-                description: relData.stix.description,
-              },
-            });
-            continue;
-          }
-
-          // Generate a new STIX ID for the cloned relationship
-          relData.stix.id = `relationship--${uuid.v4()}`;
-
-          const transferredRel = await relationshipsService.create(relData, {
-            userAccountId: options.userAccountId,
-          });
-          result.addCreated(transferredRel);
-
-          // Track the newly created triple so subsequent iterations don't create duplicates
-          objectBRelTriples.add(candidateTriple);
-        } catch (err) {
-          logger.warn(`Failed to transfer relationship ${rel.stix.id}: ${err.message}`);
+      const existing = await relationshipsRepository.retrieveAll({
+        versions: 'latest',
+        sourceOrTargetRef: objectB.stix.id,
+      });
+      const triples = new Set(existing.map((document) => triple(document.stix)));
+      for (const original of originals) {
+        if (original.stix.relationship_type === 'subtechnique-of') {
           result.addWarning({
-            message: 'Relationship transfer failed',
-            relationship: {
-              id: rel.stix.id,
-              description: rel.stix.description,
-              source_ref: rel.stix.source_ref,
-              target_ref: rel.stix.target_ref,
-              relationship_type: rel.stix.relationship_type,
-            },
-            error: err.message,
+            message: 'Hierarchy relationship not transferred',
+            reason: 'subtechnique-of',
+            relationship: { id: original.stix.id },
           });
+          continue;
         }
+        const changed = lifecycle.revision(original);
+        for (const field of ['source_ref', 'target_ref']) {
+          if (changed.stix[field] === stixId) changed.stix[field] = objectB.stix.id;
+        }
+        if (triples.has(triple(changed.stix))) {
+          result.addWarning({
+            message: 'Duplicate relationship transfer skipped',
+            skipped: { id: original.stix.id },
+          });
+          continue;
+        }
+        triples.add(triple(changed.stix));
+        changed.stix.id = `relationship--${uuid.v4()}`;
+        changed.stix.created = changed.stix.modified;
+        transferred.push(changed);
       }
     }
+    const now = new Date().toISOString();
+    const revokedBy = {
+      workspace: { workflow: {} },
+      stix: {
+        type: 'relationship',
+        spec_version: '2.1',
+        id: `relationship--${uuid.v4()}`,
+        relationship_type: 'revoked-by',
+        source_ref: stixId,
+        target_ref: objectB.stix.id,
+        created: now,
+        modified: now,
+      },
+    };
+    const writeOptions = { userAccountId: options.userAccountId, requireReferences: true };
+    for (const document of [...embedded, ...retired, ...transferred, revokedBy]) {
+      await lifecycle.createRevision(document, { ...writeOptions, dryRun: true });
+    }
+    const revokedData = lifecycle.revision(objectA);
+    revokedData.stix.revoked = true;
+    if (options.userAccountId) {
+      revokedData.workspace = revokedData.workspace || {};
+      revokedData.workspace.workflow = revokedData.workspace.workflow || {};
+      revokedData.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+    if (options.dryRun) {
+      result.setPrimary(revokedData);
+      result.addModified(embedded);
+      result.addDeprecated(retired);
+      result.addCreated([...transferred, revokedBy]);
+      return result.toJSON();
+    }
 
-    // ──────────────────────────────────────────────
-    // 7. LIFECYCLE HOOK: afterRevoke
-    // ──────────────────────────────────────────────
+    for (const document of embedded) {
+      result.addModified(await lifecycle.createRevision(document, writeOptions));
+    }
+    for (const document of retired) {
+      result.addDeprecated(await lifecycle.createRevision(document, writeOptions));
+    }
+    for (const document of transferred) {
+      result.addCreated(await lifecycle.createRevision(document, writeOptions));
+    }
+    result.addCreated(await lifecycle.createRevision(revokedBy, writeOptions));
+    // Refresh workspace metadata changed by inbound migrations before cloning A.
+    const refreshedA = await this.repository.retrieveLatestByStixId(stixId);
+    revokedData.workspace = refreshedA.toObject().workspace;
+    delete revokedData.workspace?.release_tracks;
+    if (options.userAccountId) {
+      revokedData.workspace.workflow = revokedData.workspace.workflow || {};
+      revokedData.workspace.workflow.created_by_user_account = options.userAccountId;
+    }
+    const revokedDocument = await this.repository.save(revokedData);
+    if (options.preserveRelationships) {
+      await lifecycle.reconcileEmbeddedMetadata([objectA, objectB, ...embedded]);
+      const refreshed = await this.repository.retrieveLatestByStixId(stixId);
+      revokedDocument.workspace = refreshed.workspace;
+    }
+    result.setPrimary(revokedDocument);
     await this.afterRevoke(revokedDocument, objectB, options);
-
-    // ──────────────────────────────────────────────
-    // 8. EMIT EVENT
-    // ──────────────────────────────────────────────
-    // RelationshipsService listens for revoked events and deprecates all relationships
-    // referencing the revoked object (except those in excludeRelationshipIds).
-    // EventBus.emit() awaits all listeners, so deprecation completes before we return.
-    // Handler results (deprecated docs, warnings) are merged into the WorkflowResult.
-    const excludeRelationshipIds = [revokedByRelationship.stix.id];
-    const eventResults = await this.emitRevokedEvent(revokedDocument, objectB, options, {
-      excludeRelationshipIds,
-    });
-    result.mergeEventResults(eventResults);
-
-    // Revision sync (listening on the revoked event) may have enrolled or
-    // re-pinned the revoked revision in its tracks — refresh so the response
-    // carries the resulting backrefs.
+    result.mergeEventResults(await this.emitRevokedEvent(revokedDocument, objectB, options));
     await this._refreshReleaseTrackBackrefs(revokedDocument);
-
-    // ──────────────────────────────────────────────
-    // 9. RETURN RESULT
-    // ──────────────────────────────────────────────
     return result.toJSON();
   }
 
   // TODO rename to deleteManyByStixId
   async deleteById(stixId) {
+    if (!graphWriteLock.isHeld()) {
+      return graphWriteLock.run(() => BaseService.prototype.deleteById.call(this, stixId));
+    }
     if (!stixId) {
       throw new MissingParameterError('stixId');
     }

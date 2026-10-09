@@ -63,13 +63,13 @@ class ValidationBypassesService {
    * @returns {Promise<{ errors: Array, warnings: Array }>}
    */
   static async handleBypassCheckRequested(payload) {
-    const { errors, stixType } = payload;
+    const { errors, stixType, bypassRules } = payload;
     const service = module.exports;
 
     const nonBypassed = [];
     const warnings = [];
     for (const error of errors) {
-      const result = await service.checkBypassRule(error, stixType);
+      const result = await service.checkBypassRule(error, stixType, bypassRules);
       if (result.bypassed) {
         if (result.warningMessage) {
           warnings.push({ message: result.warningMessage, path: error.path, code: error.code });
@@ -108,10 +108,11 @@ class ValidationBypassesService {
    * A rule matches if it either suppresses the error or converts it to a warning.
    * @param {Object} error - The validation error ({ path, code, ... })
    * @param {string} stixType - The STIX type being validated
+   * @param {Array} [bypassRules] - Preloaded rules, or load the current rules
    * @returns {Promise<{ bypassed: boolean, warningMessage: string|null }>}
    */
-  async checkBypassRule(error, stixType) {
-    const rules = await this.repository.findAll();
+  async checkBypassRule(error, stixType, bypassRules) {
+    const rules = bypassRules ?? (await this.repository.findAll());
 
     const errorPathStr = JSON.stringify(error.path.map(String));
 

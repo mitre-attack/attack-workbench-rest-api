@@ -61,6 +61,12 @@ class DataComponentsService extends BaseService {
           await dataComponentsRepository.retrieveLatestByStixId(dataComponentId);
 
         if (!dataComponent) {
+          if (payload.options?.requireReferences) {
+            throw new Exceptions.NotFoundError({
+              objectType: 'x-mitre-data-component',
+              objectId: dataComponentId,
+            });
+          }
           logger.warn(
             `DataComponentsService: Could not find data component ${dataComponentId} to add inbound relationship`,
           );
@@ -95,6 +101,7 @@ class DataComponentsService extends BaseService {
 
         await dataComponentsRepository.saveDocument(dataComponent);
       } catch (error) {
+        if (payload.options?.requireReferences) throw error;
         logger.error(
           `DataComponentsService: Error handling data-components-referenced for ${dataComponentId}:`,
           error,
@@ -121,6 +128,12 @@ class DataComponentsService extends BaseService {
           await dataComponentsRepository.retrieveLatestByStixId(dataComponentId);
 
         if (!dataComponent) {
+          if (payload.options?.requireReferences) {
+            throw new Exceptions.NotFoundError({
+              objectType: 'x-mitre-data-component',
+              objectId: dataComponentId,
+            });
+          }
           logger.warn(
             `DataComponentsService: Could not find data component ${dataComponentId} to remove inbound relationship`,
           );
@@ -145,6 +158,7 @@ class DataComponentsService extends BaseService {
 
         await dataComponentsRepository.saveDocument(dataComponent);
       } catch (error) {
+        if (payload.options?.requireReferences) throw error;
         logger.error(
           `DataComponentsService: Error handling data-components-removed for ${dataComponentId}:`,
           error,
@@ -168,7 +182,6 @@ class DataComponentsService extends BaseService {
    * @throws {Exceptions.NotFoundError} If the referenced data source does not exist
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
   async beforeCreate(data, options) {
     // Initialize embedded_relationships if not present
     if (!data.workspace) {
@@ -195,20 +208,18 @@ class DataComponentsService extends BaseService {
     const newDataSourceRef = data.stix?.x_mitre_data_source_ref;
     const oldDataSourceRef = previousVersion?.stix?.x_mitre_data_source_ref;
 
-    // Detect changes for event emission
-    if (previousVersion) {
-      if (oldDataSourceRef && !newDataSourceRef) {
-        // Data source reference was removed in this version
-        this._removedDataSourceRef = oldDataSourceRef;
-      } else if (!oldDataSourceRef && newDataSourceRef) {
-        // Data source reference was added in this version
-        this._addedDataSourceRef = newDataSourceRef;
-      } else if (oldDataSourceRef && newDataSourceRef && oldDataSourceRef !== newDataSourceRef) {
-        // Data source reference changed
-        this._removedDataSourceRef = oldDataSourceRef;
-        this._addedDataSourceRef = newDataSourceRef;
-      }
-    }
+    // Hook state belongs to this invocation, never the singleton service.
+    options._removedDataSourceRefs ??= new Map();
+    options._removedDataSourceRefs.set(
+      `${data.stix.id}:${new Date(data.stix.modified).getTime()}`,
+      oldDataSourceRef && oldDataSourceRef !== newDataSourceRef ? oldDataSourceRef : null,
+    );
+
+    const baselineEmbeddedRelationships =
+      previousVersion?.workspace?.embedded_relationships || data.workspace.embedded_relationships;
+    data.workspace.embedded_relationships = baselineEmbeddedRelationships.filter(
+      (rel) => !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-data-source--')),
+    );
 
     if (newDataSourceRef) {
       const dataSource = await dataSourcesRepository.retrieveLatestByStixId(newDataSourceRef);
@@ -246,8 +257,17 @@ class DataComponentsService extends BaseService {
    * @returns {Promise<void>}
    */
   async afterCreate(createdDocument, options) {
-    const addedRef = this._addedDataSourceRef;
-    const removedRef = this._removedDataSourceRef;
+    const key = `${createdDocument.stix.id}:${new Date(createdDocument.stix.modified).getTime()}`;
+    const removedRef = options._removedDataSourceRefs?.get(key);
+    options._removedDataSourceRefs?.delete(key);
+    // Historical imports must not overwrite the authoritative latest backlinks.
+    const latest = await this.repository.retrieveLatestByStixId(createdDocument.stix.id);
+    if (
+      new Date(latest.stix.modified).getTime() !== new Date(createdDocument.stix.modified).getTime()
+    ) {
+      return;
+    }
+    const addedRef = createdDocument.stix?.x_mitre_data_source_ref;
 
     // Emit event for newly referenced data source
     if (addedRef) {
@@ -256,12 +276,15 @@ class DataComponentsService extends BaseService {
         { stixId: createdDocument.stix.id, dataSourceId: addedRef },
       );
 
-      await EventBus.emit('x-mitre-data-component::data-source-referenced', {
-        dataComponentId: createdDocument.stix.id,
-        dataComponent: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
-        dataSourceId: addedRef,
-        options,
-      });
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-data-component::data-source-referenced',
+        {
+          dataComponentId: createdDocument.stix.id,
+          dataComponent: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
+          dataSourceId: addedRef,
+          options,
+        },
+      );
     }
 
     // Emit event for removed data source (when creating a new version without the reference)
@@ -271,33 +294,15 @@ class DataComponentsService extends BaseService {
         { stixId: createdDocument.stix.id, dataSourceId: removedRef },
       );
 
-      await EventBus.emit('x-mitre-data-component::data-source-removed', {
-        dataComponentId: createdDocument.stix.id,
-        dataSourceId: removedRef,
-        options,
-      });
-    }
-
-    // If no changes detected but there is a current reference, emit referenced event
-    // (this handles the case where this is the first version being created)
-    const currentDataSourceRef = createdDocument.stix?.x_mitre_data_source_ref;
-    if (!addedRef && !removedRef && currentDataSourceRef) {
-      logger.info(
-        `DataComponentsService: Emitting data-source-referenced event for data source ${currentDataSourceRef}`,
-        { stixId: createdDocument.stix.id, dataSourceId: currentDataSourceRef },
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-data-component::data-source-removed',
+        {
+          dataComponentId: createdDocument.stix.id,
+          dataSourceId: removedRef,
+          options,
+        },
       );
-
-      await EventBus.emit('x-mitre-data-component::data-source-referenced', {
-        dataComponentId: createdDocument.stix.id,
-        dataComponent: createdDocument.toObject ? createdDocument.toObject() : createdDocument,
-        dataSourceId: currentDataSourceRef,
-        options,
-      });
     }
-
-    // Clean up instance variables
-    delete this._addedDataSourceRef;
-    delete this._removedDataSourceRef;
   }
 
   /**
@@ -329,7 +334,7 @@ class DataComponentsService extends BaseService {
 
     // Preserve existing non-data-source embedded relationships (e.g., inbound from analytics)
     const existingNonDataSourceRels = (data.workspace.embedded_relationships || []).filter(
-      (rel) => !rel.stix_id?.startsWith('x-mitre-data-source--'),
+      (rel) => !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-data-source--')),
     );
 
     // Build new outbound embedded relationship for data source
@@ -357,22 +362,6 @@ class DataComponentsService extends BaseService {
       ...existingNonDataSourceRels,
       ...dataSourceEmbeddedRel,
     ];
-
-    // Detect changes in data source reference for event emission
-    const oldDataSourceRef = existingDocument.stix?.x_mitre_data_source_ref;
-
-    // Determine what changed
-    if (oldDataSourceRef && !newDataSourceRef) {
-      // Data source removed (set to null/undefined)
-      this._removedDataSourceRef = oldDataSourceRef;
-    } else if (!oldDataSourceRef && newDataSourceRef) {
-      // Data source added
-      this._addedDataSourceRef = newDataSourceRef;
-    } else if (oldDataSourceRef && newDataSourceRef && oldDataSourceRef !== newDataSourceRef) {
-      // Data source changed
-      this._removedDataSourceRef = oldDataSourceRef;
-      this._addedDataSourceRef = newDataSourceRef;
-    }
   }
 
   /**
@@ -380,13 +369,14 @@ class DataComponentsService extends BaseService {
    * Emits domain events for added/removed data source references
    *
    * @param {Object} updatedDocument - The updated data component document
-   * @param {Object} _previousDocument - The previous version of the data component (unused)
+   * @param {Object} previousDocument - The previous version of the data component
    * @returns {Promise<void>}
    */
-  // eslint-disable-next-line no-unused-vars
-  async afterUpdate(updatedDocument, _previousDocument) {
-    const addedRef = this._addedDataSourceRef;
-    const removedRef = this._removedDataSourceRef;
+  async afterUpdate(updatedDocument, previousDocument) {
+    const oldRef = previousDocument.stix?.x_mitre_data_source_ref;
+    const newRef = updatedDocument.stix?.x_mitre_data_source_ref;
+    const addedRef = newRef !== oldRef ? newRef : null;
+    const removedRef = oldRef !== newRef ? oldRef : null;
 
     // Emit event for newly referenced data source
     if (addedRef) {
@@ -414,10 +404,6 @@ class DataComponentsService extends BaseService {
         dataSourceId: removedRef,
       });
     }
-
-    // Clean up instance variables
-    delete this._addedDataSourceRef;
-    delete this._removedDataSourceRef;
   }
 }
 

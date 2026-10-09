@@ -7,12 +7,15 @@ const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
 const { cloneForCreate } = require('../../shared/clone-for-create');
 const { releaseExactMembers } = require('./release-track-test-helpers');
+const modelFactory = require('../../../models/release-tracks/model-factory');
+const virtualTrackService = require('../../../services/release-tracks/virtual-track-service');
 
 const staticMarkingDefinitionId = 'marking-definition--613f2e26-407d-48c7-9eca-b8e91df99dc9';
 
 describe('Virtual Release Track Domain Filters API', function () {
   let app;
   let passportCookie;
+  let tacticId;
 
   before(async function () {
     await database.initializeConnection();
@@ -23,6 +26,16 @@ describe('Virtual Release Track Domain Filters API', function () {
 
     app = await require('../../../index').initializeApp();
     passportCookie = await login.loginAnonymous(app);
+    const tactic = await post('/api/tactics', {
+      workspace: { workflow: { state: 'work-in-progress' } },
+      stix: {
+        type: 'x-mitre-tactic',
+        spec_version: '2.1',
+        name: 'Initial Access',
+        x_mitre_shortname: 'initial-access',
+      },
+    });
+    tacticId = tactic.stix.id;
   });
 
   async function post(path, body, status = 201) {
@@ -68,12 +81,14 @@ describe('Virtual Release Track Domain Filters API', function () {
         external_references: [{ source_name: 'test-source', external_id: externalDomain }],
         object_marking_refs: [staticMarkingDefinitionId],
         x_mitre_version: '1.0',
+        x_mitre_domains: ['enterprise-attack'],
+        tactic_refs: [tacticId],
       },
     };
   }
 
-  async function createVirtualSnapshot(name, componentTrackId, domains) {
-    const virtual = await post('/api/release-tracks/new', {
+  async function createVirtual(name, componentTrackId, domains) {
+    return post('/api/release-tracks/new', {
       name,
       type: 'virtual',
       composition: {
@@ -88,6 +103,10 @@ describe('Virtual Release Track Domain Filters API', function () {
         deduplication: { strategy: 'prioritize_latest_object' },
       },
     });
+  }
+
+  async function createVirtualSnapshot(name, componentTrackId, domains) {
+    const virtual = await createVirtual(name, componentTrackId, domains);
     return post(`/api/release-tracks/${virtual.id}/virtual/snapshots/create`, {});
   }
 
@@ -111,7 +130,7 @@ describe('Virtual Release Track Domain Filters API', function () {
     const noDomain = await post('/api/mitigations', buildMitigation('No Domain Member', undefined));
     const enterpriseMatrix = await post(
       '/api/matrices',
-      buildMatrix('Domainless Enterprise Matrix', 'enterprise-attack'),
+      buildMatrix('Enterprise Matrix', 'enterprise-attack'),
     );
 
     const component = await post('/api/release-tracks/new', {
@@ -123,9 +142,21 @@ describe('Virtual Release Track Domain Filters API', function () {
       ics,
       shared,
       mobile,
-      noDomain,
       enterpriseMatrix,
     ]);
+    // Simulate a legacy member that predates reviewed-state admission. It must
+    // remain domainless so domain filtering, not admission, excludes it.
+    await modelFactory.getModel(component.id).collection.updateOne(
+      { id: component.id, version: '1.0' },
+      {
+        $push: {
+          members: {
+            object_ref: noDomain.stix.id,
+            object_modified: new Date(noDomain.stix.modified),
+          },
+        },
+      },
+    );
 
     // A newer revision has a different domain, but virtual composition must
     // evaluate the exact revision pinned in the tagged component snapshot.
@@ -164,6 +195,51 @@ describe('Virtual Release Track Domain Filters API', function () {
     expect(mobileIds).toEqual(expect.arrayContaining([mobile.stix.id, shared.stix.id]));
     expect(mobileIds).not.toContain(enterprise.stix.id);
     expect(mobileIds).not.toContain(ics.stix.id);
+  });
+
+  it('selects a legacy domainless matrix by fallback but rejects its new admission', async function () {
+    const matrixData = buildMatrix('Domainless Enterprise Matrix', 'enterprise-attack');
+    delete matrixData.stix.x_mitre_domains;
+    const matrix = await post('/api/matrices', matrixData);
+    const component = await post('/api/release-tracks/new', {
+      name: 'Legacy Matrix Domain Component',
+      type: 'standard',
+    });
+    await post(
+      `/api/release-tracks/${component.id}/snapshots/latest/release`,
+      { version: '1.0' },
+      200,
+    );
+    // Install old membership directly: current admission must not accept this
+    // deliberately incomplete matrix merely to exercise its domain fallback.
+    await modelFactory.getModel(component.id).collection.updateOne(
+      { id: component.id, version: '1.0' },
+      {
+        $push: {
+          members: {
+            object_ref: matrix.stix.id,
+            object_modified: new Date(matrix.stix.modified),
+          },
+        },
+      },
+    );
+
+    const enterprise = await createVirtual('Legacy Matrix Enterprise Virtual', component.id, [
+      'enterprise',
+    ]);
+    await expect(virtualTrackService.createVirtualSnapshot(enterprise.id)).rejects.toMatchObject({
+      message: 'ADM validation failed',
+      details: [
+        expect.objectContaining({
+          object_ref: matrix.stix.id,
+          object_modified: matrix.stix.modified,
+          path: ['x_mitre_domains'],
+        }),
+      ],
+    });
+
+    const ics = await createVirtualSnapshot('Legacy Matrix ICS Virtual', component.id, ['ics']);
+    expect(ics.members).toEqual([]);
   });
 
   after(async function () {

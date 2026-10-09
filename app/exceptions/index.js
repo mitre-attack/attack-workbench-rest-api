@@ -460,6 +460,21 @@ class ObjectHasValidationIssuesError extends CustomError {
   }
 }
 
+class LifecycleConflictError extends CustomError {
+  constructor(message, options) {
+    super(message, options);
+  }
+}
+
+class DeprecationBlockedError extends LifecycleConflictError {
+  constructor(check) {
+    super('Remove current relationships before deprecating this object', {
+      code: 'deprecation_blocked',
+      ...check,
+    });
+  }
+}
+
 module.exports = {
   //** General errors */
   NotImplementedError,
@@ -481,6 +496,8 @@ module.exports = {
   //** Revocation errors */
   AlreadyRevokedError,
   SelfRevocationError,
+  LifecycleConflictError,
+  DeprecationBlockedError,
 
   //** Version control errors */
   AlreadyReleasedError,

@@ -186,21 +186,18 @@ class ServiceWithHooks {
    * @param {object} revokedDocument - The revoked document
    * @param {object} revokingDocument - The revoking document
    * @param {object} options - Revocation options
-   * @param {object} [metadata] - Additional event metadata
-   * @param {string[]} [metadata.excludeRelationshipIds] - Relationship STIX IDs to exclude from deprecation
    */
-  async emitRevokedEvent(revokedDocument, revokingDocument, options, metadata = {}) {
-    const eventName = `${this.type}::revoked`;
+  async emitRevokedEvent(revokedDocument, revokingDocument, options) {
+    const eventName = `${revokedDocument.stix.type}::revoked`;
 
     logger.info(`Emitting event '${eventName}' for ${revokedDocument.stix.id}`);
 
-    const results = await EventBus.emit(eventName, {
+    const results = await EventBus.emitRequired(eventName, {
       stixId: revokedDocument.stix.id,
       revokedDocument: revokedDocument.toObject ? revokedDocument.toObject() : revokedDocument,
       revokingDocument: revokingDocument.toObject ? revokingDocument.toObject() : revokingDocument,
-      type: this.type,
+      type: revokedDocument.stix.type,
       options,
-      excludeRelationshipIds: metadata.excludeRelationshipIds || [],
     });
 
     logger.info(`Event '${eventName}' emission complete`);

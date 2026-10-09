@@ -7,7 +7,6 @@ const { DetectionStrategy: DetectionStrategyType } = require('../../lib/types');
 const logger = require('../../lib/logger');
 const EventBus = require('../../lib/event-bus');
 const { NotFoundError } = require('../../exceptions');
-const assertions = require('../../lib/assertions');
 
 /**
  * Service for managing detection strategies
@@ -24,28 +23,11 @@ const assertions = require('../../lib/assertions');
  */
 class DetectionStrategiesService extends BaseService {
   /**
-   * Assertion: Verify x_mitre_analytic_refs contains only unique values
-   * (This should never actually throw in practice. We have (or will have) validation middleware
-   *  that checks the request body before the service layer runs. That middleware is powered by
-   *  the `@mitre-attack/attack-data-model` library which checks for this condition implicitly.
-   *  This assertion thus serves as a fail-safe in case the middleware is ever somehow bypassed.
-   *  It will throw, causing a 500 exception, but it will block "bad data" from entering the
-   *  database.)
-   */
-  async _assertAnalyticRefsAreUnique(data) {
-    assertions.assertUnique(data.stix?.x_mitre_analytic_refs, 'x_mitre_analytic_refs', {
-      stixId: data.stix?.id || 'unknown',
-    });
-  }
-
-  /**
    * Prepare detection strategy data before creation
    * Build outbound embedded_relationships for x_mitre_analytic_refs
    * Detects if this is a new version and tracks removed relationships
    */
-  async beforeCreate(data) {
-    this._assertAnalyticRefsAreUnique(data);
-
+  async beforeCreate(data, options) {
     // Initialize workspace if not present
     if (!data.workspace) {
       data.workspace = {};
@@ -66,14 +48,14 @@ class DetectionStrategiesService extends BaseService {
     // Build outbound embedded_relationships for x_mitre_analytic_refs
     // Cross-repository READS are allowed for denormalization (see CROSS_SERVICE_READS_PATTERN.md)
     // We emit events in afterCreate/afterUpdate for cross-service WRITES
-    const newAnalyticRefs = data.stix?.x_mitre_analytic_refs || [];
+    const newAnalyticRefs = [...new Set(data.stix?.x_mitre_analytic_refs || [])];
     const oldAnalyticRefs = previousVersion?.stix?.x_mitre_analytic_refs || [];
 
-    // Detect changes for event emission
-    if (previousVersion) {
-      this._addedAnalyticRefs = newAnalyticRefs.filter((ref) => !oldAnalyticRefs.includes(ref));
-      this._removedAnalyticRefs = oldAnalyticRefs.filter((ref) => !newAnalyticRefs.includes(ref));
-    }
+    options._removedAnalyticRefs ??= new Map();
+    options._removedAnalyticRefs.set(
+      `${data.stix.id}:${new Date(data.stix.modified).getTime()}`,
+      [...new Set(oldAnalyticRefs)].filter((ref) => !newAnalyticRefs.includes(ref)),
+    );
 
     // Preserve non-analytic embedded_relationships from the previous version when POST is
     // creating a new version. Client payloads often omit server-managed workspace metadata,
@@ -85,7 +67,7 @@ class DetectionStrategiesService extends BaseService {
 
     // Rebuild only the analytic outbound relationships for the new version.
     const existingNonAnalyticRels = baselineEmbeddedRelationships.filter(
-      (rel) => !rel.stix_id?.startsWith('x-mitre-analytic--'),
+      (rel) => !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-analytic--')),
     );
 
     const analyticEmbeddedRels = [];
@@ -122,8 +104,14 @@ class DetectionStrategiesService extends BaseService {
    *   See app/lib/import-safety.js for the contract.
    */
   async afterCreate(document, options) {
-    const addedRefs = this._addedAnalyticRefs || [];
-    const removedRefs = this._removedAnalyticRefs || [];
+    const key = `${document.stix.id}:${new Date(document.stix.modified).getTime()}`;
+    const removedRefs = options._removedAnalyticRefs?.get(key) || [];
+    options._removedAnalyticRefs?.delete(key);
+    const latest = await this.repository.retrieveLatestByStixId(document.stix.id);
+    if (new Date(latest.stix.modified).getTime() !== new Date(document.stix.modified).getTime()) {
+      return;
+    }
+    const addedRefs = [...new Set(document.stix?.x_mitre_analytic_refs || [])];
 
     // Emit event for newly referenced analytics
     if (addedRefs.length > 0) {
@@ -132,12 +120,15 @@ class DetectionStrategiesService extends BaseService {
         { stixId: document.stix.id, analyticIds: addedRefs },
       );
 
-      await EventBus.emit('x-mitre-detection-strategy::analytics-referenced', {
-        detectionStrategyId: document.stix.id,
-        detectionStrategy: document.toObject ? document.toObject() : document,
-        analyticIds: addedRefs,
-        options,
-      });
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-detection-strategy::analytics-referenced',
+        {
+          detectionStrategyId: document.stix.id,
+          detectionStrategy: document.toObject ? document.toObject() : document,
+          analyticIds: addedRefs,
+          options,
+        },
+      );
     }
 
     // Emit event for removed analytics (when creating a new version without the analytics)
@@ -147,33 +138,15 @@ class DetectionStrategiesService extends BaseService {
         { stixId: document.stix.id, analyticIds: removedRefs },
       );
 
-      await EventBus.emit('x-mitre-detection-strategy::analytics-removed', {
-        detectionStrategyId: document.stix.id,
-        analyticIds: removedRefs,
-        options,
-      });
-    }
-
-    // If no changes detected but there are current analytics, emit referenced event
-    // (this handles the case where this is the first version being created)
-    const currentAnalyticRefs = document.stix?.x_mitre_analytic_refs || [];
-    if (!addedRefs.length && !removedRefs.length && currentAnalyticRefs.length > 0) {
-      logger.info(
-        `DetectionStrategiesService: Emitting analytics-referenced event for ${currentAnalyticRefs.length} analytic(s)`,
-        { stixId: document.stix.id, analyticIds: currentAnalyticRefs },
+      await EventBus[options.requireReferences ? 'emitRequired' : 'emit'](
+        'x-mitre-detection-strategy::analytics-removed',
+        {
+          detectionStrategyId: document.stix.id,
+          analyticIds: removedRefs,
+          options,
+        },
       );
-
-      await EventBus.emit('x-mitre-detection-strategy::analytics-referenced', {
-        detectionStrategyId: document.stix.id,
-        detectionStrategy: document.toObject ? document.toObject() : document,
-        analyticIds: currentAnalyticRefs,
-        options,
-      });
     }
-
-    // Clean up instance variables
-    delete this._addedAnalyticRefs;
-    delete this._removedAnalyticRefs;
   }
 
   /**
@@ -182,14 +155,7 @@ class DetectionStrategiesService extends BaseService {
    */
   // eslint-disable-next-line no-unused-vars
   async beforeUpdate(stixId, stixModified, data, existingDocument, options) {
-    this._assertAnalyticRefsAreUnique(data);
-
-    const oldAnalyticRefs = existingDocument.stix?.x_mitre_analytic_refs || [];
-    const newAnalyticRefs = data.stix?.x_mitre_analytic_refs || [];
-
-    // Store change detection for afterUpdate
-    this._addedAnalyticRefs = newAnalyticRefs.filter((ref) => !oldAnalyticRefs.includes(ref));
-    this._removedAnalyticRefs = oldAnalyticRefs.filter((ref) => !newAnalyticRefs.includes(ref));
+    const newAnalyticRefs = [...new Set(data.stix?.x_mitre_analytic_refs || [])];
 
     // Update embedded_relationships in the data being saved
     if (!data.workspace) {
@@ -201,7 +167,7 @@ class DetectionStrategiesService extends BaseService {
 
     // Rebuild the analytic portion of embedded_relationships
     const existingNonAnalyticRels = (data.workspace.embedded_relationships || []).filter(
-      (rel) => !rel.stix_id?.startsWith('x-mitre-analytic--'),
+      (rel) => !(rel.direction === 'outbound' && rel.stix_id?.startsWith('x-mitre-analytic--')),
     );
 
     const analyticEmbeddedRels = [];
@@ -233,9 +199,11 @@ class DetectionStrategiesService extends BaseService {
    * Handle post-update logic
    * Emit domain events for analytics that were added or removed
    */
-  async afterUpdate(updatedDocument) {
-    const addedRefs = this._addedAnalyticRefs || [];
-    const removedRefs = this._removedAnalyticRefs || [];
+  async afterUpdate(updatedDocument, previousDocument) {
+    const oldRefs = new Set(previousDocument.stix?.x_mitre_analytic_refs || []);
+    const newRefs = new Set(updatedDocument.stix?.x_mitre_analytic_refs || []);
+    const addedRefs = [...newRefs].filter((ref) => !oldRefs.has(ref));
+    const removedRefs = [...oldRefs].filter((ref) => !newRefs.has(ref));
 
     // Emit event for newly referenced analytics
     if (addedRefs.length > 0) {
@@ -263,10 +231,6 @@ class DetectionStrategiesService extends BaseService {
         analyticIds: removedRefs,
       });
     }
-
-    // Clean up instance variables
-    delete this._addedAnalyticRefs;
-    delete this._removedAnalyticRefs;
   }
 }
 

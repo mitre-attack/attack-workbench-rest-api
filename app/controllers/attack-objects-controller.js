@@ -34,3 +34,11 @@ exports.retrieveAll = async function (req, res) {
     return res.status(500).send('Unable to get ATT&CK objects. Server error.');
   }
 };
+
+exports.deprecationCheck = async function (req, res, next) {
+  try {
+    return res.status(200).send(await attackObjectsService.deprecationCheck(req.params.stixId));
+  } catch (error) {
+    return next(error);
+  }
+};

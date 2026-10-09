@@ -109,24 +109,6 @@ class RelationshipsService extends BaseService {
    * Called once on module load.
    */
   static initializeEventListeners() {
-    const revokedEvents = [
-      EventConstants.ATTACK_PATTERN_REVOKED,
-      EventConstants.TACTIC_REVOKED,
-      EventConstants.COURSE_OF_ACTION_REVOKED,
-      EventConstants.INTRUSION_SET_REVOKED,
-      EventConstants.MALWARE_REVOKED,
-      EventConstants.TOOL_REVOKED,
-      EventConstants.CAMPAIGN_REVOKED,
-      EventConstants.DATA_SOURCE_REVOKED,
-      EventConstants.DATA_COMPONENT_REVOKED,
-      EventConstants.MATRIX_REVOKED,
-      EventConstants.ASSET_REVOKED,
-    ];
-
-    for (const event of revokedEvents) {
-      EventBus.on(event, this.handleObjectRevoked.bind(this));
-    }
-
     EventBus.on(
       EventConstants.TECHNIQUE_CONVERTED_TO_SUBTECHNIQUE,
       this.handleTechniqueConvertedToSubtechnique.bind(this),
@@ -140,6 +122,11 @@ class RelationshipsService extends BaseService {
     EventBus.on(
       EventConstants.RELEASE_TRACK_CONTENTS_CHANGED,
       this.handleReleaseTrackContentsChanged.bind(this),
+    );
+
+    EventBus.on(
+      EventConstants.RELEASE_TRACK_OBJECTS_REVIEWED,
+      this.handleReleaseTrackObjectsReviewed.bind(this),
     );
 
     EventBus.on(
@@ -165,6 +152,12 @@ class RelationshipsService extends BaseService {
       includeDeprecated: false,
       objectRefs,
     });
+  }
+
+  static async handleReleaseTrackObjectsReviewed({ entries }) {
+    return relationshipsRepository.markRevisionsReviewed(
+      entries.filter((entry) => entry.object_ref.startsWith('relationship--')),
+    );
   }
 
   /**
@@ -312,75 +305,6 @@ class RelationshipsService extends BaseService {
       );
       warnings.push({
         message: 'Failed to deprecate subtechnique-of relationships',
-        stixId,
-        error: error.message,
-      });
-    }
-
-    return { deprecated: deprecatedDocs, warnings };
-  }
-
-  /**
-   * Handle an object being revoked by deprecating all relationships that reference it.
-   * Creates a new version of each relationship with x_mitre_deprecated = true and bumped modified,
-   * preserving the original version in history.
-   * @param {object} payload - Event payload
-   * @param {string} payload.stixId - STIX ID of the revoked object
-   * @param {string[]} [payload.excludeRelationshipIds] - Relationship STIX IDs to skip (e.g. the revoked-by relationship)
-   */
-  static async handleObjectRevoked(payload) {
-    const { stixId, excludeRelationshipIds = [] } = payload;
-
-    logger.info(`RelationshipsService heard event: object revoked for ${stixId}`);
-
-    const deprecatedDocs = [];
-    const warnings = [];
-
-    try {
-      const relationships = await relationshipsRepository.retrieveAllBySourceOrTarget(stixId);
-
-      const toDeprecate = relationships.filter(
-        (rel) => !excludeRelationshipIds.includes(rel.stix.id),
-      );
-
-      for (const rel of toDeprecate) {
-        try {
-          const relData = rel.toObject ? rel.toObject() : { ...rel };
-          delete relData._id;
-          delete relData.__v;
-          delete relData.__t;
-
-          relData.stix.x_mitre_deprecated = true;
-          relData.stix.modified = new Date().toISOString();
-          // Backrefs are pinned to the exact revision a track references —
-          // never carried onto a new revision.
-          if (relData.workspace) {
-            delete relData.workspace.release_tracks;
-          }
-
-          const saved = await relationshipsRepository.save(relData);
-          deprecatedDocs.push(saved);
-
-          logger.info(
-            `Deprecated relationship ${rel.stix.id} (was referencing revoked object ${stixId})`,
-          );
-        } catch (error) {
-          logger.error(`Failed to deprecate relationship ${rel.stix.id}: ${error.message}`);
-          warnings.push({
-            message: 'Failed to deprecate relationship',
-            relationshipId: rel.stix.id,
-            error: error.message,
-          });
-        }
-      }
-
-      logger.info(
-        `RelationshipsService: deprecated ${deprecatedDocs.length}/${toDeprecate.length} relationships for revoked object ${stixId}`,
-      );
-    } catch (error) {
-      logger.error(`RelationshipsService: Error handling object revoked for ${stixId}:`, error);
-      warnings.push({
-        message: 'Failed to deprecate relationships for revoked object',
         stixId,
         error: error.message,
       });

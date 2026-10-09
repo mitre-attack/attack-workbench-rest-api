@@ -294,6 +294,8 @@ describe('Virtual draft lifecycle API', function () {
           name: 'Lifecycle Quarantine',
           created: '2026-01-01T00:00:00.000Z',
           modified: '2026-01-01T00:00:00.000Z',
+          x_mitre_version: '1.0',
+          x_mitre_domains: ['enterprise-attack'],
           x_mitre_platforms: ['Windows'],
           x_mitre_is_subtechnique: false,
           kill_chain_phases: [{ kill_chain_name: 'mitre-attack', phase_name: 'persistence' }],
