@@ -27,17 +27,7 @@
           },
           {
             "domainName": "ics-attack",
-            "allowedValues": [
-              "Field Controller/RTU/PLC/IED",
-              "Safety Instrumented System/Protection Relay",
-              "Control Server",
-              "Input/Output Server",
-              "Data Historian",
-              "Human-Machine Interface",
-              "Engineering Workstation",
-              "None",
-              "Windows"
-            ]
+            "allowedValues": ["Windows", "Linux", "Network", "Embedded", "IaaS", "SaaS", "None"]
           }
         ]
       }
