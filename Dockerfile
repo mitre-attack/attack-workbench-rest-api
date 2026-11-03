@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:22 AS base
 
 # Define build arguments
@@ -34,7 +36,11 @@ ENV APP_VERSION=${VERSION} \
 FROM base AS dev
 
 # Install development dependencies.
-RUN npm ci
+RUN --mount=type=secret,id=build_ca_cert \
+    if [ -s /run/secrets/build_ca_cert ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_cert; \
+    fi; \
+    npm ci
 
 # Copy app source
 COPY . .
@@ -44,7 +50,11 @@ CMD [ "node", "./bin/www" ]
 FROM base AS production
 
 # Install the app dependencies
-RUN npm ci --omit=dev
+RUN --mount=type=secret,id=build_ca_cert \
+    if [ -s /run/secrets/build_ca_cert ]; then \
+        export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca_cert; \
+    fi; \
+    npm ci --omit=dev
 
 # Copy app source
 COPY . .
