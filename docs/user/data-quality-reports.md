@@ -77,3 +77,97 @@ unpublishable, and this report lists it:
 
 Fix a finding by revising the object with the domain it belongs to, or by
 deprecating the relationship.
+
+## Release-track coverage
+
+```
+GET /api/reports/release-track-coverage
+```
+
+The **Untracked Latest Revisions** and **Never Enrolled Objects** dashboards
+share this read-only report. Each object is evaluated across its stored
+revisions, with the greatest `stix.modified` defining the latest revision.
+
+- `untracked_latest_revisions` — the latest revision is **missing the
+  `workspace.release_tracks` key**, while at least one older stored revision
+  has a nonempty membership array. A latest value of `[]` or `null` does not
+  qualify, even when an older revision has membership.
+- `never_enrolled_objects` — no stored revision has a nonempty
+  `workspace.release_tracks` array. Missing, empty, and null values alone are
+  not membership. “Never enrolled” means **no recorded membership**: current
+  backrefs cannot prove enrollment never existed and was subsequently removed.
+- `summary` — counts of both lists.
+
+Both lists include revoked and deprecated objects and are unique and sorted
+by STIX ID. Supported objects are techniques (including sub-techniques),
+tactics, groups, malware, tools, mitigations, campaigns, data sources, data
+components, assets, matrices, detection strategies, and analytics. Relationships,
+identities, notes, marking definitions, and projected collections are excluded.
+Objects do not need an ATT&CK ID to appear.
+
+Untracked findings identify the **last enrolled revision**: the stored revision
+with the greatest `stix.modified` that still has nonempty membership. Its
+modified timestamp, optional version, and **all memberships on that revision**
+are returned. Names are resolved from the current release-track registry, not
+historical names. If a track was deleted or its name is unavailable, its ID is
+retained for display.
+
+`unenrolled_revision_count` is the number of stored revisions strictly newer
+than that last enrolled revision that have no nonempty membership. Missing,
+empty, and null membership all count. Re-enrollment resets this count: gaps
+before the last enrolled revision are excluded. The finding's latest revision
+must still meet the missing-key rule above.
+
+```json
+{
+  "untracked_latest_revisions": [
+    {
+      "stix": {
+        "id": "attack-pattern--...",
+        "type": "attack-pattern",
+        "name": "Example technique",
+        "created": "2026-10-01T09:30:00.000Z",
+        "modified": "2026-11-03T00:00:00.000Z",
+        "x_mitre_version": "1.1"
+      },
+      "workspace": { "attack_id": "T1234" },
+      "last_enrolled_revision": {
+        "modified": "2026-11-01T12:00:00.000Z",
+        "x_mitre_version": "1.0",
+        "release_tracks": [
+          {
+            "id": "release-track--...",
+            "type": "standard",
+            "tier": "members",
+            "status": "reviewed",
+            "name": "Enterprise ATT&CK"
+          }
+        ]
+      },
+      "unenrolled_revision_count": 2
+    }
+  ],
+  "never_enrolled_objects": [],
+  "summary": {
+    "untracked_latest_revision_count": 1,
+    "never_enrolled_object_count": 0
+  }
+}
+```
+
+Both lists contain compact latest-revision fields: `stix.id`, `stix.type`,
+optional `stix.name`, `stix.created`, `stix.modified`, `stix.x_mitre_version`,
+and optional `workspace.attack_id`; `workspace` is always an object.
+Only untracked findings add the enrollment evidence shown above. Never-enrolled
+objects have no last enrollment or gap count. The report does not return
+descriptions, full histories, or full track documents. It is one JSON response
+without pagination.
+
+Review membership in the appropriate release track before making changes.
+Reading either dashboard does not enroll anything or change `track_latest`.
+Enabling `track_latest` does not retroactively enroll a latest revision that
+already exists. A missing backref on that revision does not by itself prevent
+future revisions from being tracked: synchronization can discover the object
+by STIX ID in the track's latest standard snapshot, subject to enrollment
+policy. The report is a coverage finding, not a diagnosis that future tracking
+is broken.
