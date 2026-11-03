@@ -23,6 +23,70 @@ class AttackObjectsRepository extends BaseRepository {
       .exec();
   }
 
+  /**
+   * Classify latest SDO revisions using membership recorded on any stored revision.
+   * Retain only one compact document and scalar membership flags per STIX ID.
+   */
+  async retrieveReleaseTrackCoverage(types) {
+    const aggregation = [
+      { $match: { 'stix.type': { $in: types } } },
+      { $sort: { 'stix.id': 1, 'stix.modified': -1 } },
+      {
+        $project: {
+          _id: 0,
+          'stix.id': 1,
+          'stix.type': 1,
+          'stix.name': 1,
+          'stix.modified': 1,
+          'workspace.attack_id': 1,
+          membershipMissing: { $eq: [{ $type: '$workspace.release_tracks' }, 'missing'] },
+          hasMembership: {
+            $cond: [
+              { $isArray: '$workspace.release_tracks' },
+              { $gt: [{ $size: '$workspace.release_tracks' }, 0] },
+              false,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$stix.id',
+          latest: { $first: '$$ROOT' },
+          hasRecordedMembership: { $max: '$hasMembership' },
+        },
+      },
+      {
+        $match: {
+          $or: [{ hasRecordedMembership: false }, { 'latest.membershipMissing': true }],
+        },
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          _id: 0,
+          stix: '$latest.stix',
+          workspace: { $ifNull: ['$latest.workspace', {}] },
+          hasRecordedMembership: 1,
+        },
+      },
+    ];
+
+    const cursor = this.model.aggregate(aggregation).allowDiskUse(true).cursor({ batchSize: 100 });
+    const results = { untracked_latest_revisions: [], never_enrolled_objects: [] };
+    try {
+      for await (const { stix, workspace, hasRecordedMembership } of cursor) {
+        const category = hasRecordedMembership
+          ? results.untracked_latest_revisions
+          : results.never_enrolled_objects;
+        category.push({ stix, workspace });
+      }
+    } finally {
+      await cursor.close();
+    }
+    return results;
+  }
+
   async retrieveAll(options) {
     // Build the query
     const query = {};

@@ -1,0 +1,45 @@
+components:
+  schemas:
+    release-track-report-object:
+      type: object
+      additionalProperties: false
+      required:
+        - stix
+        - workspace
+      properties:
+        stix:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - type
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              enum:
+                - attack-pattern
+                - campaign
+                - course-of-action
+                - intrusion-set
+                - malware
+                - tool
+                - x-mitre-analytic
+                - x-mitre-asset
+                - x-mitre-data-component
+                - x-mitre-data-source
+                - x-mitre-detection-strategy
+                - x-mitre-matrix
+                - x-mitre-tactic
+            name:
+              type: string
+            modified:
+              type: string
+              format: date-time
+        workspace:
+          type: object
+          additionalProperties: false
+          properties:
+            attack_id:
+              type: string

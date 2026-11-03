@@ -72,3 +72,55 @@ but requires response backpressure, disconnect cancellation, error semantics,
 and a frontend streaming parser; the existing Angular JSON request waits for a
 complete response. Merely streaming the current query or increasing Node's heap
 would leave its unnecessary history fan-out intact.
+
+## Release-track coverage
+
+`GET /api/reports/release-track-coverage` uses the existing report authentication
+and visitor/read-only-service authorization. The service reuses
+`DOMAIN_BEARING_TYPES` as the explicit supported SDO allowlist: `attack-pattern`,
+`campaign`, `course-of-action`, `intrusion-set`, `malware`, `tool`,
+`x-mitre-analytic`, `x-mitre-asset`, `x-mitre-data-component`,
+`x-mitre-data-source`, `x-mitre-detection-strategy`, `x-mitre-matrix`, and
+`x-mitre-tactic`. Unlike the domain-consistency report, coverage deliberately
+includes revoked and deprecated latest revisions. It does not require an
+ATT&CK ID, a domain value, or an active workflow state.
+
+`AttackObjectsRepository.retrieveReleaseTrackCoverage()` performs a single
+aggregation over `attackObjects`:
+
+1. Match the supported types and sort by `(stix.id, stix.modified descending)`,
+   following the existing latest-revision index and convention.
+2. Project only compact identifying fields and two booleans: whether
+   `workspace.release_tracks` has BSON type `missing`, and whether it is an
+   array with nonzero length. `$isArray` guards `$size`; null and non-array
+   values are not membership.
+3. Group by STIX ID, retaining the first compact revision and the maximum
+   membership boolean across all stored revisions. There is no `$push` of
+   histories, full-document hydration, identity enrichment, or track join.
+4. Keep objects with no recorded membership, or a missing latest membership
+   key. If membership exists somewhere and the latest key is missing, that
+   membership necessarily belongs to an older revision. Explicit empty/null
+   latest values are not untracked-latest findings.
+5. Sort findings by STIX ID and consume a 100-document cursor with explicit
+   cleanup and disk use enabled for eligible aggregation stages. Partition
+   compact findings into the two mutually exclusive arrays. The service adds
+   counts directly from those arrays.
+
+The public object projection is `{ stix: { id, type, name?, modified? },
+workspace: { attack_id? } }`. Missing ATT&CK IDs leave an empty workspace
+object. No membership arrays or internal classification flags escape the
+repository. Current backrefs only establish **recorded** membership; removing
+all backrefs can make a formerly enrolled object appear in Never Enrolled
+Objects. This is not an audit-history API.
+
+The database still scans stored revisions, but grouping state is constant-sized
+per object rather than proportional to its history. Node memory and the final
+HTTP response remain proportional to actual findings; cursor batching is not
+HTTP streaming. No `$facet` assembles the entire report into a single BSON
+document, avoiding that additional report-size limit.
+
+`app/tests/api/reports/release-track-coverage.spec.js` covers latest selection,
+historical membership, missing/empty/null distinctions, membership restoration,
+all supported types, inactive revisions, excluded object types, compact output,
+missing ATT&CK IDs, deterministic ordering, and read-only behavior. Enrollment
+and `track_latest` synchronization are unchanged.

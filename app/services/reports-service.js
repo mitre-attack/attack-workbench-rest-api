@@ -138,6 +138,22 @@ class ReportsService {
   }
 
   /**
+   * Report coverage of all supported domain-bearing SDOs, including inactive ones.
+   * Recorded backrefs describe stored membership, not an immutable enrollment history.
+   */
+  async getReleaseTrackCoverage() {
+    const results =
+      await attackObjectsRepository.retrieveReleaseTrackCoverage(DOMAIN_BEARING_TYPES);
+    return {
+      ...results,
+      summary: {
+        untracked_latest_revision_count: results.untracked_latest_revisions.length,
+        never_enrolled_object_count: results.never_enrolled_objects.length,
+      },
+    };
+  }
+
+  /**
    * Retrieves parallel relationships - relationships that share the same source_ref,
    * target_ref, and relationship_type.
    * @returns {Promise<Map>} Map of relationship keys to arrays of parallel relationships
