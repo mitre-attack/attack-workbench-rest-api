@@ -25,18 +25,7 @@ docker run -p 3000:3000 -d \
 
 The REST API will be accessible at `http://localhost:3000`, with API documentation available at `http://localhost:3000/api-docs`.
 
-Local builds behind a corporate TLS proxy can supply an optional BuildKit CA secret:
-
-```bash
-docker build --secret id=build_ca_cert,src=/absolute/path/to/combined-ca.pem -t attack-workbench-rest-api:local .
-```
-
-Both development (`--target dev`) and production installs use the PEM bundle as
-`NODE_EXTRA_CA_CERTS` only during npm installation, without storing it in image
-layers. Compose users can supply `build_ca_cert` through `build.secrets`. BuildKit
-itself must already trust your registry/proxy to pull base images. Runtime custom
-certificates still require their existing certificate mount and `NODE_EXTRA_CA_CERTS`
-configuration; build trust does not replace them or disable TLS verification.
+For source builds and corporate CA configuration, see the [container build guide](docs/developer/container-builds.md).
 
 ### Full Application Deployment
 
