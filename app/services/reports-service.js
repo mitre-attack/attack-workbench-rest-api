@@ -2,6 +2,7 @@
 
 const attackObjectsRepository = require('../repository/attack-objects-repository');
 const relationshipsRepository = require('../repository/relationships-repository');
+const releaseTrackRegistryRepository = require('../repository/release-tracks/release-track-registry.repository');
 const identitiesService = require('./stix/identities-service');
 
 // ATT&CK SDO types whose ADM schema carries x_mitre_domains. Relationships,
@@ -144,6 +145,20 @@ class ReportsService {
   async getReleaseTrackCoverage() {
     const results =
       await attackObjectsRepository.retrieveReleaseTrackCoverage(DOMAIN_BEARING_TYPES);
+    const trackIds = new Set();
+    for (const finding of results.untracked_latest_revisions) {
+      for (const track of finding.last_enrolled_revision.release_tracks) trackIds.add(track.id);
+    }
+    if (trackIds.size) {
+      const tracks = await releaseTrackRegistryRepository.findNamesByTrackIds([...trackIds]);
+      const names = new Map(tracks.map((track) => [track.track_id, track.name]));
+      for (const finding of results.untracked_latest_revisions) {
+        for (const track of finding.last_enrolled_revision.release_tracks) {
+          const name = names.get(track.id);
+          if (name) track.name = name;
+        }
+      }
+    }
     return {
       ...results,
       summary: {

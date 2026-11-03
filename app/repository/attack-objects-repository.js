@@ -25,7 +25,7 @@ class AttackObjectsRepository extends BaseRepository {
 
   /**
    * Classify latest SDO revisions using membership recorded on any stored revision.
-   * Retain only one compact document and scalar membership flags per STIX ID.
+   * Keep bounded grouping state; look up only the last enrollment and later count.
    */
   async retrieveReleaseTrackCoverage(types) {
     const aggregation = [
@@ -37,6 +37,8 @@ class AttackObjectsRepository extends BaseRepository {
           'stix.id': 1,
           'stix.type': 1,
           'stix.name': 1,
+          'stix.created': 1,
+          'stix.x_mitre_version': 1,
           'stix.modified': 1,
           'workspace.attack_id': 1,
           membershipMissing: { $eq: [{ $type: '$workspace.release_tracks' }, 'missing'] },
@@ -53,21 +55,81 @@ class AttackObjectsRepository extends BaseRepository {
         $group: {
           _id: '$stix.id',
           latest: { $first: '$$ROOT' },
-          hasRecordedMembership: { $max: '$hasMembership' },
+          lastEnrolledModified: {
+            $max: { $cond: ['$hasMembership', '$stix.modified', null] },
+          },
         },
       },
       {
         $match: {
-          $or: [{ hasRecordedMembership: false }, { 'latest.membershipMissing': true }],
+          $or: [{ lastEnrolledModified: null }, { 'latest.membershipMissing': true }],
         },
       },
       { $sort: { _id: 1 } },
+      {
+        $lookup: {
+          from: this.model.collection.name,
+          let: { objectId: '$_id', enrolledModified: '$lastEnrolledModified' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $ne: ['$$enrolledModified', null] },
+                    { $eq: ['$stix.id', '$$objectId'] },
+                    { $gte: ['$stix.modified', '$$enrolledModified'] },
+                  ],
+                },
+              },
+            },
+            // The compound ID/modified index also supports this reverse scan.
+            { $sort: { 'stix.modified': 1 } },
+            {
+              $project: {
+                _id: 0,
+                modified: '$stix.modified',
+                x_mitre_version: '$stix.x_mitre_version',
+                release_tracks: {
+                  $map: {
+                    input: {
+                      $cond: [
+                        { $eq: ['$stix.modified', '$$enrolledModified'] },
+                        '$workspace.release_tracks',
+                        [],
+                      ],
+                    },
+                    as: 'track',
+                    in: {
+                      id: '$$track.id',
+                      type: '$$track.type',
+                      tier: '$$track.tier',
+                      status: '$$track.status',
+                    },
+                  },
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                last_enrolled_revision: { $first: '$$ROOT' },
+                // No revision after the maximum enrolled date has membership.
+                unenrolled_revision_count: {
+                  $sum: { $cond: [{ $gt: ['$modified', '$$enrolledModified'] }, 1, 0] },
+                },
+              },
+            },
+            { $project: { _id: 0 } },
+          ],
+          as: 'enrollment',
+        },
+      },
       {
         $project: {
           _id: 0,
           stix: '$latest.stix',
           workspace: { $ifNull: ['$latest.workspace', {}] },
-          hasRecordedMembership: 1,
+          enrollment: { $arrayElemAt: ['$enrollment', 0] },
         },
       },
     ];
@@ -75,11 +137,12 @@ class AttackObjectsRepository extends BaseRepository {
     const cursor = this.model.aggregate(aggregation).allowDiskUse(true).cursor({ batchSize: 100 });
     const results = { untracked_latest_revisions: [], never_enrolled_objects: [] };
     try {
-      for await (const { stix, workspace, hasRecordedMembership } of cursor) {
-        const category = hasRecordedMembership
-          ? results.untracked_latest_revisions
-          : results.never_enrolled_objects;
-        category.push({ stix, workspace });
+      for await (const { stix, workspace, enrollment } of cursor) {
+        if (enrollment) {
+          results.untracked_latest_revisions.push({ stix, workspace, ...enrollment });
+        } else {
+          results.never_enrolled_objects.push({ stix, workspace });
+        }
       }
     } finally {
       await cursor.close();

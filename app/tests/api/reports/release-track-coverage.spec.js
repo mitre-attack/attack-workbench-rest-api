@@ -9,9 +9,17 @@ const database = require('../../../lib/database-in-memory');
 const databaseConfiguration = require('../../../lib/database-configuration');
 const login = require('../../shared/login');
 const AttackObject = require('../../../models/attack-object-model');
+const ReleaseTrackRegistry = require('../../../models/release-tracks/release-track-registry-model');
 
 const missing = Symbol('missing membership key');
-const membership = [{ id: 'release-track--00000000-0000-4000-8000-000000000000', tier: 'members' }];
+const membership = [
+  {
+    id: 'release-track--00000000-0000-4000-8000-000000000000',
+    type: 'standard',
+    tier: 'members',
+    status: 'reviewed',
+  },
+];
 const supportedTypes = [
   'attack-pattern',
   'campaign',
@@ -53,6 +61,7 @@ describe('GET /api/reports/release-track-coverage', function () {
   let app;
   let passportCookie;
   let fixtureIds = [];
+  let fixtureTrackIds = [];
 
   before(async function () {
     await database.initializeConnection();
@@ -66,6 +75,8 @@ describe('GET /api/reports/release-track-coverage', function () {
   afterEach(async function () {
     await AttackObject.deleteMany({ 'stix.id': { $in: fixtureIds } });
     fixtureIds = [];
+    await ReleaseTrackRegistry.deleteMany({ track_id: { $in: fixtureTrackIds } });
+    fixtureTrackIds = [];
   });
 
   after(async function () {
@@ -146,8 +157,16 @@ describe('GET /api/reports/release-track-coverage', function () {
         type: 'attack-pattern',
         name: 'Latest member revision',
         modified: latest.stix.modified.toISOString(),
+        created: new Date(latest.stix.created).toISOString(),
+        x_mitre_version: '1.0',
       },
       workspace: { attack_id: first.workspace.attack_id },
+      last_enrolled_revision: {
+        modified: first.stix.modified.toISOString(),
+        x_mitre_version: '1.0',
+        release_tracks: membership,
+      },
+      unenrolled_revision_count: 3,
     });
     expect(ids(result.never_enrolled_objects)).toEqual([never.stix.id]);
     expect(result.never_enrolled_objects[0].stix.name).toBe('Latest never enrolled');
@@ -155,6 +174,110 @@ describe('GET /api/reports/release-track-coverage', function () {
       untracked_latest_revision_count: 2,
       never_enrolled_object_count: 1,
     });
+  });
+
+  it('uses the last enrollment only, counts later gaps, and resolves current names without dropping unresolved tracks', async function () {
+    const tracks = ['standard', 'virtual', 'standard', 'standard'].map((type, index) => ({
+      id: `release-track--${randomUUID()}`,
+      type,
+      tier: index === 1 ? 'staged' : 'members',
+      status: index === 1 ? 'pending' : 'reviewed',
+    }));
+    fixtureTrackIds.push(...tracks.map((track) => track.id));
+    await ReleaseTrackRegistry.collection.insertMany(
+      tracks.map((track, index) => ({
+        track_id: track.id,
+        type: track.type,
+        ...(index === 3 ? {} : { name: `Original track ${index}` }),
+      })),
+    );
+    const old = await create('First enrollment', membership);
+    await revision(old, missing, {}, 1000);
+    await revision(old, null, {}, 2000);
+    // Store the newest revision first to distinguish modified ordering from insertion order.
+    const latest = await revision(old, missing, { x_mitre_version: '3.0' }, 7000);
+    const enrolled = await revision(
+      old,
+      tracks.map((track) => ({ ...track, name: 'Stale embedded name', internal: 'not public' })),
+      { x_mitre_version: '2.0' },
+      4000,
+    );
+    await revision(old, [], {}, 3000);
+    await revision(old, [], {}, 5000);
+    await revision(old, null, {}, 6000);
+    await ReleaseTrackRegistry.collection.updateOne(
+      { track_id: tracks[0].id },
+      { $set: { name: 'Current renamed track' } },
+    );
+    await ReleaseTrackRegistry.collection.deleteOne({ track_id: tracks[2].id });
+
+    const result = await report();
+    expect(result.never_enrolled_objects).toEqual([]);
+    expect(result.untracked_latest_revisions).toHaveLength(1);
+    expect(result.untracked_latest_revisions[0]).toEqual({
+      stix: {
+        id: old.stix.id,
+        type: old.stix.type,
+        name: old.stix.name,
+        created: new Date(latest.stix.created).toISOString(),
+        modified: latest.stix.modified.toISOString(),
+        x_mitre_version: '3.0',
+      },
+      workspace: { attack_id: old.workspace.attack_id },
+      last_enrolled_revision: {
+        modified: enrolled.stix.modified.toISOString(),
+        x_mitre_version: '2.0',
+        release_tracks: [
+          { ...tracks[0], name: 'Current renamed track' },
+          { ...tracks[1], name: 'Original track 1' },
+          tracks[2],
+          tracks[3],
+        ],
+      },
+      unenrolled_revision_count: 3,
+    });
+  });
+
+  it('returns metadata from only the latest never-enrolled revision, without enrollment fields', async function () {
+    const old = await create('Older never enrolled');
+    const latest = await revision(old, [], {
+      name: 'Latest never enrolled',
+      created: new Date('2025-02-03T04:05:06.789Z'),
+      x_mitre_version: '4.2',
+    });
+    const result = await report();
+    expect(result.untracked_latest_revisions).toEqual([]);
+    expect(result.never_enrolled_objects).toEqual([
+      {
+        stix: {
+          id: old.stix.id,
+          type: old.stix.type,
+          name: latest.stix.name,
+          created: latest.stix.created.toISOString(),
+          modified: latest.stix.modified.toISOString(),
+          x_mitre_version: '4.2',
+        },
+        workspace: { attack_id: old.workspace.attack_id },
+      },
+    ]);
+  });
+
+  it('omits unavailable optional dates and versions without losing enrollment evidence', async function () {
+    const old = await create('Imported member', membership);
+    await revision(old);
+    await AttackObject.collection.updateMany(
+      { 'stix.id': old.stix.id },
+      { $unset: { 'stix.created': '', 'stix.x_mitre_version': '' } },
+    );
+    const result = await report();
+    const finding = result.untracked_latest_revisions[0];
+    expect(finding.stix).not.toHaveProperty('created');
+    expect(finding.stix).not.toHaveProperty('x_mitre_version');
+    expect(finding.last_enrolled_revision).toEqual({
+      modified: old.stix.modified.toISOString(),
+      release_tracks: membership,
+    });
+    expect(finding.unenrolled_revision_count).toBe(1);
   });
 
   it('distinguishes absent, empty, null, and populated latest membership exactly', async function () {
@@ -258,6 +381,7 @@ describe('GET /api/reports/release-track-coverage', function () {
     const after = await AttackObject.collection.find(query).sort({ 'stix.modified': 1 }).toArray();
     expect(after).toEqual(before);
     expect(result.untracked_latest_revisions).toHaveLength(1);
+    expect(result.untracked_latest_revisions[0].unenrolled_revision_count).toBe(30);
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(1024);
   });
 });

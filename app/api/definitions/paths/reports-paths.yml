@@ -160,6 +160,12 @@ paths:
         recorded membership, not proof that membership was never removed.
         Both lists are unique by STIX ID and sorted by STIX ID ascending.
         The response contains compact object summaries, not full revisions.
+        Untracked findings include the most recent enrolled revision's modified,
+        optional version, and all memberships, plus the number of unenrolled
+        stored revisions strictly newer than it. Earlier gaps are not counted.
+        Track names come from the current registry; unresolved names are omitted,
+        retaining the membership ID. Compact latest objects include created and
+        x_mitre_version when present.
         No enrollment or track_latest configuration is changed.
       tags:
         - 'Reports'
@@ -179,7 +185,7 @@ paths:
                   untracked_latest_revisions:
                     type: array
                     items:
-                      $ref: '../components/reports.yml#/components/schemas/release-track-report-object'
+                      $ref: '../components/reports.yml#/components/schemas/untracked-latest-report-object'
                   never_enrolled_objects:
                     type: array
                     items:

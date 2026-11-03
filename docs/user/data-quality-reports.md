@@ -105,6 +105,19 @@ components, assets, matrices, detection strategies, and analytics. Relationships
 identities, notes, marking definitions, and projected collections are excluded.
 Objects do not need an ATT&CK ID to appear.
 
+Untracked findings identify the **last enrolled revision**: the stored revision
+with the greatest `stix.modified` that still has nonempty membership. Its
+modified timestamp, optional version, and **all memberships on that revision**
+are returned. Names are resolved from the current release-track registry, not
+historical names. If a track was deleted or its name is unavailable, its ID is
+retained for display.
+
+`unenrolled_revision_count` is the number of stored revisions strictly newer
+than that last enrolled revision that have no nonempty membership. Missing,
+empty, and null membership all count. Re-enrollment resets this count: gaps
+before the last enrolled revision are excluded. The finding's latest revision
+must still meet the missing-key rule above.
+
 ```json
 {
   "untracked_latest_revisions": [
@@ -113,9 +126,25 @@ Objects do not need an ATT&CK ID to appear.
         "id": "attack-pattern--...",
         "type": "attack-pattern",
         "name": "Example technique",
-        "modified": "2026-11-03T00:00:00.000Z"
+        "created": "2026-10-01T09:30:00.000Z",
+        "modified": "2026-11-03T00:00:00.000Z",
+        "x_mitre_version": "1.1"
       },
-      "workspace": { "attack_id": "T1234" }
+      "workspace": { "attack_id": "T1234" },
+      "last_enrolled_revision": {
+        "modified": "2026-11-01T12:00:00.000Z",
+        "x_mitre_version": "1.0",
+        "release_tracks": [
+          {
+            "id": "release-track--...",
+            "type": "standard",
+            "tier": "members",
+            "status": "reviewed",
+            "name": "Enterprise ATT&CK"
+          }
+        ]
+      },
+      "unenrolled_revision_count": 2
     }
   ],
   "never_enrolled_objects": [],
@@ -126,10 +155,13 @@ Objects do not need an ATT&CK ID to appear.
 }
 ```
 
-Entries contain only `stix.id`, `stix.type`, optional `stix.name` and
-`stix.modified`, and optional `workspace.attack_id`; `workspace` is always an
-object. The report does not load descriptions, full histories, or track details.
-It is one JSON response without pagination.
+Both lists contain compact latest-revision fields: `stix.id`, `stix.type`,
+optional `stix.name`, `stix.created`, `stix.modified`, `stix.x_mitre_version`,
+and optional `workspace.attack_id`; `workspace` is always an object.
+Only untracked findings add the enrollment evidence shown above. Never-enrolled
+objects have no last enrollment or gap count. The report does not return
+descriptions, full histories, or full track documents. It is one JSON response
+without pagination.
 
 Review membership in the appropriate release track before making changes.
 Reading either dashboard does not enroll anything or change `track_latest`.
