@@ -160,6 +160,11 @@ class AttackObjectsRepository extends BaseRepository {
         query['workspace.attack_id'] = options.attackId;
       }
     }
+    if (typeof options.excludeID !== 'undefined') {
+      query['stix.id'] = {
+        $nin: Array.isArray(options.excludeID) ? options.excludeID : [options.excludeID],
+      };
+    }
     if (!options.includeRevoked) {
       query['stix.revoked'] = { $in: [null, false] };
     }

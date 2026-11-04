@@ -100,6 +100,17 @@ paths:
                 items:
                   type: string
           example: 'T9999'
+        - name: excludeID
+          in: query
+          description: |
+            Exclude objects with the specified STIX IDs before sorting and pagination.
+            This parameter may be set multiple times.
+          schema:
+            oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
         - name: limit
           in: query
           description: |
