@@ -2,6 +2,7 @@
 
 const attackObjectsRepository = require('../repository/attack-objects-repository');
 const relationshipsRepository = require('../repository/relationships-repository');
+const releaseTrackRegistryRepository = require('../repository/release-tracks/release-track-registry.repository');
 const identitiesService = require('./stix/identities-service');
 
 // ATT&CK SDO types whose ADM schema carries x_mitre_domains. Relationships,
@@ -133,6 +134,36 @@ class ReportsService {
       summary: {
         cross_domain_relationship_count: crossDomainRelationships.length,
         objects_without_domains_count: objectsWithoutDomains.length,
+      },
+    };
+  }
+
+  /**
+   * Report coverage of all supported domain-bearing SDOs, including inactive ones.
+   * Recorded backrefs describe stored membership, not an immutable enrollment history.
+   */
+  async getReleaseTrackCoverage() {
+    const results =
+      await attackObjectsRepository.retrieveReleaseTrackCoverage(DOMAIN_BEARING_TYPES);
+    const trackIds = new Set();
+    for (const finding of results.untracked_latest_revisions) {
+      for (const track of finding.last_enrolled_revision.release_tracks) trackIds.add(track.id);
+    }
+    if (trackIds.size) {
+      const tracks = await releaseTrackRegistryRepository.findNamesByTrackIds([...trackIds]);
+      const names = new Map(tracks.map((track) => [track.track_id, track.name]));
+      for (const finding of results.untracked_latest_revisions) {
+        for (const track of finding.last_enrolled_revision.release_tracks) {
+          const name = names.get(track.id);
+          if (name) track.name = name;
+        }
+      }
+    }
+    return {
+      ...results,
+      summary: {
+        untracked_latest_revision_count: results.untracked_latest_revisions.length,
+        never_enrolled_object_count: results.never_enrolled_objects.length,
       },
     };
   }

@@ -8,3 +8,15 @@ local-only
 # Local developer logs
 /TODO.md
 /FRONTEND_TODO.md
+
+# Keep workstation credentials, datasets, and caches out of image layers.
+/.env
+/.env.*
+/.nocommit
+/.claude
+/AGENTS.local.md
+/.pytest_cache
+/.ruff_cache
+/.uv-cache
+/coverage
+**/.DS_Store

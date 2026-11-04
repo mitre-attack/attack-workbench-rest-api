@@ -72,3 +72,79 @@ but requires response backpressure, disconnect cancellation, error semantics,
 and a frontend streaming parser; the existing Angular JSON request waits for a
 complete response. Merely streaming the current query or increasing Node's heap
 would leave its unnecessary history fan-out intact.
+
+## Release-track coverage
+
+`GET /api/reports/release-track-coverage` uses the existing report authentication
+and visitor/read-only-service authorization. The service reuses
+`DOMAIN_BEARING_TYPES` as the explicit supported SDO allowlist: `attack-pattern`,
+`campaign`, `course-of-action`, `intrusion-set`, `malware`, `tool`,
+`x-mitre-analytic`, `x-mitre-asset`, `x-mitre-data-component`,
+`x-mitre-data-source`, `x-mitre-detection-strategy`, `x-mitre-matrix`, and
+`x-mitre-tactic`. Unlike the domain-consistency report, coverage deliberately
+includes revoked and deprecated latest revisions. It does not require an
+ATT&CK ID, a domain value, or an active workflow state.
+
+`AttackObjectsRepository.retrieveReleaseTrackCoverage()` performs a single
+aggregation over `attackObjects`:
+
+1. Match the supported types and sort by `(stix.id, stix.modified descending)`,
+   following the existing latest-revision index and convention.
+2. Project only compact identifying fields and two booleans: whether
+   `workspace.release_tracks` has BSON type `missing`, and whether it is an
+   array with nonzero length. `$isArray` guards `$size`; null and non-array
+   values are not membership.
+3. Group by STIX ID, retaining the first compact revision and the maximum
+   `stix.modified` with nonempty membership (or null if none). There is no
+   `$push` of histories, full-document hydration, or identity enrichment.
+4. Keep objects with no recorded membership, or a missing latest membership
+   key. If membership exists somewhere and the latest key is missing, that
+   membership necessarily belongs to an older revision. Explicit empty/null
+   latest values are not untracked-latest findings.
+5. Sort findings by STIX ID. An indexed self-lookup for each untracked finding
+   reads only revisions of that ID at or after the last enrolled timestamp,
+   ordered by modified ascending. It groups to one compact enrolled revision
+   and a count of strictly later revisions; those later revisions necessarily
+   have no nonempty membership. Never-enrolled findings have no lookup match.
+   The existing unique `(stix.id, stix.modified descending)` index supports the
+   equality/range lookup and reverse date ordering; no new index is required.
+6. Consume a 100-document cursor with explicit cleanup and disk use enabled
+   for eligible aggregation stages. Partition compact findings into the two
+   mutually exclusive arrays. The service deduplicates membership track IDs
+   and makes one projected registry read (`track_id`, `name`) for all findings,
+   not one network request per finding or revision. It attaches current names
+   when available and adds counts directly from the arrays.
+
+The base public object projection is
+`{ stix: { id, type, name?, created?, modified?, x_mitre_version? },
+workspace: { attack_id? } }`. Missing ATT&CK IDs leave an empty workspace
+object. Untracked findings additionally contain `last_enrolled_revision` with
+`modified`, optional `x_mitre_version`, and all `release_tracks` on that one
+revision, projected to `id`, `type`, `tier`, `status`, and optional current
+registry `name`. Deleted/missing/unnamed registry entries retain their
+membership ID; consumers display that ID rather than dropping the finding.
+No historical embedded names, unrelated membership fields, or internal
+classification flags are returned. `unenrolled_revision_count` counts stored
+revisions strictly newer than the last enrolled revision, including missing,
+empty, or null membership; re-enrollment resets the count, excluding older
+gaps. Never-enrolled findings contain only the base projection.
+
+Current backrefs only establish **recorded** membership; removing all backrefs
+can make a formerly enrolled object appear in Never Enrolled Objects. This is
+not an audit-history API.
+
+The database still scans stored revisions, but grouping state retains one
+compact latest revision and one date per object, then one compact enrolled
+revision with its memberships and one count per lookup, rather than a history
+array. Node memory and the final HTTP response remain proportional to actual
+findings and their last-enrolled memberships; cursor batching is not HTTP
+streaming. No `$facet` assembles the entire report into a single BSON document,
+avoiding that additional report-size limit.
+
+`app/tests/api/reports/release-track-coverage.spec.js` covers latest selection,
+multiple enrollment revisions/tracks, reset counts, missing/empty/null
+distinctions, current/renamed/deleted/unnamed registry entries, optional latest
+metadata, membership restoration, all supported types, inactive revisions,
+excluded object types, compact output, missing ATT&CK IDs, deterministic
+ordering, and read-only behavior. Enrollment and `track_latest`
+synchronization are unchanged.

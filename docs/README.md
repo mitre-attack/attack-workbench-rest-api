@@ -32,6 +32,7 @@ Guides for consumers of the REST API — endpoints, workflows, and terminology.
 Architecture, patterns, and implementation details for contributors.
 
 - [Build Information](developer/build-information.md): Build metadata provenance, runtime configuration, and frontend integration
+- [Container Builds](developer/container-builds.md): Development and production images, optional corporate CA trust, secret handling, and build caching
 - [Data Quality Query Design](developer/data-quality-reports.md): Duplicate-report memory amplification, query optimization, and remaining response-size limits
 - [Data Model](developer/data-model.md): Database schema and STIX object structure
 - [Allowed Values Model](developer/data-model.md#runtime-allowed-values-configuration): Schema catalog, initialization, persistence, and invalid settings

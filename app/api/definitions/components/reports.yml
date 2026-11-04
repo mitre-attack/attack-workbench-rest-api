@@ -1,0 +1,105 @@
+components:
+  schemas:
+    release-track-report-object:
+      type: object
+      additionalProperties: false
+      required:
+        - stix
+        - workspace
+      properties:
+        stix:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - type
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              enum:
+                - attack-pattern
+                - campaign
+                - course-of-action
+                - intrusion-set
+                - malware
+                - tool
+                - x-mitre-analytic
+                - x-mitre-asset
+                - x-mitre-data-component
+                - x-mitre-data-source
+                - x-mitre-detection-strategy
+                - x-mitre-matrix
+                - x-mitre-tactic
+            name:
+              type: string
+            modified:
+              type: string
+              format: date-time
+            created:
+              type: string
+              format: date-time
+            x_mitre_version:
+              type: string
+        workspace:
+          type: object
+          additionalProperties: false
+          properties:
+            attack_id:
+              type: string
+
+    untracked-latest-report-object:
+      type: object
+      additionalProperties: false
+      required:
+        - stix
+        - workspace
+        - last_enrolled_revision
+        - unenrolled_revision_count
+      properties:
+        stix:
+          $ref: '#/components/schemas/release-track-report-object/properties/stix'
+        workspace:
+          $ref: '#/components/schemas/release-track-report-object/properties/workspace'
+        last_enrolled_revision:
+          type: object
+          additionalProperties: false
+          description: Most recently modified stored revision with a nonempty membership array.
+          required:
+            - modified
+            - release_tracks
+          properties:
+            modified:
+              type: string
+              format: date-time
+            x_mitre_version:
+              type: string
+            release_tracks:
+              type: array
+              minItems: 1
+              description: All memberships on that revision, with current registry names when available.
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - id
+                  - type
+                  - tier
+                  - status
+                properties:
+                  id:
+                    type: string
+                  type:
+                    type: string
+                  tier:
+                    type: string
+                  status:
+                    type: string
+                  name:
+                    type: string
+                    description: Current registry name; clients fall back to id when unavailable.
+        unenrolled_revision_count:
+          type: integer
+          minimum: 1
+          description: Stored revisions strictly newer than the last enrolled revision without nonempty membership; excludes gaps before re-enrollment.
