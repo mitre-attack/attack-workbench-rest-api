@@ -61,3 +61,20 @@ exports.getParallelRelationships = async function (req, res) {
     return res.status(500).send('Unable to get parallel relationships. Server error.');
   }
 };
+
+/**
+ * Handler for GET /api/reports/release-track-coverage.
+ * Returns latest SDO revisions with missing or no recorded release-track membership.
+ */
+exports.getReleaseTrackCoverage = async function (req, res) {
+  try {
+    const results = await reportsService.getReleaseTrackCoverage();
+    logger.debug(
+      `Success: Retrieved ${results.summary.untracked_latest_revision_count} untracked latest revision(s) and ${results.summary.never_enrolled_object_count} object(s) with no recorded membership`,
+    );
+    return res.status(200).send(results);
+  } catch (err) {
+    logger.error('Failed with error: ' + err);
+    return res.status(500).send('Unable to get the release-track coverage report. Server error.');
+  }
+};

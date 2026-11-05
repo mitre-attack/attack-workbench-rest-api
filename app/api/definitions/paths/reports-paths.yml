@@ -142,3 +142,71 @@ paths:
               schema:
                 type: string
                 example: 'Unable to get parallel relationships. Server error.'
+
+  /api/reports/release-track-coverage:
+    get:
+      summary: 'Get the release-track coverage report'
+      operationId: 'reports-get-release-track-coverage'
+      description: |
+        Read-only report over all stored revisions of supported domain-bearing
+        ATT&CK SDOs, including revoked and deprecated objects. Relationships,
+        identities, notes, marking definitions, and collections are excluded.
+        Latest means greatest stix.modified per stix.id.
+        untracked_latest_revisions contains latest revisions where the
+        workspace.release_tracks key is absent and an older stored revision has
+        a nonempty release_tracks array. Empty or null latest values do not match.
+        never_enrolled_objects contains latest revisions of objects with no
+        nonempty release_tracks array on any stored revision. This means no
+        recorded membership, not proof that membership was never removed.
+        Both lists are unique by STIX ID and sorted by STIX ID ascending.
+        The response contains compact object summaries, not full revisions.
+        Untracked findings include the most recent enrolled revision's modified,
+        optional version, and all memberships, plus the number of unenrolled
+        stored revisions strictly newer than it. Earlier gaps are not counted.
+        Track names come from the current registry; unresolved names are omitted,
+        retaining the membership ID. Compact latest objects include created and
+        x_mitre_version when present.
+        No enrollment or track_latest configuration is changed.
+      tags:
+        - 'Reports'
+      responses:
+        '200':
+          description: 'Untracked latest revisions and objects with no recorded membership.'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - untracked_latest_revisions
+                  - never_enrolled_objects
+                  - summary
+                properties:
+                  untracked_latest_revisions:
+                    type: array
+                    items:
+                      $ref: '../components/reports.yml#/components/schemas/untracked-latest-report-object'
+                  never_enrolled_objects:
+                    type: array
+                    items:
+                      $ref: '../components/reports.yml#/components/schemas/release-track-report-object'
+                  summary:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - untracked_latest_revision_count
+                      - never_enrolled_object_count
+                    properties:
+                      untracked_latest_revision_count:
+                        type: integer
+                        minimum: 0
+                      never_enrolled_object_count:
+                        type: integer
+                        minimum: 0
+        '500':
+          description: 'Server error'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 'Unable to get the release-track coverage report. Server error.'

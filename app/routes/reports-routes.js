@@ -32,4 +32,12 @@ router
     reportsController.getDomainConsistency,
   );
 
+router
+  .route('/reports/release-track-coverage')
+  .get(
+    authn.authenticate,
+    authz.requireRole(authz.visitorOrHigher, authz.readOnlyService),
+    reportsController.getReleaseTrackCoverage,
+  );
+
 module.exports = router;

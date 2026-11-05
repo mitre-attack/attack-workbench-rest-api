@@ -25,6 +25,8 @@ docker run -p 3000:3000 -d \
 
 The REST API will be accessible at `http://localhost:3000`, with API documentation available at `http://localhost:3000/api-docs`.
 
+For source builds and corporate CA configuration, see the [container build guide](docs/developer/container-builds.md).
+
 ### Full Application Deployment
 
 For a full ATT&CK Workbench deployment, including the frontend application, see the official [Workbench Deployment Guide](https://github.com/mitre-attack/attack-workbench-deployment).
