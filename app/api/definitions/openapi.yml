@@ -555,6 +555,9 @@ paths:
   /api/reports/domain-consistency:
     $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1domain-consistency'
 
+  /api/reports/release-track-coverage:
+    $ref: 'paths/reports-paths.yml#/paths/~1api~1reports~1release-track-coverage'
+
   # Health Checks
   /api/health/ping:
     $ref: 'paths/health-paths.yml#/paths/~1api~1health~1ping'

@@ -79,6 +79,18 @@ class ReleaseTrackRegistryRepository {
     }
   }
 
+  async findNamesByTrackIds(trackIds) {
+    try {
+      return await this.model
+        .find({ track_id: { $in: trackIds } })
+        .select({ _id: 0, track_id: 1, name: 1 })
+        .lean()
+        .exec();
+    } catch (err) {
+      throw new DatabaseError(err);
+    }
+  }
+
   async findAll(options = {}) {
     try {
       const query = {};
