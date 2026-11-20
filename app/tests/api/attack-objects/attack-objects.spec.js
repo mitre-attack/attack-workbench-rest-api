@@ -222,6 +222,24 @@ describe('ATT&CK Objects API', function () {
     expect(attackObjects.length).toBe(3);
   });
 
+  it('GET /api/attack-objects excludes IDs before paginating results', async function () {
+    const excludedGroupId = 'intrusion-set--925216d2-dd4c-4487-8d19-f96e81dabd5d';
+    const excludedSoftwareId = 'malware--9c5ab575-f015-462c-92a0-f887277d8519';
+    const includedTechniqueId = 'attack-pattern--757471d4-d931-4109-82dd-cdd50c04744e';
+    const res = await request(app)
+      .get(
+        `/api/attack-objects?attackId=G9001&attackId=S9001&attackId=T9001&excludeID=${excludedGroupId}&excludeID=${excludedSoftwareId}&offset=0&limit=1&includePagination=true`,
+      )
+      .set('Accept', 'application/json')
+      .set('Cookie', `${passportCookie.name}=${passportCookie.value}`)
+      .expect(200)
+      .expect('Content-Type', /json/);
+
+    expect(res.body.pagination).toEqual({ total: 1, offset: 0, limit: 1 });
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].stix.id).toBe(includedTechniqueId);
+  });
+
   it('GET /api/attack-objects uses the search parameter to return the tactic objects', async function () {
     const res = await request(app)
       .get('/api/attack-objects?search=nabu')

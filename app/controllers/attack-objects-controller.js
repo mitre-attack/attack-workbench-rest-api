@@ -6,6 +6,7 @@ const logger = require('../lib/logger');
 exports.retrieveAll = async function (req, res) {
   const options = {
     attackId: req.query.attackId,
+    excludeID: req.query.excludeID,
     offset: req.query.offset || 0,
     limit: req.query.limit || 0,
     state: req.query.state,
